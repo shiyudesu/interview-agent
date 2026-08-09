@@ -65,9 +65,12 @@ catalog:
 
 nodeVersion: 24.19.0
 engineStrict: true
+injectWorkspacePackages: true
 saveExact: true
 strictPeerDependencies: true
 sharedWorkspaceLockfile: true
+syncInjectedDepsAfterScripts:
+  - build
 pmOnFail: download
 runtimeOnFail: download
 minimumReleaseAgeExclude:

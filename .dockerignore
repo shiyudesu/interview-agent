@@ -1,0 +1,17 @@
+.git
+.github
+.agents
+.turbo
+coverage
+docs
+node_modules
+**/dist
+**/node_modules
+playwright-report
+test-results
+
+.env
+.env.*
+!.env.example
+
+*.log
