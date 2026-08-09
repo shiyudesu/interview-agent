@@ -332,6 +332,10 @@ export function isInterviewExpired(interview: Interview, at: Date): boolean {
   );
 }
 
+export function getInterviewExpiresAt(interview: Interview): Date {
+  return new Date(interview.lastEffectiveActivityAt.getTime() + INACTIVITY_LIMIT_MS);
+}
+
 function createInterview(command: CreateInterviewCommand): InterviewTransition {
   if (command.expectedVersion !== 0) {
     throw new InterviewVersionConflictError(command.expectedVersion, 0);

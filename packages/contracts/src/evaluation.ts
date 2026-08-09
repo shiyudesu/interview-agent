@@ -2,7 +2,9 @@ import { type Static, Type } from "typebox";
 
 import {
   AnswerMaterialIdSchema,
+  EvaluationIdSchema,
   FollowUpGoalIdSchema,
+  PositiveScoreSchema,
   PositiveVersionSchema,
   RubricItemIdSchema,
 } from "./common.js";
@@ -75,6 +77,54 @@ export const StructuredAnswerEvaluationSchema = Type.Object(
   { additionalProperties: false },
 );
 
+const internalQuestionEvaluationProperties = {
+  evaluationId: EvaluationIdSchema,
+  rubricItems: Type.Array(RubricItemEvidenceSchema, { minItems: 1 }),
+  metadata: ModelCallMetadataSchema,
+} as const;
+
+export const InternalQuestionEvaluationSchema = Type.Union([
+  Type.Object(
+    {
+      ...internalQuestionEvaluationProperties,
+      classification: Type.Union([Type.Literal("relevant"), Type.Literal("ambiguous")]),
+      outcome: Type.Union([
+        Type.Object(
+          {
+            kind: Type.Literal("scored"),
+            score: PositiveScoreSchema,
+          },
+          { additionalProperties: false },
+        ),
+        Type.Object(
+          {
+            kind: Type.Literal("incorrect"),
+            score: Type.Literal(0),
+            zeroScoreReason: Type.Literal("incorrect"),
+          },
+          { additionalProperties: false },
+        ),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...internalQuestionEvaluationProperties,
+      classification: Type.Literal("irrelevant"),
+      outcome: Type.Object(
+        {
+          kind: Type.Literal("irrelevant"),
+          score: Type.Literal(0),
+          zeroScoreReason: Type.Literal("irrelevant"),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export type ResponseClassificationDto = Static<typeof ResponseClassificationSchema>;
 export type FollowUpKindDto = Static<typeof FollowUpKindSchema>;
 export type FollowUpPurposeDto = Static<typeof FollowUpPurposeSchema>;
@@ -85,3 +135,4 @@ export type PredefinedFollowUpRecommendationDto = Static<
   typeof PredefinedFollowUpRecommendationSchema
 >;
 export type StructuredAnswerEvaluationDto = Static<typeof StructuredAnswerEvaluationSchema>;
+export type InternalQuestionEvaluationDto = Static<typeof InternalQuestionEvaluationSchema>;

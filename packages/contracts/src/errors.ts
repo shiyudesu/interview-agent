@@ -78,12 +78,21 @@ export const OperationFailureApiErrorSchema = Type.Object(
 export const OperationFailedApiErrorSchema = OperationFailureApiErrorSchema;
 export const ModelFailureApiErrorSchema = OperationFailureApiErrorSchema;
 
+export const InternalApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("internal_error"),
+    message: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export const ApiErrorSchema = Type.Union([
   ValidationApiErrorSchema,
   UnauthorizedApiErrorSchema,
   NotFoundApiErrorSchema,
   VersionConflictApiErrorSchema,
   OperationFailureApiErrorSchema,
+  InternalApiErrorSchema,
 ]);
 
 export const ErrorEnvelopeSchema = Type.Object(
@@ -103,5 +112,6 @@ export type OperationFailureDetailDto = Static<typeof OperationFailureDetailSche
 export type OperationFailureApiErrorDto = Static<typeof OperationFailureApiErrorSchema>;
 export type OperationFailedApiErrorDto = Static<typeof OperationFailedApiErrorSchema>;
 export type ModelFailureApiErrorDto = Static<typeof ModelFailureApiErrorSchema>;
+export type InternalApiErrorDto = Static<typeof InternalApiErrorSchema>;
 export type ApiErrorDto = Static<typeof ApiErrorSchema>;
 export type ErrorEnvelopeDto = Static<typeof ErrorEnvelopeSchema>;

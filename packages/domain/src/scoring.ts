@@ -1,5 +1,6 @@
 import type { AnswerMaterialId, RubricItemId } from "./identifiers.js";
 import {
+  type EvaluatedQuestionOutcome,
   type InterviewQuestionCount,
   KNOWLEDGE_DOMAINS,
   type KnowledgeDomain,
@@ -7,6 +8,8 @@ import {
   type QuestionEvaluation,
   type QuestionEvaluationInput,
   type QuestionOutcome,
+  type ResponseClassification,
+  type RubricItemEvaluation,
   type RubricItemSnapshot,
   type ZeroQuestionOutcome,
   type ZeroScoreReason,
@@ -116,6 +119,64 @@ export function validateRubric(rubric: readonly RubricItemSnapshot[]): Validated
   return { itemCount: rubric.length, totalWeight: 100 };
 }
 
+export interface EvaluatedQuestionFacts {
+  readonly classification: ResponseClassification;
+  readonly rubricItems: readonly RubricItemEvaluation[];
+}
+
+export function deriveEvaluatedQuestionOutcome(
+  evaluation: EvaluatedQuestionFacts,
+): EvaluatedQuestionOutcome {
+  const awardedIds = new Set<RubricItemId>();
+  let score = 0;
+
+  for (const award of evaluation.rubricItems) {
+    if (awardedIds.has(award.rubricItemId)) {
+      throw new InvalidRubricAwardError(
+        "duplicate_rubric_award",
+        `Duplicate award for Rubric item ${award.rubricItemId}`,
+        award.rubricItemId,
+      );
+    }
+    awardedIds.add(award.rubricItemId);
+    if (
+      !Number.isInteger(award.awardedPoints) ||
+      award.awardedPoints < 0 ||
+      award.awardedPoints > 100
+    ) {
+      throw new InvalidRubricAwardError(
+        "invalid_awarded_points",
+        `Awarded points for ${award.rubricItemId} must be an integer from 0 through 100`,
+        award.rubricItemId,
+      );
+    }
+    score += award.awardedPoints;
+  }
+
+  if (evaluation.classification === "irrelevant") {
+    if (score !== 0) {
+      throw new InvalidRubricAwardError(
+        "irrelevant_awarded_points",
+        "Irrelevant evaluations cannot award points",
+      );
+    }
+    return createZeroQuestionOutcome("irrelevant");
+  }
+  if (score === 0) {
+    return createZeroQuestionOutcome("incorrect");
+  }
+  if (score > 100) {
+    throw new InvalidRubricAwardError(
+      "invalid_awarded_points",
+      "Total awarded points cannot exceed 100",
+    );
+  }
+  return Object.freeze({
+    kind: "scored",
+    score: parsePositiveQuestionScore(score),
+  });
+}
+
 export interface ScoreQuestionInput {
   readonly rubric: readonly RubricItemSnapshot[];
   readonly evaluation: QuestionEvaluationInput;
@@ -125,7 +186,6 @@ export interface ScoreQuestionInput {
 export function scoreQuestion(input: ScoreQuestionInput): QuestionEvaluation {
   validateRubric(input.rubric);
   const rubricById = new Map(input.rubric.map((item) => [item.id, item] as const));
-  const awardedIds = new Set<RubricItemId>();
 
   if (input.evaluation.rubricItems.length !== input.rubric.length) {
     throw new InvalidRubricAwardError(
@@ -134,7 +194,6 @@ export function scoreQuestion(input: ScoreQuestionInput): QuestionEvaluation {
     );
   }
 
-  let score = 0;
   for (const award of input.evaluation.rubricItems) {
     const rubricItem = rubricById.get(award.rubricItemId);
     if (rubricItem === undefined) {
@@ -144,14 +203,6 @@ export function scoreQuestion(input: ScoreQuestionInput): QuestionEvaluation {
         award.rubricItemId,
       );
     }
-    if (awardedIds.has(award.rubricItemId)) {
-      throw new InvalidRubricAwardError(
-        "duplicate_rubric_award",
-        `Duplicate award for Rubric item ${award.rubricItemId}`,
-        award.rubricItemId,
-      );
-    }
-    awardedIds.add(award.rubricItemId);
     if (
       !Number.isInteger(award.awardedPoints) ||
       award.awardedPoints < 0 ||
@@ -180,7 +231,6 @@ export function scoreQuestion(input: ScoreQuestionInput): QuestionEvaluation {
         );
       }
     }
-    score += award.awardedPoints;
   }
 
   const rubricItems = Object.freeze(
@@ -193,39 +243,16 @@ export function scoreQuestion(input: ScoreQuestionInput): QuestionEvaluation {
     ),
   );
 
-  if (input.evaluation.classification === "irrelevant") {
-    if (score !== 0) {
-      throw new InvalidRubricAwardError(
-        "irrelevant_awarded_points",
-        "Irrelevant evaluations cannot award points",
-      );
-    }
-    return Object.freeze({
-      id: input.evaluation.id,
-      classification: "irrelevant",
-      rubricItems,
-      outcome: createZeroQuestionOutcome("irrelevant"),
-    });
-  }
-
-  if (score === 0) {
-    return Object.freeze({
-      id: input.evaluation.id,
-      classification: input.evaluation.classification,
-      rubricItems,
-      outcome: createZeroQuestionOutcome("incorrect"),
-    });
-  }
-
+  const outcome = deriveEvaluatedQuestionOutcome({
+    classification: input.evaluation.classification,
+    rubricItems,
+  });
   return Object.freeze({
     id: input.evaluation.id,
     classification: input.evaluation.classification,
     rubricItems,
-    outcome: Object.freeze({
-      kind: "scored",
-      score: parsePositiveQuestionScore(score),
-    }),
-  });
+    outcome,
+  }) as QuestionEvaluation;
 }
 
 type ZeroQuestionOutcomeFor<Reason extends ZeroScoreReason> = Extract<

@@ -87,6 +87,18 @@ export interface FollowUpGoalSnapshot {
   readonly goal: string;
 }
 
+export interface QuestionDefinition {
+  readonly questionId: QuestionId;
+  readonly questionVersion: number;
+  readonly domain: KnowledgeDomain;
+  readonly difficulty: "medium";
+  readonly sourceWording: string;
+  readonly rubric: readonly RubricItemSnapshot[];
+  readonly followUpGoals: readonly FollowUpGoalSnapshot[];
+  readonly knowledgeExplanation: string;
+  readonly active: boolean;
+}
+
 export interface QuestionSnapshot {
   readonly questionId: QuestionId;
   readonly questionVersion: number;

@@ -66,6 +66,20 @@ export const QuestionBankImportSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const InternalQuestionSnapshotSchema = Type.Object(
+  {
+    questionId: QuestionIdSchema,
+    questionVersion: PositiveVersionSchema,
+    domain: KnowledgeDomainSchema,
+    sourceWording: Type.String({ minLength: 1 }),
+    displayedWording: Type.String({ minLength: 1 }),
+    rubric: Type.Array(QuestionBankRubricItemSchema, { minItems: 1 }),
+    followUpGoals: Type.Array(QuestionBankFollowUpGoalSchema, { minItems: 1 }),
+    knowledgeExplanation: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export interface QuestionBankValidationIssue {
   readonly path: string;
   readonly code:
@@ -131,3 +145,4 @@ export type QuestionBankFollowUpGoalDto = Static<typeof QuestionBankFollowUpGoal
 export type QuestionBankQuestionDto = Static<typeof QuestionBankQuestionSchema>;
 export type QuestionBankSourceDto = Static<typeof QuestionBankSourceSchema>;
 export type QuestionBankImportDto = Static<typeof QuestionBankImportSchema>;
+export type InternalQuestionSnapshotDto = Static<typeof InternalQuestionSnapshotSchema>;
