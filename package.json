@@ -24,6 +24,7 @@
     "build": "pnpm workspace:check && turbo run build",
     "check": "pnpm workspace:check && biome check .",
     "clean": "turbo run clean",
+    "compatibility:typescript": "tsc -p tsconfig.type-tests.json --pretty false && pnpm --parallel --filter @interview-agent/server --filter @interview-agent/web --filter @interview-agent/db run typecheck:toolchain",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "dev": "turbo run dev --parallel",

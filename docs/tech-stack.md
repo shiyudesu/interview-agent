@@ -74,6 +74,8 @@ packages/domain ────────▶ no infrastructure dependencies
 - 环境变量由 Node.js `--env-file` 加载，并在启动时通过 TypeBox 完整校验。
 - 所有直接依赖使用精确版本，不使用 `^` 或 `~`。
 - `pnpm-lock.yaml` 是完整传递依赖的最终基线。
+- TypeScript `7.0.2` 已通过前端、服务端、数据库、测试与构建依赖的类型冒烟检查，并在 CI 中持续验证。
+- 当前不启用 TypeScript `6.0.3` 回退；只有兼容性检查出现无法通过上游升级解决的阻塞时，才通过显式 OpenSpec/ADR 变更回退。
 
 ## 4. Web
 

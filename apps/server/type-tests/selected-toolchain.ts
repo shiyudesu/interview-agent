@@ -1,0 +1,24 @@
+export type ServerToolchainModules = {
+  readonly agentCore: typeof import("@earendil-works/pi-agent-core");
+  readonly ai: typeof import("@earendil-works/pi-ai");
+  readonly ajvFormats: typeof import("ajv-formats");
+  readonly auth: typeof import("better-auth");
+  readonly authDrizzleAdapter: typeof import("@better-auth/drizzle-adapter");
+  readonly fastify: typeof import("fastify");
+  readonly fastifyHelmet: typeof import("@fastify/helmet");
+  readonly fastifyRateLimit: typeof import("@fastify/rate-limit");
+  readonly fastifySensible: typeof import("@fastify/sensible");
+  readonly fastifySse: typeof import("@fastify/sse");
+  readonly fastifyStatic: typeof import("@fastify/static");
+  readonly fastifySwagger: typeof import("@fastify/swagger");
+  readonly fastifySwaggerUi: typeof import("@fastify/swagger-ui");
+  readonly fastifyTypeBox: typeof import("@fastify/type-provider-typebox");
+  readonly nodemailer: typeof import("nodemailer");
+  readonly openTelemetryApi: typeof import("@opentelemetry/api");
+  readonly openTelemetryAuto: typeof import("@opentelemetry/auto-instrumentations-node");
+  readonly openTelemetryExporter: typeof import("@opentelemetry/exporter-trace-otlp-http");
+  readonly openTelemetrySdk: typeof import("@opentelemetry/sdk-node");
+  readonly pino: typeof import("pino");
+  readonly typebox: typeof import("typebox");
+  readonly yaml: typeof import("yaml");
+};

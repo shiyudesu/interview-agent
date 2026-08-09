@@ -20,7 +20,8 @@
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "typecheck:toolchain": "tsc -p tsconfig.type-tests.json --pretty false"
   },
   "dependencies": {
     "@interview-agent/domain": "workspace:*",

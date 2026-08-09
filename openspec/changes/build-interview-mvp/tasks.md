@@ -5,7 +5,7 @@
 - [x] 1.3 Configure Biome, Vitest, coverage, shared TypeScript settings, environment-file loading, and TypeBox startup configuration validation.
 - [x] 1.4 Add Docker Compose for PostgreSQL 18.4 and Mailpit 1.30.7, local environment examples, database readiness checks, and the production application Dockerfile.
 - [x] 1.5 Add GitHub Actions for frozen dependency installation, question-bank validation, formatting/linting, type checking, tests, and build without live external credentials.
-- [ ] 1.6 Verify TypeScript 7 compatibility across the selected toolchain and document an explicit fallback decision if TypeScript 6.0.3 is required.
+- [x] 1.6 Verify TypeScript 7 compatibility across the selected toolchain and document an explicit fallback decision if TypeScript 6.0.3 is required.
 
 ## 2. Domain Model and Contracts
 
