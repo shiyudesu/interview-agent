@@ -178,6 +178,12 @@ export interface IrrelevantQuestionOutcome {
   readonly zeroScoreReason: "irrelevant";
 }
 
+export type ZeroQuestionOutcome =
+  | IncorrectQuestionOutcome
+  | UnknownQuestionOutcome
+  | SkippedQuestionOutcome
+  | IrrelevantQuestionOutcome;
+
 export type FixedZeroQuestionOutcome =
   | UnknownQuestionOutcome
   | SkippedQuestionOutcome
@@ -195,6 +201,10 @@ export type QuestionOutcome = EvaluatedQuestionOutcome | UnevaluatedQuestionOutc
 interface QuestionEvaluationBase {
   readonly id: EvaluationId;
   readonly rubricItems: readonly RubricItemEvaluation[];
+}
+
+export interface QuestionEvaluationInput extends QuestionEvaluationBase {
+  readonly classification: ResponseClassification;
 }
 
 export interface RelevantQuestionEvaluation extends QuestionEvaluationBase {

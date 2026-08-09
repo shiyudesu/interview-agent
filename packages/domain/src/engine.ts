@@ -28,11 +28,19 @@ import {
   isSupportedQuestionCount,
   isTerminalInterviewStatus,
   type QuestionEvaluation,
+  type QuestionEvaluationInput,
   type QuestionOutcome,
   type QuestionSnapshot,
   type ReportKind,
   type ResponseClassification,
 } from "./interview.js";
+import {
+  createZeroQuestionOutcome,
+  InvalidRubricAwardError,
+  InvalidRubricError,
+  scoreQuestion,
+  validateRubric,
+} from "./scoring.js";
 
 const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000;
 
@@ -596,12 +604,17 @@ function completeWithQuestionEvaluation(
 
   const question = getCurrentQuestionState(interview);
   const answerMaterial = [...question.answerMaterial, plan.material];
-  validateQuestionEvaluation(interview, question, answerMaterial, completion.evaluation);
+  const evaluation = validateQuestionEvaluation(
+    interview,
+    question,
+    answerMaterial,
+    completion.evaluation,
+  );
   const updatedQuestion: InterviewQuestionState = {
     ...question,
     answerMaterial,
-    evaluation: completion.evaluation,
-    outcome: completion.evaluation.outcome,
+    evaluation,
+    outcome: evaluation.outcome,
   };
   const next = replaceCurrentQuestion(interview, updatedQuestion, {
     phase: "awaiting_continue",
@@ -616,7 +629,7 @@ function completeWithQuestionEvaluation(
       operationId: completion.operationId,
       occurredAt: cloneDate(completion.occurredAt),
       questionPosition: plan.questionPosition,
-      evaluation: completion.evaluation,
+      evaluation,
     },
   ]);
 }
@@ -630,10 +643,7 @@ function recordUnevaluatedOutcome(
   assertPhase(interview, "awaiting_response");
   assertValidDate(command.occurredAt, "outcome time");
 
-  const outcome =
-    kind === "unknown"
-      ? ({ kind, score: 0, zeroScoreReason: kind } as const)
-      : ({ kind, score: 0, zeroScoreReason: kind } as const);
+  const outcome = createZeroQuestionOutcome(kind);
   const question = getCurrentQuestionState(interview);
   const updatedQuestion: InterviewQuestionState = {
     ...question,
@@ -889,25 +899,16 @@ function validateQuestionSnapshot(question: QuestionSnapshot): void {
   assertNonEmptyBlueprintText(question.sourceWording, "source wording");
   assertNonEmptyBlueprintText(question.displayedWording, "displayed wording");
   assertNonEmptyBlueprintText(question.knowledgeExplanation, "knowledge explanation");
-  if (question.rubric.length === 0) {
-    throw new InvalidInterviewBlueprintError("Question Rubric cannot be empty");
-  }
-
-  const rubricIds = new Set<string>();
-  let totalWeight = 0;
   for (const item of question.rubric) {
-    if (rubricIds.has(item.id)) {
-      throw new InvalidInterviewBlueprintError(`Duplicate Rubric item ${item.id}`);
-    }
-    rubricIds.add(item.id);
     assertNonEmptyBlueprintText(item.description, "Rubric description");
-    if (!Number.isInteger(item.weight) || item.weight < 1 || item.weight > 100) {
-      throw new InvalidInterviewBlueprintError("Rubric weights must be integers from 1 to 100");
-    }
-    totalWeight += item.weight;
   }
-  if (totalWeight !== 100) {
-    throw new InvalidInterviewBlueprintError("Rubric weights must total 100");
+  try {
+    validateRubric(question.rubric);
+  } catch (error) {
+    if (error instanceof InvalidRubricError) {
+      throw new InvalidInterviewBlueprintError(error.message);
+    }
+    throw error;
   }
 
   const goalIds = new Set<string>();
@@ -963,52 +964,29 @@ function validateQuestionEvaluation(
   interview: Interview,
   question: InterviewQuestionState,
   answerMaterial: readonly AnswerMaterial[],
-  evaluation: QuestionEvaluation,
-): void {
+  evaluation: QuestionEvaluationInput,
+): QuestionEvaluation {
   const snapshot = getCurrentQuestion(interview);
   const materialIds = new Set(answerMaterial.map((material) => material.id));
-  const rubricById = new Map(snapshot.rubric.map((item) => [item.id, item] as const));
-  const evaluatedIds = new Set<string>();
-
-  if (evaluation.rubricItems.length !== snapshot.rubric.length) {
-    throw new InvalidInterviewCommandError("Evaluation must include every Rubric item");
-  }
-  for (const item of evaluation.rubricItems) {
-    const rubric = rubricById.get(item.rubricItemId);
-    if (rubric === undefined || evaluatedIds.has(item.rubricItemId)) {
-      throw new InvalidInterviewCommandError("Evaluation contains an invalid Rubric item");
-    }
-    evaluatedIds.add(item.rubricItemId);
-    if (
-      !Number.isInteger(item.awardedPoints) ||
-      item.awardedPoints < 0 ||
-      item.awardedPoints > rubric.weight
-    ) {
-      throw new InvalidInterviewCommandError("Awarded points exceed the Rubric item weight");
-    }
-    if (item.evidenceMaterialIds.some((id) => !materialIds.has(id))) {
-      throw new InvalidInterviewCommandError("Evaluation evidence must reference answer material");
-    }
-  }
-
-  const total = evaluation.rubricItems.reduce((sum, item) => sum + item.awardedPoints, 0);
   if (evaluation.classification === "irrelevant") {
     if (!question.systemFollowUps.some((followUp) => followUp.kind === "clarification")) {
       throw new InvalidInterviewCommandError(
         "An irrelevant outcome requires a clarification opportunity first",
       );
     }
-    if (total !== 0) {
-      throw new InvalidInterviewCommandError("Irrelevant evaluations cannot award points");
-    }
-    return;
   }
 
-  if (total === 0 && evaluation.outcome.kind !== "incorrect") {
-    throw new InvalidInterviewCommandError("A zero-point relevant evaluation is incorrect");
-  }
-  if (total > 0 && (evaluation.outcome.kind !== "scored" || evaluation.outcome.score !== total)) {
-    throw new InvalidInterviewCommandError("Scored outcome must equal awarded Rubric points");
+  try {
+    return scoreQuestion({
+      rubric: snapshot.rubric,
+      evaluation,
+      validEvidenceMaterialIds: materialIds,
+    });
+  } catch (error) {
+    if (error instanceof InvalidRubricError || error instanceof InvalidRubricAwardError) {
+      throw new InvalidInterviewCommandError(error.message);
+    }
+    throw error;
   }
 }
 

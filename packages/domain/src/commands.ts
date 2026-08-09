@@ -12,7 +12,7 @@ import type {
   FollowUpPurpose,
   InterviewBlueprint,
   InterviewQuestionCount,
-  QuestionEvaluation,
+  QuestionEvaluationInput,
   ReportKind,
   ResponseClassification,
 } from "./interview.js";
@@ -74,7 +74,7 @@ export interface RecordSystemFollowUpCommand
 
 export interface RecordQuestionEvaluationCommand
   extends InterviewCommandBase<"record_question_evaluation"> {
-  readonly evaluation: QuestionEvaluation;
+  readonly evaluation: QuestionEvaluationInput;
 }
 
 export interface RecordReportCommand extends InterviewCommandBase<"record_report"> {

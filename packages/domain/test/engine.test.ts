@@ -23,7 +23,6 @@ import {
   parseInterviewId,
   parseMessageId,
   parseOperationId,
-  parsePositiveQuestionScore,
   parseQuestionId,
   parseReportId,
   parseRubricItemId,
@@ -170,7 +169,7 @@ function evaluation(
   plan: InterviewOperationPlan,
   score: number,
   classification: "relevant" | "ambiguous" | "irrelevant" = "relevant",
-): QuestionEvaluation {
+): Omit<QuestionEvaluation, "outcome"> {
   if (plan.operation !== "answer_analysis") {
     throw new Error("Expected answer analysis plan");
   }
@@ -184,38 +183,10 @@ function evaluation(
     },
   ];
 
-  if (classification === "irrelevant") {
-    return {
-      id: parseEvaluationId(`evaluation-${sequence}`),
-      classification,
-      rubricItems,
-      outcome: {
-        kind: "irrelevant",
-        score: 0,
-        zeroScoreReason: "irrelevant",
-      },
-    };
-  }
-  if (score === 0) {
-    return {
-      id: parseEvaluationId(`evaluation-${sequence}`),
-      classification,
-      rubricItems,
-      outcome: {
-        kind: "incorrect",
-        score: 0,
-        zeroScoreReason: "incorrect",
-      },
-    };
-  }
   return {
     id: parseEvaluationId(`evaluation-${sequence}`),
     classification,
     rubricItems,
-    outcome: {
-      kind: "scored",
-      score: parsePositiveQuestionScore(score),
-    },
   };
 }
 
@@ -454,6 +425,27 @@ describe("answer processing and clarification", () => {
       "answer_material_submitted",
       "question_evaluation_recorded",
     ]);
+  });
+
+  it("rejects awarded Rubric points without evidence from accepted answer material", () => {
+    const interview = createInterview();
+    const plan = submitAnswerPlan(interview);
+    const completion = evaluationCompletion(plan.interview, plan, 100);
+
+    expect(() =>
+      completeInterviewOperation(plan.interview, plan, {
+        ...completion,
+        evaluation: {
+          ...completion.evaluation,
+          rubricItems: completion.evaluation.rubricItems.map((item) => ({
+            ...item,
+            evidenceMaterialIds: [],
+          })),
+        },
+      }),
+    ).toThrow(/require answer-material evidence/);
+    expect(plan.interview.questions[0]?.answerMaterial).toEqual([]);
+    expect(plan.interview.questions[0]?.evaluation).toBeNull();
   });
 
   it.each(["", "   ", "\n\t"])("rejects empty answer text %j", (text) => {

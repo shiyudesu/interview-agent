@@ -11,7 +11,7 @@
 
 - [x] 2.1 Define domain identifiers, interview statuses and phases, question outcomes, commands, events, report kinds, and repository/model ports without infrastructure dependencies.
 - [x] 2.2 Implement and unit-test the interview state machine, including clarification, bounded follow-ups, explicit supplements, continuation, completion, early ending, abandonment, expiry, and terminal-state rejection.
-- [ ] 2.3 Implement and unit-test deterministic Rubric scoring, question/domain/overall aggregation, unassessed domains, and distinct zero-point reasons.
+- [x] 2.3 Implement and unit-test deterministic Rubric scoring, question/domain/overall aggregation, unassessed domains, and distinct zero-point reasons.
 - [ ] 2.4 Define TypeBox API request, response, error, Operation event, configuration, question-bank, evaluation, and report schemas in `packages/contracts`.
 - [ ] 2.5 Implement explicit DTO-to-domain and domain-to-DTO mappings and test that transport schemas do not leak into `packages/domain`.
 
