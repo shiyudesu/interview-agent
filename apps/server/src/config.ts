@@ -17,10 +17,18 @@ export interface ServerConfig {
       readonly clientSecret: string;
     };
   };
-  readonly model: {
-    readonly provider: string;
-    readonly id: string;
-  };
+  readonly model:
+    | {
+        readonly provider: "faux";
+        readonly id: string;
+        readonly baseUrl?: string;
+      }
+    | {
+        readonly provider: string;
+        readonly id: string;
+        readonly apiKey: string;
+        readonly baseUrl?: string;
+      };
   readonly logLevel: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
   readonly telemetry: {
     readonly otlpEndpoint?: string;
@@ -45,6 +53,32 @@ function validationIssues(environment: Readonly<Record<string, string | undefine
 
     return `${error.instancePath || "/"} ${error.message}`;
   });
+}
+
+const SERVER_ENVIRONMENT_KEYS = [
+  "NODE_ENV",
+  "HOST",
+  "PORT",
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "MODEL_PROVIDER",
+  "MODEL_ID",
+  "MODEL_API_KEY",
+  "MODEL_BASE_URL",
+  "LOG_LEVEL",
+  "OTEL_EXPORTER_OTLP_ENDPOINT",
+] as const;
+
+function selectServerEnvironment(environment: Readonly<Record<string, string | undefined>>) {
+  return Object.fromEntries(
+    SERVER_ENVIRONMENT_KEYS.flatMap((key) => {
+      const value = environment[key];
+      return value === undefined ? [] : [[key, value] as const];
+    }),
+  );
 }
 
 function parsePort(port: string | undefined) {
@@ -80,28 +114,45 @@ function githubConfig(environment: ServerEnvironment) {
 export function loadServerConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ServerConfig {
-  if (!Check(ServerEnvironmentSchema, environment)) {
-    throw new ConfigurationError(validationIssues(environment));
+  const selectedEnvironment = selectServerEnvironment(environment);
+  if (!Check(ServerEnvironmentSchema, selectedEnvironment)) {
+    throw new ConfigurationError(validationIssues(selectedEnvironment));
   }
 
-  const github = githubConfig(environment);
-  const otlpEndpoint = environment.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const github = githubConfig(selectedEnvironment);
+  const otlpEndpoint = selectedEnvironment.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const modelBaseUrl = selectedEnvironment.MODEL_BASE_URL;
+  let model: ServerConfig["model"];
+  if (selectedEnvironment.MODEL_PROVIDER === "faux") {
+    model = {
+      provider: "faux",
+      id: selectedEnvironment.MODEL_ID,
+      ...(modelBaseUrl === undefined ? {} : { baseUrl: modelBaseUrl }),
+    };
+  } else {
+    if (!("MODEL_API_KEY" in selectedEnvironment)) {
+      throw new ConfigurationError(["/MODEL_API_KEY is required"]);
+    }
+    model = {
+      provider: selectedEnvironment.MODEL_PROVIDER,
+      id: selectedEnvironment.MODEL_ID,
+      apiKey: selectedEnvironment.MODEL_API_KEY,
+      ...(modelBaseUrl === undefined ? {} : { baseUrl: modelBaseUrl }),
+    };
+  }
 
   return {
-    environment: environment.NODE_ENV ?? "development",
-    host: environment.HOST ?? DEFAULT_HOST,
-    port: parsePort(environment.PORT),
-    databaseUrl: environment.DATABASE_URL,
+    environment: selectedEnvironment.NODE_ENV ?? "development",
+    host: selectedEnvironment.HOST ?? DEFAULT_HOST,
+    port: parsePort(selectedEnvironment.PORT),
+    databaseUrl: selectedEnvironment.DATABASE_URL,
     auth: {
-      secret: environment.BETTER_AUTH_SECRET,
-      baseUrl: environment.BETTER_AUTH_URL,
+      secret: selectedEnvironment.BETTER_AUTH_SECRET,
+      baseUrl: selectedEnvironment.BETTER_AUTH_URL,
       ...(github === undefined ? {} : { github }),
     },
-    model: {
-      provider: environment.MODEL_PROVIDER,
-      id: environment.MODEL_ID,
-    },
-    logLevel: environment.LOG_LEVEL ?? "info",
+    model,
+    logLevel: selectedEnvironment.LOG_LEVEL ?? "info",
     telemetry: {
       ...(otlpEndpoint === undefined ? {} : { otlpEndpoint }),
     },

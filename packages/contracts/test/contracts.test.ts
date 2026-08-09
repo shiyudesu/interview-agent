@@ -1,0 +1,1066 @@
+import { Check, Errors } from "typebox/value";
+import { describe, expect, it } from "vitest";
+
+import {
+  AbandonInterviewRequestSchema,
+  ActiveInterviewProgressSchema,
+  ActiveInterviewResponseSchema,
+  CompleteReportResponseSchema,
+  ContinueInterviewRequestSchema,
+  CreateInterviewRequestSchema,
+  EndInterviewEarlyRequestSchema,
+  ErrorEnvelopeSchema,
+  IncompleteReportResponseSchema,
+  InternalCompleteReportSnapshotSchema,
+  InternalIncompleteReportSnapshotSchema,
+  InterviewDetailResponseSchema,
+  MarkQuestionUnknownRequestSchema,
+  OperationEventSchema,
+  OperationStatusResponseSchema,
+  PublicReportQuestionFeedbackSchema,
+  QuestionBankQuestionSchema,
+  ReportPendingInterviewResponseSchema,
+  RequestClarificationRequestSchema,
+  RetryOperationRequestSchema,
+  ServerEnvironmentSchema,
+  SkipQuestionRequestSchema,
+  StructuredAnswerEvaluationSchema,
+  SubmitAnswerRequestSchema,
+  SubmitSupplementRequestSchema,
+  validateInternalReportSnapshot,
+  validateQuestionBankQuestion,
+  validateReportResponse,
+} from "../src/index.js";
+
+const now = "2026-08-09T12:00:00.000Z";
+
+const modelMetadata = {
+  provider: "faux",
+  modelId: "faux-v1",
+  promptVersion: "answer-evaluation-v1",
+  schemaVersion: "1.0",
+  questionVersion: 1,
+  purpose: "answer_evaluation",
+  latencyMs: 42,
+  tokens: {
+    inputTokens: 100,
+    outputTokens: 50,
+  },
+};
+
+const questionBankQuestion = {
+  id: "go.context.001",
+  version: 1,
+  domain: "go_language",
+  difficulty: "medium",
+  sourceWording: "请解释 context.Context 的用途。",
+  rubric: [
+    {
+      id: "go.context.001.cancel",
+      description: "说明取消信号传播",
+      weight: 50,
+    },
+    {
+      id: "go.context.001.deadline",
+      description: "说明截止时间传播",
+      weight: 50,
+    },
+  ],
+  followUpGoals: [
+    {
+      id: "go.context.001.clarification",
+      kind: "clarification",
+      goal: "澄清回答中提到的取消传播范围",
+    },
+    {
+      id: "go.context.001.follow-up",
+      kind: "depth",
+      goal: "解释请求范围值的使用边界",
+    },
+  ],
+  knowledgeExplanation: "Context 在调用链上传递取消、截止时间和请求范围值。",
+  active: true,
+};
+
+const incompleteDomains = [
+  {
+    status: "assessed",
+    domain: "go_language",
+    score: 80,
+    questionCount: 1,
+  },
+  {
+    status: "unassessed",
+    domain: "concurrency_runtime_performance",
+  },
+  {
+    status: "unassessed",
+    domain: "http_rpc_api",
+  },
+  {
+    status: "unassessed",
+    domain: "database_storage",
+  },
+  {
+    status: "unassessed",
+    domain: "cache_messaging_distributed",
+  },
+  {
+    status: "unassessed",
+    domain: "testing_observability_engineering",
+  },
+] as const;
+
+const domains = incompleteDomains.map((result, index) =>
+  index < 5
+    ? {
+        status: "assessed" as const,
+        domain: result.domain,
+        score: 80,
+        questionCount: 1,
+      }
+    : result,
+);
+
+const allAssessedDomains = incompleteDomains.map((result) => ({
+  status: "assessed" as const,
+  domain: result.domain,
+  score: 80,
+  questionCount: 1,
+}));
+
+const internalReportQuestion = {
+  questionId: "go.context.001",
+  questionVersion: 1,
+  domain: "go_language",
+  position: 1,
+  displayedQuestion: "请解释 context.Context 的用途。",
+  answerSummary: "回答提到了取消信号和截止时间。",
+  score: 80,
+  outcome: "scored",
+  matchedKnowledgePoints: [
+    {
+      rubricItemId: "go.context.001.cancel",
+      summary: "能够说明取消信号沿调用链传播",
+      awardedPoints: 50,
+      evidence: [
+        {
+          source: "answer_material",
+          answerMaterialId: "answer-1",
+        },
+      ],
+    },
+  ],
+  missingOrIncorrectPoints: [
+    {
+      rubricItemId: "go.context.001.deadline",
+      summary: "未准确说明 Value 的请求范围限制",
+      awardedPoints: 0,
+      evidence: [
+        {
+          source: "question_snapshot",
+          questionId: "go.context.001",
+        },
+      ],
+    },
+  ],
+  scoreRationale: "答案覆盖了主要用途，但遗漏了 Value 的边界。",
+  improvementSuggestions: ["复习 Context Value 只应承载请求范围数据的约束。"],
+  evidence: [
+    {
+      source: "answer_material",
+      answerMaterialId: "answer-1",
+    },
+  ],
+};
+
+const publicReportQuestion = {
+  position: 1,
+  displayedQuestion: "请解释 context.Context 的用途。",
+  answerSummary: "回答提到了取消信号和截止时间。",
+  score: 80,
+  outcome: "scored",
+  matchedKnowledgePoints: ["能够说明取消信号沿调用链传播"],
+  missingOrIncorrectPoints: ["未准确说明 Value 的请求范围限制"],
+  scoreRationale: "答案覆盖了主要用途，但遗漏了 Value 的边界。",
+  improvementSuggestions: ["复习 Context Value 只应承载请求范围数据的约束。"],
+};
+
+const internalReportQuestions = Array.from({ length: 5 }, (_, index) => ({
+  ...internalReportQuestion,
+  questionId: `go.question.${index + 1}`,
+  domain: incompleteDomains[index]?.domain,
+  position: index + 1,
+}));
+
+const publicReportQuestions = Array.from({ length: 5 }, (_, index) => ({
+  ...publicReportQuestion,
+  position: index + 1,
+}));
+
+const reportDisplay = {
+  reportId: "report-1",
+  interviewId: "interview-1",
+  generatedAt: now,
+  domains,
+  overallExplanation: "基础知识较扎实。",
+  strengths: ["能够解释取消传播。"],
+  weaknesses: ["对请求范围值的边界理解不完整。"],
+  priorities: ["优先补充 Context 使用约束。"],
+  learningSuggestions: ["阅读 context 包文档并分析实际请求链路。"],
+};
+
+const internalReport = {
+  ...reportDisplay,
+  schemaVersion: "1.0",
+  questions: internalReportQuestions,
+  modelMetadata,
+  questionVersions: internalReportQuestions.map((question) => ({
+    questionId: question.questionId,
+    questionVersion: 1,
+  })),
+};
+
+const publicReport = {
+  ...reportDisplay,
+  questions: publicReportQuestions,
+};
+
+const activeInterview = {
+  id: "interview-1",
+  status: "active",
+  phase: "awaiting_response",
+  version: 3,
+  progress: {
+    current: 2,
+    total: 5,
+  },
+  currentWording: "请解释 Go interface 的动态类型和值。",
+  messages: [
+    {
+      id: "message-1",
+      role: "interviewer",
+      kind: "main_question",
+      text: "请解释 Go interface 的动态类型和值。",
+      createdAt: now,
+    },
+  ],
+  availableActions: ["submit_answer", "request_clarification", "mark_unknown", "skip"],
+  startedAt: now,
+  lastEffectiveActivityAt: now,
+  expiresAt: "2026-08-10T12:00:00.000Z",
+};
+
+describe("API command and error schemas", () => {
+  it("accepts only supported interview question counts", () => {
+    expect(Check(CreateInterviewRequestSchema, { questionCount: 5, expectedVersion: 0 })).toBe(
+      true,
+    );
+    expect(Check(CreateInterviewRequestSchema, { questionCount: 7, expectedVersion: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("validates the stable version-conflict error envelope", () => {
+    const envelope = {
+      error: {
+        code: "version_conflict",
+        message: "Interview state changed",
+        interviewId: "interview-1",
+        currentVersion: 8,
+      },
+    };
+
+    expect(Check(ErrorEnvelopeSchema, envelope)).toBe(true);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        ...envelope,
+        error: { ...envelope.error, expectedVersion: 7 },
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    [SubmitAnswerRequestSchema, { text: "answer" }],
+    [SubmitSupplementRequestSchema, { text: "supplement" }],
+    [RequestClarificationRequestSchema, {}],
+    [MarkQuestionUnknownRequestSchema, {}],
+    [SkipQuestionRequestSchema, {}],
+    [ContinueInterviewRequestSchema, {}],
+    [EndInterviewEarlyRequestSchema, {}],
+    [AbandonInterviewRequestSchema, {}],
+    [RetryOperationRequestSchema, { operationId: "operation-1" }],
+  ])("requires expectedVersion on every interview mutation", (schema, body) => {
+    expect(Check(schema, body)).toBe(false);
+    expect(Check(schema, { ...body, expectedVersion: 2 })).toBe(true);
+  });
+});
+
+describe("discriminated interview lifecycle responses", () => {
+  it.each([
+    [{ current: 1, total: 5 }, true],
+    [{ current: 5, total: 5 }, true],
+    [{ current: 1, total: 10 }, true],
+    [{ current: 10, total: 10 }, true],
+    [{ current: 1, total: 15 }, true],
+    [{ current: 15, total: 15 }, true],
+    [{ current: 0, total: 5 }, false],
+    [{ current: 6, total: 5 }, false],
+    [{ current: 99, total: 5 }, false],
+    [{ current: 11, total: 10 }, false],
+    [{ current: 16, total: 15 }, false],
+  ])("constrains active progress to the selected total: %o", (progress, expected) => {
+    expect(Check(ActiveInterviewProgressSchema, progress)).toBe(expected);
+  });
+
+  it("accepts an active response without terminal fields", () => {
+    expect(Check(ActiveInterviewResponseSchema, activeInterview)).toBe(true);
+    expect(Check(ActiveInterviewResponseSchema, { ...activeInterview, endedAt: now })).toBe(false);
+  });
+
+  it("couples processing with a current Operation and no answer actions", () => {
+    const processing = {
+      ...activeInterview,
+      phase: "processing",
+      operation: {
+        operationId: "operation-1",
+        status: "processing",
+      },
+      availableActions: [],
+    };
+    expect(Check(ActiveInterviewResponseSchema, processing)).toBe(true);
+    expect(
+      Check(ActiveInterviewResponseSchema, {
+        ...processing,
+        availableActions: ["submit_answer"],
+      }),
+    ).toBe(false);
+    expect(Check(ActiveInterviewResponseSchema, { ...processing, operation: undefined })).toBe(
+      false,
+    );
+  });
+
+  it("requires retryable active failures to expose the failed Operation and retry action", () => {
+    const failed = {
+      ...activeInterview,
+      operation: {
+        operationId: "operation-1",
+        status: "failed",
+        failure: {
+          code: "model_failure",
+          message: "Provider unavailable",
+          retryable: true,
+        },
+      },
+      availableActions: ["submit_answer", "retry"],
+    };
+    expect(Check(ActiveInterviewResponseSchema, failed)).toBe(true);
+    expect(
+      Check(ActiveInterviewResponseSchema, { ...failed, availableActions: ["submit_answer"] }),
+    ).toBe(false);
+  });
+
+  it("exposes report kind and Operation state without answer actions while report-pending", () => {
+    const reportPending = {
+      id: "interview-1",
+      status: "report_pending",
+      reportKind: "complete",
+      version: 8,
+      progress: { current: 5, total: 5 },
+      messages: activeInterview.messages,
+      startedAt: now,
+      lastEffectiveActivityAt: now,
+      expiresAt: "2026-08-10T12:00:00.000Z",
+      operation: {
+        operationId: "operation-report-1",
+        status: "failed",
+        failure: {
+          code: "model_failure",
+          message: "Provider unavailable",
+          retryable: true,
+        },
+      },
+      availableActions: ["retry"],
+    };
+    expect(Check(ReportPendingInterviewResponseSchema, reportPending)).toBe(true);
+    expect(
+      Check(ReportPendingInterviewResponseSchema, {
+        ...reportPending,
+        availableActions: ["retry", "submit_answer"],
+      }),
+    ).toBe(false);
+  });
+
+  it("requires reports for completed and early-ended, and forbids them for abandoned", () => {
+    const terminal = {
+      id: "interview-1",
+      version: 9,
+      questionCount: 5,
+      startedAt: now,
+      endedAt: now,
+      messages: activeInterview.messages,
+    };
+    expect(
+      Check(InterviewDetailResponseSchema, {
+        ...terminal,
+        status: "completed",
+        reportId: "report-1",
+      }),
+    ).toBe(true);
+    expect(Check(InterviewDetailResponseSchema, { ...terminal, status: "completed" })).toBe(false);
+    expect(
+      Check(InterviewDetailResponseSchema, {
+        ...terminal,
+        status: "early_ended",
+        reportId: "report-1",
+      }),
+    ).toBe(true);
+    expect(Check(InterviewDetailResponseSchema, { ...terminal, status: "abandoned" })).toBe(true);
+    expect(
+      Check(InterviewDetailResponseSchema, {
+        ...terminal,
+        status: "abandoned",
+        reportId: "report-1",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("Operation schemas", () => {
+  const failure = {
+    code: "model_failure",
+    message: "Model request failed",
+    retryable: false,
+  };
+
+  it.each([
+    {
+      operationId: "operation-1",
+      sequence: 0,
+      occurredAt: now,
+      type: "text_delta",
+      text: "你好",
+    },
+    {
+      operationId: "operation-1",
+      sequence: 1,
+      occurredAt: now,
+      type: "succeeded",
+    },
+    {
+      operationId: "operation-1",
+      sequence: 1,
+      occurredAt: now,
+      type: "failed",
+      failure,
+    },
+  ])("accepts the $type event variant", (event) => {
+    expect(Check(OperationEventSchema, event)).toBe(true);
+  });
+
+  it("uses the same retryable failure detail in SSE, API errors, and canonical status", () => {
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        error: {
+          code: "operation_failure",
+          operationId: "operation-1",
+          failure: { ...failure, retryable: true },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Check(OperationStatusResponseSchema, {
+        operationId: "operation-1",
+        status: "failed",
+        createdAt: now,
+        updatedAt: now,
+        failure,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps presentation events separate from durable results", () => {
+    expect(
+      Check(OperationEventSchema, {
+        operationId: "operation-1",
+        sequence: 1,
+        occurredAt: now,
+        type: "succeeded",
+        result: {
+          interviewId: "interview-1",
+          interviewVersion: 2,
+          reportId: null,
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      Check(OperationStatusResponseSchema, {
+        operationId: "operation-1",
+        status: "succeeded",
+        createdAt: now,
+        updatedAt: now,
+        result: {
+          interviewId: "interview-1",
+          interviewVersion: 2,
+          reportId: null,
+        },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("question-bank schemas", () => {
+  it("accepts reviewed non-coding questions with a 100-point Rubric", () => {
+    expect(Check(QuestionBankQuestionSchema, questionBankQuestion)).toBe(true);
+    expect(validateQuestionBankQuestion(questionBankQuestion)).toEqual([]);
+  });
+
+  it("rejects coding-task representations and unknown fields", () => {
+    expect(
+      Check(QuestionBankQuestionSchema, {
+        ...questionBankQuestion,
+        codingTask: {
+          starterCode: "package main",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("reports Rubric totals that JSON Schema cannot express", () => {
+    const invalidQuestion = {
+      ...questionBankQuestion,
+      rubric: questionBankQuestion.rubric.map((item) => ({ ...item, weight: 40 })),
+    };
+
+    expect(Check(QuestionBankQuestionSchema, invalidQuestion)).toBe(true);
+    expect(validateQuestionBankQuestion(invalidQuestion)).toEqual([
+      {
+        path: "/rubric",
+        code: "rubric_total",
+        message: "Rubric weights must total 100, received 80",
+      },
+    ]);
+  });
+
+  it("requires non-empty follow-up goals including a clarification goal", () => {
+    const emptyGoals = {
+      ...questionBankQuestion,
+      followUpGoals: [],
+    };
+    expect(Check(QuestionBankQuestionSchema, emptyGoals)).toBe(false);
+    expect(validateQuestionBankQuestion(emptyGoals)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "schema" })]),
+    );
+
+    const depthOnly = {
+      ...questionBankQuestion,
+      followUpGoals: questionBankQuestion.followUpGoals.filter((goal) => goal.kind === "depth"),
+    };
+    expect(Check(QuestionBankQuestionSchema, depthOnly)).toBe(true);
+    expect(validateQuestionBankQuestion(depthOnly)).toEqual([
+      expect.objectContaining({ code: "missing_clarification_goal" }),
+    ]);
+  });
+
+  it("rejects duplicate nested Rubric and follow-up goal IDs", () => {
+    const duplicateIds = {
+      ...questionBankQuestion,
+      rubric: [
+        questionBankQuestion.rubric[0],
+        {
+          ...questionBankQuestion.rubric[1],
+          id: questionBankQuestion.rubric[0]?.id,
+        },
+      ],
+      followUpGoals: [
+        ...questionBankQuestion.followUpGoals,
+        {
+          id: questionBankQuestion.followUpGoals[0]?.id,
+          kind: "depth",
+          goal: "使用不同内容但复用同一目标 ID",
+        },
+      ],
+    };
+
+    expect(Check(QuestionBankQuestionSchema, duplicateIds)).toBe(true);
+    expect(validateQuestionBankQuestion(duplicateIds)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "duplicate_rubric_item_id" }),
+        expect.objectContaining({ code: "duplicate_follow_up_goal_id" }),
+      ]),
+    );
+  });
+});
+
+describe("structured evaluation schema", () => {
+  const evaluation = {
+    classification: "relevant",
+    rubricItems: [
+      {
+        rubricItemId: "go.context.001.cancel",
+        evidenceMaterialIds: ["answer-1"],
+        awardedPoints: 50,
+        missingOrIncorrectPoints: [],
+      },
+    ],
+    recommendedFollowUp: {
+      goalId: "go.context.001.follow-up",
+      kind: "depth",
+      purpose: "depth",
+    },
+    metadata: modelMetadata,
+  };
+
+  it("accepts evidence and complete model metadata", () => {
+    expect(Check(StructuredAnswerEvaluationSchema, evaluation)).toBe(true);
+  });
+
+  it("rejects unstructured internal explanations", () => {
+    expect(
+      Check(StructuredAnswerEvaluationSchema, {
+        ...evaluation,
+        chainOfThought: "private reasoning",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("internal and public report schemas", () => {
+  it("keeps immutable internal metadata and evidence out of public responses", () => {
+    expect(
+      Check(InternalCompleteReportSnapshotSchema, {
+        kind: "complete",
+        ...internalReport,
+        overallScore: 80,
+      }),
+    ).toBe(true);
+    expect(
+      Check(CompleteReportResponseSchema, {
+        kind: "complete",
+        ...publicReport,
+        overallScore: 80,
+      }),
+    ).toBe(true);
+
+    const internalFields = [
+      "questionId",
+      "questionVersion",
+      "rubricItemId",
+      "awardedPoints",
+      "evidence",
+      "modelMetadata",
+      "questionVersions",
+      "schemaVersion",
+      "sourceWording",
+      "referenceAnswer",
+      "followUpGoals",
+      "knowledgeExplanation",
+    ];
+    for (const field of internalFields) {
+      const leaked =
+        field === "modelMetadata" || field === "questionVersions" || field === "schemaVersion"
+          ? { kind: "complete", ...publicReport, overallScore: 80, [field]: "private" }
+          : {
+              kind: "complete",
+              ...publicReport,
+              overallScore: 80,
+              questions: publicReportQuestions.map((question, index) =>
+                index === 0 ? { ...question, [field]: "private" } : question,
+              ),
+            };
+      expect(Check(CompleteReportResponseSchema, leaked), field).toBe(false);
+    }
+  });
+
+  it("discriminates positive scored outcomes from matching zero-score reasons", () => {
+    expect(Check(PublicReportQuestionFeedbackSchema, publicReportQuestion)).toBe(true);
+    expect(Check(PublicReportQuestionFeedbackSchema, { ...publicReportQuestion, score: 0 })).toBe(
+      false,
+    );
+    expect(
+      Check(PublicReportQuestionFeedbackSchema, {
+        ...publicReportQuestion,
+        outcome: "unknown",
+        score: 0,
+        zeroScoreReason: "unknown",
+      }),
+    ).toBe(true);
+    expect(
+      Check(PublicReportQuestionFeedbackSchema, {
+        ...publicReportQuestion,
+        outcome: "unknown",
+        score: 0,
+        zeroScoreReason: "skipped",
+      }),
+    ).toBe(false);
+    expect(
+      Check(InternalCompleteReportSnapshotSchema, {
+        kind: "complete",
+        ...internalReport,
+        overallScore: 0,
+        questions: internalReportQuestions.map((question, index) =>
+          index === 0
+            ? {
+                ...question,
+                outcome: "skipped",
+                score: 0,
+                zeroScoreReason: "unknown",
+              }
+            : question,
+        ),
+      }),
+    ).toBe(false);
+  });
+
+  it("requires complete reports to contain exactly 5, 10, or 15 feedback items", () => {
+    const fiveQuestionReport = {
+      kind: "complete",
+      ...publicReport,
+      overallScore: 80,
+    };
+    expect(Check(CompleteReportResponseSchema, fiveQuestionReport)).toBe(true);
+    expect(
+      Check(CompleteReportResponseSchema, {
+        ...fiveQuestionReport,
+        questions: [publicReportQuestion],
+      }),
+    ).toBe(false);
+
+    for (const questionCount of [10, 15]) {
+      expect(
+        Check(CompleteReportResponseSchema, {
+          ...fiveQuestionReport,
+          domains: allAssessedDomains,
+          questions: Array.from({ length: questionCount }, (_, index) => ({
+            ...publicReportQuestion,
+            position: index + 1,
+          })),
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("requires five assessed domains for 5 questions and all domains for 10 or 15", () => {
+    const complete = {
+      kind: "complete",
+      ...publicReport,
+      overallScore: 80,
+    };
+    expect(
+      Check(CompleteReportResponseSchema, {
+        ...complete,
+        domains: incompleteDomains.map((domain) => ({
+          status: "unassessed",
+          domain: domain.domain,
+        })),
+      }),
+    ).toBe(false);
+    expect(
+      Check(CompleteReportResponseSchema, {
+        ...complete,
+        domains: incompleteDomains,
+        questions: Array.from({ length: 10 }, (_, index) => ({
+          ...publicReportQuestion,
+          position: index + 1,
+        })),
+      }),
+    ).toBe(false);
+  });
+
+  it("requires six unique domain results and detects coverage JSON Schema cannot express", () => {
+    const complete = {
+      kind: "complete",
+      ...publicReport,
+      overallScore: 80,
+    };
+    expect(validateReportResponse(complete)).toEqual([]);
+
+    const duplicateDomains = [
+      ...domains.slice(0, 5),
+      {
+        status: "unassessed",
+        domain: "go_language",
+      },
+    ];
+    const issues = validateReportResponse({ ...complete, domains: duplicateDomains });
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "duplicate_domain" }),
+        expect.objectContaining({ code: "missing_domain" }),
+      ]),
+    );
+  });
+
+  it("requires complete and incomplete feedback positions to be unique and contiguous", () => {
+    const complete = {
+      kind: "complete",
+      ...publicReport,
+      overallScore: 80,
+      questions: publicReportQuestions.map((question, index) => ({
+        ...question,
+        position: index === 1 ? 1 : question.position,
+      })),
+    };
+    expect(validateReportResponse(complete)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "duplicate_position" }),
+        expect.objectContaining({ code: "non_contiguous_position" }),
+      ]),
+    );
+
+    const incomplete = {
+      kind: "incomplete",
+      ...publicReport,
+      domains: [
+        {
+          status: "assessed",
+          domain: "go_language",
+          score: 80,
+          questionCount: 2,
+        },
+        ...incompleteDomains.slice(1),
+      ],
+      questions: [
+        publicReportQuestion,
+        {
+          ...publicReportQuestion,
+          position: 1,
+        },
+      ],
+    };
+    expect(validateReportResponse(incomplete)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "duplicate_position" }),
+        expect.objectContaining({ code: "non_contiguous_position" }),
+      ]),
+    );
+
+    const internalIncomplete = {
+      kind: "incomplete",
+      ...internalReport,
+      domains: incomplete.domains,
+      questions: [
+        internalReportQuestion,
+        {
+          ...internalReportQuestion,
+          questionId: "go.context.002",
+          position: 1,
+        },
+      ],
+      questionVersions: [
+        {
+          questionId: internalReportQuestion.questionId,
+          questionVersion: internalReportQuestion.questionVersion,
+        },
+        {
+          questionId: "go.context.002",
+          questionVersion: internalReportQuestion.questionVersion,
+        },
+      ],
+    };
+    expect(validateInternalReportSnapshot(internalIncomplete)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "duplicate_position" }),
+        expect.objectContaining({ code: "non_contiguous_position" }),
+      ]),
+    );
+  });
+
+  it("limits incomplete reports to at most 15 question feedback items", () => {
+    const publicQuestions = Array.from({ length: 16 }, (_, index) => ({
+      ...publicReportQuestion,
+      position: index + 1,
+    }));
+    const internalQuestions = Array.from({ length: 16 }, (_, index) => ({
+      ...internalReportQuestion,
+      questionId: `go.incomplete.${index + 1}`,
+      position: index + 1,
+    }));
+
+    expect(
+      Check(IncompleteReportResponseSchema, {
+        kind: "incomplete",
+        ...publicReport,
+        domains: incompleteDomains,
+        questions: publicQuestions,
+      }),
+    ).toBe(false);
+    expect(
+      Check(InternalIncompleteReportSnapshotSchema, {
+        kind: "incomplete",
+        ...internalReport,
+        domains: incompleteDomains,
+        questions: internalQuestions,
+        questionVersions: internalQuestions.map((question) => ({
+          questionId: question.questionId,
+          questionVersion: question.questionVersion,
+        })),
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects assessed domain counts inconsistent with question feedback", () => {
+    const inconsistentDomains = domains.map((domain, index) =>
+      index === 0 && domain.status === "assessed"
+        ? { ...domain, questionCount: domain.questionCount + 1 }
+        : domain,
+    );
+    expect(
+      validateReportResponse({
+        kind: "complete",
+        ...publicReport,
+        domains: inconsistentDomains,
+        overallScore: 80,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "inconsistent_domain_question_count" }),
+      ]),
+    );
+
+    const internallyMisassigned = {
+      kind: "complete",
+      ...internalReport,
+      domains,
+      questions: internalReportQuestions.map((question, index) =>
+        index === 0 ? { ...question, domain: "concurrency_runtime_performance" } : question,
+      ),
+      overallScore: 80,
+    };
+    expect(validateInternalReportSnapshot(internallyMisassigned)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "inconsistent_domain_question_count" }),
+      ]),
+    );
+  });
+
+  it("requires internal question-version metadata to cover each question exactly once", () => {
+    const complete = {
+      kind: "complete",
+      ...internalReport,
+      questionVersions: internalReport.questionVersions.slice(1),
+      overallScore: 80,
+    };
+    expect(validateInternalReportSnapshot(complete)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "missing_question_version" })]),
+    );
+
+    const incomplete = {
+      kind: "incomplete",
+      ...internalReport,
+      domains: incompleteDomains,
+      questions: [internalReportQuestion],
+      questionVersions: [
+        {
+          questionId: internalReportQuestion.questionId,
+          questionVersion: internalReportQuestion.questionVersion,
+        },
+        {
+          questionId: internalReportQuestion.questionId,
+          questionVersion: internalReportQuestion.questionVersion + 1,
+        },
+      ],
+    };
+    expect(validateInternalReportSnapshot(incomplete)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "duplicate_question_version" })]),
+    );
+  });
+
+  it("requires overall score only for complete reports", () => {
+    expect(
+      Check(InternalCompleteReportSnapshotSchema, {
+        kind: "complete",
+        ...internalReport,
+        overallScore: 0,
+      }),
+    ).toBe(true);
+    expect(
+      Check(InternalIncompleteReportSnapshotSchema, {
+        kind: "incomplete",
+        ...internalReport,
+        domains: incompleteDomains,
+        questions: [internalReportQuestion],
+      }),
+    ).toBe(true);
+    expect(
+      Check(IncompleteReportResponseSchema, {
+        kind: "incomplete",
+        ...publicReport,
+        domains: incompleteDomains,
+        questions: [publicReportQuestion],
+        overallScore: 80,
+      }),
+    ).toBe(false);
+    expect(
+      validateInternalReportSnapshot({
+        kind: "incomplete",
+        ...internalReport,
+        domains: incompleteDomains,
+        questions: [internalReportQuestion],
+        questionVersions: [
+          {
+            questionId: internalReportQuestion.questionId,
+            questionVersion: internalReportQuestion.questionVersion,
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("startup configuration schema", () => {
+  const commonEnvironment = {
+    DATABASE_URL: "postgres://localhost:5432/interview",
+    BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    MODEL_ID: "test-model",
+    NODE_ENV: "test",
+  };
+
+  it("allows Faux Provider without an API key", () => {
+    expect(
+      Check(ServerEnvironmentSchema, {
+        ...commonEnvironment,
+        MODEL_PROVIDER: "faux",
+      }),
+    ).toBe(true);
+    expect(
+      Check(ServerEnvironmentSchema, {
+        ...commonEnvironment,
+        MODEL_PROVIDER: "faux",
+        MODEL_API_KEY: "unused-secret",
+      }),
+    ).toBe(false);
+  });
+
+  it("requires a non-empty API key for every real provider", () => {
+    expect(
+      Check(ServerEnvironmentSchema, {
+        ...commonEnvironment,
+        MODEL_PROVIDER: "openai",
+      }),
+    ).toBe(false);
+    expect(
+      Check(ServerEnvironmentSchema, {
+        ...commonEnvironment,
+        MODEL_PROVIDER: "custom-provider",
+        MODEL_API_KEY: "secret-key",
+        MODEL_BASE_URL: "https://models.example.test/v1",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects unrelated properties and reports invalid required configuration", () => {
+    const invalidEnvironment = {
+      ...commonEnvironment,
+      MODEL_PROVIDER: "faux",
+      BETTER_AUTH_SECRET: "short",
+      PATH: "/usr/bin",
+    };
+    const errors = [...Errors(ServerEnvironmentSchema, invalidEnvironment)];
+
+    expect(Check(ServerEnvironmentSchema, invalidEnvironment)).toBe(false);
+    expect(errors.some((error) => error.instancePath === "/BETTER_AUTH_SECRET")).toBe(true);
+  });
+});

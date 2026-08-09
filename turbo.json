@@ -30,6 +30,8 @@
         "GITHUB_CLIENT_SECRET",
         "MODEL_PROVIDER",
         "MODEL_ID",
+        "MODEL_API_KEY",
+        "MODEL_BASE_URL",
         "LOG_LEVEL",
         "OTEL_EXPORTER_OTLP_ENDPOINT"
       ],

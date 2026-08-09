@@ -30,6 +30,38 @@ describe("loadServerConfig", () => {
     });
   });
 
+  it("requires an API key for a real provider", () => {
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        MODEL_PROVIDER: "openai",
+      }),
+    ).toThrow("/MODEL_API_KEY");
+  });
+
+  it("propagates real-provider credentials and an optional base URL", () => {
+    expect(
+      loadServerConfig({
+        ...validEnvironment,
+        MODEL_PROVIDER: "custom-provider",
+        MODEL_API_KEY: "model-secret",
+        MODEL_BASE_URL: "https://models.example.test/v1",
+      }).model,
+    ).toEqual({
+      provider: "custom-provider",
+      id: "test-model",
+      apiKey: "model-secret",
+      baseUrl: "https://models.example.test/v1",
+    });
+  });
+
+  it("ignores unrelated process environment variables before strict validation", () => {
+    expect(loadServerConfig({ ...validEnvironment, PATH: "/usr/bin" }).model).toEqual({
+      provider: "faux",
+      id: "test-model",
+    });
+  });
+
   it("rejects missing required settings without exposing values", () => {
     expect(() => loadServerConfig({})).toThrow(ConfigurationError);
     expect(() => loadServerConfig({})).toThrow("/DATABASE_URL");
