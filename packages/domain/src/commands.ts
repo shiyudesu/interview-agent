@@ -1,5 +1,6 @@
 import type {
   AccountId,
+  AnswerMaterialId,
   FollowUpGoalId,
   InterviewId,
   MessageId,
@@ -8,10 +9,12 @@ import type {
 } from "./identifiers.js";
 import type {
   FollowUpKind,
+  FollowUpPurpose,
   InterviewBlueprint,
   InterviewQuestionCount,
   QuestionEvaluation,
   ReportKind,
+  ResponseClassification,
 } from "./interview.js";
 
 interface InterviewCommandBase<Type extends string> {
@@ -29,12 +32,12 @@ export interface CreateInterviewCommand extends InterviewCommandBase<"create_int
 }
 
 export interface SubmitAnswerCommand extends InterviewCommandBase<"submit_answer"> {
-  readonly messageId: MessageId;
+  readonly answerMaterialId: AnswerMaterialId;
   readonly text: string;
 }
 
 export interface SubmitSupplementCommand extends InterviewCommandBase<"submit_supplement"> {
-  readonly messageId: MessageId;
+  readonly answerMaterialId: AnswerMaterialId;
   readonly text: string;
 }
 
@@ -64,6 +67,8 @@ export interface RecordSystemFollowUpCommand
   readonly messageId: MessageId;
   readonly goalId: FollowUpGoalId;
   readonly kind: FollowUpKind;
+  readonly purpose: FollowUpPurpose;
+  readonly responseClassification: ResponseClassification;
   readonly text: string;
 }
 

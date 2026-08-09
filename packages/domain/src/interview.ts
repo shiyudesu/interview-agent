@@ -48,6 +48,13 @@ export type ZeroScoreReason = (typeof ZERO_SCORE_REASONS)[number];
 export const FOLLOW_UP_KINDS = ["clarification", "depth"] as const;
 export type FollowUpKind = (typeof FOLLOW_UP_KINDS)[number];
 
+export const FOLLOW_UP_PURPOSES = [
+  "answer_clarification",
+  "irrelevant_response_clarification",
+  "depth",
+] as const;
+export type FollowUpPurpose = (typeof FOLLOW_UP_PURPOSES)[number];
+
 export const ANSWER_MATERIAL_KINDS = ["main_answer", "follow_up_answer", "supplement"] as const;
 export type AnswerMaterialKind = (typeof ANSWER_MATERIAL_KINDS)[number];
 
@@ -118,6 +125,7 @@ export interface RubricItemEvaluation {
 export interface FollowUpRecommendation {
   readonly goalId: FollowUpGoalId;
   readonly kind: FollowUpKind;
+  readonly purpose: FollowUpPurpose;
 }
 
 declare const positiveQuestionScoreBrand: unique symbol;

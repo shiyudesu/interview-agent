@@ -9,6 +9,7 @@ import type {
 import type {
   AnswerMaterial,
   FollowUpGoalSnapshot,
+  FollowUpPurpose,
   FollowUpRecommendation,
   InterviewBlueprint,
   InterviewQuestionCount,
@@ -75,6 +76,7 @@ export type InterviewerTextRequest =
       readonly purpose: "phrase_follow_up";
       readonly question: QuestionSnapshot;
       readonly goal: FollowUpGoalSnapshot;
+      readonly followUpPurpose: FollowUpPurpose;
       readonly answerMaterial: readonly AnswerMaterial[];
     };
 

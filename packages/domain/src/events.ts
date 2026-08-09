@@ -1,5 +1,6 @@
 import type {
   AccountId,
+  AnswerMaterialId,
   FollowUpGoalId,
   InterviewId,
   MessageId,
@@ -9,10 +10,12 @@ import type {
 import type {
   AnswerMaterialKind,
   FollowUpKind,
+  FollowUpPurpose,
   InterviewBlueprint,
   InterviewQuestionCount,
   QuestionEvaluation,
   ReportKind,
+  ResponseClassification,
   UnevaluatedQuestionOutcome,
 } from "./interview.js";
 
@@ -31,7 +34,7 @@ export interface InterviewCreatedEvent extends InterviewEventBase<"interview_cre
 
 export interface AnswerMaterialSubmittedEvent
   extends InterviewEventBase<"answer_material_submitted"> {
-  readonly messageId: MessageId;
+  readonly answerMaterialId: AnswerMaterialId;
   readonly materialKind: AnswerMaterialKind;
   readonly questionPosition: number;
   readonly text: string;
@@ -55,7 +58,14 @@ export interface SystemFollowUpRecordedEvent
   readonly questionPosition: number;
   readonly goalId: FollowUpGoalId;
   readonly kind: FollowUpKind;
+  readonly purpose: FollowUpPurpose;
+  readonly responseClassification: ResponseClassification;
   readonly text: string;
+}
+
+export interface QuestionOutcomeClearedEvent
+  extends InterviewEventBase<"question_outcome_cleared"> {
+  readonly questionPosition: number;
 }
 
 export interface QuestionEvaluationRecordedEvent
@@ -93,6 +103,7 @@ export type InterviewEvent =
   | QuestionClarificationRequestedEvent
   | QuestionClarificationRecordedEvent
   | SystemFollowUpRecordedEvent
+  | QuestionOutcomeClearedEvent
   | QuestionEvaluationRecordedEvent
   | UnevaluatedQuestionOutcomeRecordedEvent
   | QuestionFrozenEvent
