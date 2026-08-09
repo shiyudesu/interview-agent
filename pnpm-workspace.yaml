@@ -3,7 +3,11 @@ packages:
   - packages/*
 
 allowBuilds:
+  "@google/genai": false
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false
 
 catalog:
   "@better-auth/drizzle-adapter": 1.6.26
@@ -66,3 +70,7 @@ strictPeerDependencies: true
 sharedWorkspaceLockfile: true
 pmOnFail: download
 runtimeOnFail: download
+minimumReleaseAgeExclude:
+  - '@fastify/sensible@6.0.5'
+  - pg-protocol@1.16.0
+  - pg@8.23.0

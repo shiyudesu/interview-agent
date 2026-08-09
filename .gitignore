@@ -11,4 +11,5 @@ test-results/
 !.env.example
 
 *.log
+*.tsbuildinfo
 .DS_Store

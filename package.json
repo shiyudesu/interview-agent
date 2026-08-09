@@ -21,8 +21,8 @@
     }
   },
   "scripts": {
-    "build": "turbo run build",
-    "check": "biome check .",
+    "build": "pnpm workspace:check && turbo run build",
+    "check": "pnpm workspace:check && biome check .",
     "clean": "turbo run clean",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
@@ -34,7 +34,8 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run test:e2e",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "pnpm workspace:check && turbo run typecheck",
+    "workspace:check": "node scripts/check-workspace-dependencies.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
