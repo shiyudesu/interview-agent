@@ -1,6 +1,6 @@
 ## 1. Project Foundation
 
-- [ ] 1.1 Create the pnpm workspace, Turborepo configuration, root scripts, exact dependency versions, Node/pnpm version constraints, and lockfile.
+- [x] 1.1 Create the pnpm workspace, Turborepo configuration, root scripts, exact dependency versions, Node/pnpm version constraints, and lockfile.
 - [ ] 1.2 Scaffold `apps/web`, `apps/server`, `packages/domain`, `packages/contracts`, and `packages/db` with ESM TypeScript project references and enforced one-way package dependencies.
 - [ ] 1.3 Configure Biome, Vitest, coverage, shared TypeScript settings, environment-file loading, and TypeBox startup configuration validation.
 - [ ] 1.4 Add Docker Compose for PostgreSQL 18.4 and Mailpit 1.30.7, local environment examples, database readiness checks, and the production application Dockerfile.
