@@ -2,14 +2,22 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const workspaceRules = new Map([
-  ["apps/server", new Set(["@interview-agent/contracts", "@interview-agent/db", "@interview-agent/domain"])],
+  [
+    "apps/server",
+    new Set(["@interview-agent/contracts", "@interview-agent/db", "@interview-agent/domain"]),
+  ],
   ["apps/web", new Set(["@interview-agent/contracts"])],
   ["packages/contracts", new Set(["@interview-agent/domain"])],
   ["packages/db", new Set(["@interview-agent/domain"])],
   ["packages/domain", new Set()],
 ]);
 
-const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
+const dependencyFields = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
 const runtimeDependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"];
 const errors = [];
 

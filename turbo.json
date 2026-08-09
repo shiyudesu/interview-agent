@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "vitest.config.ts", "vitest.shared.ts"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -17,6 +18,21 @@
     },
     "dev": {
       "cache": false,
+      "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "NODE_ENV",
+        "HOST",
+        "PORT",
+        "DATABASE_URL",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "MODEL_PROVIDER",
+        "MODEL_ID",
+        "LOG_LEVEL",
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+      ],
       "persistent": true
     },
     "question-bank:validate": {
@@ -24,9 +40,11 @@
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test:coverage": {
+      "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
     "test:e2e": {
