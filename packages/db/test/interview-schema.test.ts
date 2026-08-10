@@ -154,7 +154,7 @@ describe("interview persistence PostgreSQL schema", () => {
       [operations, ["input", "result", "error"]],
       [questionEvaluations, ["rubric_results", "model_metadata"]],
       [reports, ["snapshot", "model_metadata"]],
-      [deletionRequests, ["result", "error"]],
+      [deletionRequests, []],
       [purgeAuditEvents, []],
     ]);
 
@@ -187,6 +187,13 @@ describe("interview persistence PostgreSQL schema", () => {
       "operations_owner_user_idx",
       "operations_interview_idx",
       "operations_status_lease_idx",
+    ]);
+    expect(indexNames(deletionRequests)).toEqual([
+      "deletion_requests_owner_user_idx",
+      "deletion_requests_interview_idx",
+      "deletion_requests_status_due_idx",
+      "deletion_requests_one_account_request_idx",
+      "deletion_requests_one_interview_request_idx",
     ]);
 
     expect(uniqueConstraintNames(interviewSessions)).toEqual([
@@ -228,6 +235,13 @@ describe("interview persistence PostgreSQL schema", () => {
       "operations_attempt_count_check",
       "operations_identity_hash_check",
       "operations_lifecycle_check",
+    ]);
+    expect(checkNames(deletionRequests)).toEqual([
+      "deletion_requests_purge_window_check",
+      "deletion_requests_scope_target_check",
+      "deletion_requests_attempt_count_check",
+      "deletion_requests_error_bounds_check",
+      "deletion_requests_lifecycle_check",
     ]);
   });
 
@@ -324,6 +338,10 @@ describe("interview persistence PostgreSQL schema", () => {
       "result",
       "purged_at",
     ]);
+    expect(checkNames(purgeAuditEvents)).toEqual(["purge_audit_events_subject_hash_check"]);
+    expect(columnNames(deletionRequests)).not.toContain("result");
+    expect(columnNames(deletionRequests)).not.toContain("error");
+    expect(columnNames(deletionRequests)).toContain("purge_deadline_at");
   });
 
   it("stores only final message content and no stream or raw model deltas", () => {

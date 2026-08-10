@@ -33,6 +33,21 @@ export class RepositoryVersionConflictError extends RepositoryError {
   }
 }
 
+export class RepositoryInterviewExpiredError extends RepositoryError {
+  constructor(
+    readonly interviewId: string,
+    readonly expectedVersion: number,
+    readonly actualVersion: number,
+    readonly expiredAt: Date,
+  ) {
+    super(
+      "repository_interview_expired",
+      `Interview ${interviewId} expired at version ${actualVersion}`,
+    );
+    this.name = "RepositoryInterviewExpiredError";
+  }
+}
+
 export class RepositoryImmutableConflictError extends RepositoryError {
   constructor(
     readonly resource: string,
@@ -78,6 +93,20 @@ export class RepositoryOperationRetryConflictError extends RepositoryError {
       `Operation ${operationId} is not eligible for the requested retry`,
     );
     this.name = "RepositoryOperationRetryConflictError";
+  }
+}
+
+export class RepositoryInterviewUnavailableError extends RepositoryError {
+  constructor(
+    readonly interviewId: string,
+    readonly status: string,
+    readonly version: number,
+  ) {
+    super(
+      "repository_interview_unavailable",
+      `Interview ${interviewId} is ${status} at version ${version}`,
+    );
+    this.name = "RepositoryInterviewUnavailableError";
   }
 }
 

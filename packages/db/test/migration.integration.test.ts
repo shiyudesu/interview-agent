@@ -13,6 +13,8 @@ const repositoryRoot = resolve(packageRoot, "../..");
 const migrationsRoot = resolve(packageRoot, "drizzle");
 const cliTarget = resolve(packageRoot, "dist/cli/migrate.js");
 const cliLink = resolve(packageRoot, ".test-artifacts/interview-agent-db-migrate");
+const numericOverflowJson = "1e1000000";
+const unsupportedUnicodeEscapeJson = String.raw`{"link":{"userId":"\u0000"}}`;
 
 interface ProcessResult {
   readonly exitCode: number | null;
@@ -156,6 +158,13 @@ async function applyThroughMigration0002(pool: Pool): Promise<void> {
 async function applyThroughMigration0003(pool: Pool): Promise<void> {
   await applyThroughMigration0002(pool);
   await applySqlMigration(pool, "0003_repository_invariants.sql");
+}
+
+async function applyThroughMigration0006(pool: Pool): Promise<void> {
+  await applyThroughMigration0003(pool);
+  await applySqlMigration(pool, "0004_operation_lifecycle.sql");
+  await applySqlMigration(pool, "0005_deletion_lifecycle.sql");
+  await applySqlMigration(pool, "0006_deletion_request_minimization.sql");
 }
 
 async function seedLegacyPendingOperationState(
@@ -362,8 +371,6 @@ describe.sequential("database migration CLI", () => {
         "verification",
       ]);
       expect(jsonColumns.rows).toEqual([
-        { table_name: "deletion_requests", column_name: "result" },
-        { table_name: "deletion_requests", column_name: "error" },
         { table_name: "interview_messages", column_name: "metadata" },
         { table_name: "operations", column_name: "input" },
         { table_name: "operations", column_name: "result" },
@@ -447,6 +454,173 @@ describe.sequential("database migration CLI", () => {
       await pool.end();
     }
   }, 120_000);
+
+  it("backfills deletion safety data and installs authentication write guards", async () => {
+    const upgradeDatabaseName = "deletion_safety_upgrade";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, upgradeDatabaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0006(pool);
+      await pool.query(
+        `insert into "user" (id, name, email, deletion_requested_at)
+         values (
+           'deadline-owner',
+           'Deadline Owner',
+           'deadline-owner@example.com',
+           timestamp '2026-08-01 00:00:00+00'
+         )`,
+      );
+      await pool.query(
+        `insert into verification (id, identifier, value, expires_at)
+         values
+           ('owned-verification', 'sign-in-otp-deadline-owner@example.com', 'secret', now()),
+           (
+             'owned-github-link-state',
+             'random-owned-github-state',
+             '{"callbackURL":"/settings","codeVerifier":"owned","expiresAt":1,
+               "link":{"email":"deadline-owner@example.com","userId":"deadline-owner"}}',
+             now()
+           ),
+           (
+             'unrelated-github-link-state',
+             'random-unrelated-github-state',
+             '{"callbackURL":"/settings","codeVerifier":"other","expiresAt":1,
+               "link":{"email":"other@example.com","userId":"other-owner"}}',
+             now()
+           ),
+           (
+             'non-link-oauth-state',
+             'random-non-link-state',
+             '{"callbackURL":"/sign-in","codeVerifier":"non-link","expiresAt":1}',
+             now()
+           ),
+           ('invalid-json-value', 'random-invalid-json', 'not-json', now()),
+           ('numeric-overflow-json-value', 'random-numeric-overflow-json', $1, now()),
+           ('unsupported-unicode-json-value', 'random-unsupported-unicode-json', $2, now()),
+           ('unrelated-verification', 'sign-in-otp-other@example.com', 'secret', now())`,
+        [numericOverflowJson, unsupportedUnicodeEscapeJson],
+      );
+      await pool.query(
+        `insert into deletion_requests
+           (id, owner_user_id, scope, requested_at, inaccessible_at, purge_due_at)
+         values (
+           'deadline-request',
+           'deadline-owner',
+           'account',
+           timestamp '2026-08-01 00:00:00+00',
+           timestamp '2026-08-01 00:00:00+00',
+           timestamp '2026-08-08 00:00:00+00'
+         )`,
+      );
+
+      await applySqlMigration(pool, "0007_deletion_safety.sql");
+      const rows = await pool.query<{
+        deadline_offset: string;
+        eligible_offset: string;
+      }>(
+        `select
+           (purge_deadline_at - requested_at)::text as deadline_offset,
+           (purge_due_at - requested_at)::text as eligible_offset
+         from deletion_requests
+         where id = 'deadline-request'`,
+      );
+      expect(rows.rows[0]).toEqual({
+        eligible_offset: "6 days",
+        deadline_offset: "7 days",
+      });
+      expect(
+        (await pool.query<{ id: string }>(`select id from verification order by id`)).rows,
+      ).toEqual([
+        { id: "invalid-json-value" },
+        { id: "non-link-oauth-state" },
+        { id: "numeric-overflow-json-value" },
+        { id: "unrelated-github-link-state" },
+        { id: "unrelated-verification" },
+        { id: "unsupported-unicode-json-value" },
+      ]);
+      expect(
+        (
+          await pool.query<{
+            invalid_is_null: boolean;
+            overflow_is_null: boolean;
+            unsupported_unicode_is_null: boolean;
+            valid_link_matches: boolean;
+          }>(
+            `select
+               safe_verification_value_jsonb('not-json') is null as invalid_is_null,
+               safe_verification_value_jsonb($1) is null as overflow_is_null,
+               safe_verification_value_jsonb($2) is null as unsupported_unicode_is_null,
+               safe_verification_value_jsonb($3) #>> '{link,userId}' = 'deadline-owner'
+                 as valid_link_matches`,
+            [
+              numericOverflowJson,
+              unsupportedUnicodeEscapeJson,
+              JSON.stringify({ link: { userId: "deadline-owner" } }),
+            ],
+          )
+        ).rows[0],
+      ).toEqual({
+        invalid_is_null: true,
+        overflow_is_null: true,
+        unsupported_unicode_is_null: true,
+        valid_link_matches: true,
+      });
+      const triggers = await pool.query<{ trigger_name: string }>(
+        `select distinct trigger_name
+           from information_schema.triggers
+          where event_object_schema = 'public'
+            and trigger_name in (
+              'session_user_not_deleting_trigger',
+              'verification_user_not_deleting_trigger'
+            )
+          order by trigger_name`,
+      );
+      expect(triggers.rows).toEqual([
+        { trigger_name: "session_user_not_deleting_trigger" },
+        { trigger_name: "verification_user_not_deleting_trigger" },
+      ]);
+      await expect(
+        pool.query(
+          `insert into verification (id, identifier, value, expires_at)
+           values (
+             'post-migration-owned-link',
+             'random-post-migration-owned-link',
+             '{"callbackURL":"/settings","codeVerifier":"owned","expiresAt":1,
+               "link":{"email":"deadline-owner@example.com","userId":"deadline-owner"}}',
+             now()
+           )`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "verification_user_not_deleting_check",
+      });
+      await expect(
+        pool.query(
+          `insert into verification (id, identifier, value, expires_at)
+           values
+             (
+               'post-migration-non-link',
+               'random-post-migration-non-link',
+               '{"callbackURL":"/sign-in","codeVerifier":"non-link","expiresAt":1}',
+               now()
+             ),
+             ('post-migration-invalid-json', 'random-post-migration-invalid', 'not-json', now()),
+             ('post-migration-overflow-json', 'random-post-migration-overflow', $1, now()),
+             (
+               'post-migration-unsupported-unicode-json',
+               'random-post-migration-unsupported-unicode',
+               $2,
+               now()
+             )`,
+          [numericOverflowJson, unsupportedUnicodeEscapeJson],
+        ),
+      ).resolves.toMatchObject({ rowCount: 4 });
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, upgradeDatabaseName);
+    }
+  });
 
   it("rejects upgrading an incomplete or gapped blueprint created under migration 0001", async () => {
     const databaseName = "upgrade_invalid_blueprint";
@@ -790,9 +964,12 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `insert into deletion_requests
-             (id, owner_user_id, scope, interview_id, purge_due_at)
+             (id, owner_user_id, scope, interview_id, requested_at, purge_due_at,
+              purge_deadline_at)
            values ('cross-owner-deletion', 'aggregate-owner-b', 'interview',
-                   'aggregate-interview-a', now() + interval '1 day')`,
+                   'aggregate-interview-a', statement_timestamp(),
+                   statement_timestamp() + interval '6 days',
+                   statement_timestamp() + interval '7 days')`,
         ),
       ).rejects.toMatchObject({
         code: "23503",
@@ -802,9 +979,12 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `insert into deletion_requests
-             (id, owner_user_id, scope, interview_id, purge_due_at)
+             (id, owner_user_id, scope, interview_id, requested_at, purge_due_at,
+              purge_deadline_at)
            values ('account-deletion-with-interview', 'aggregate-owner-a', 'account',
-                   'aggregate-interview-a', now() + interval '1 day')`,
+                   'aggregate-interview-a', statement_timestamp(),
+                   statement_timestamp() + interval '6 days',
+                   statement_timestamp() + interval '7 days')`,
         ),
       ).rejects.toMatchObject({
         code: "23514",
@@ -814,9 +994,10 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `insert into deletion_requests
-             (id, owner_user_id, scope, purge_due_at)
+             (id, owner_user_id, scope, requested_at, purge_due_at, purge_deadline_at)
            values ('interview-deletion-without-interview', 'aggregate-owner-a', 'interview',
-                   now() + interval '1 day')`,
+                   statement_timestamp(), statement_timestamp() + interval '6 days',
+                   statement_timestamp() + interval '7 days')`,
         ),
       ).rejects.toMatchObject({
         code: "23514",

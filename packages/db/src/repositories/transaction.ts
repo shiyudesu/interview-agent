@@ -26,7 +26,7 @@ export class RepositoryExecution {
   constructor(
     readonly database: Database,
     readonly executor: DatabaseExecutor = database,
-    private readonly transactionBound = false,
+    readonly transactionBound = false,
   ) {}
 
   inTransaction<Result>(

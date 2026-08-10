@@ -20,6 +20,7 @@ import {
   RepositoryImmutableConflictError,
   RepositoryNotFoundError,
 } from "./errors.js";
+import { runRepositoryTransaction } from "./interview-expiry-handling.js";
 import { loadInterviewAggregate } from "./interview-repository.js";
 import { RepositoryExecution } from "./transaction.js";
 import type { CreateStoredReport, StoredReport } from "./types.js";
@@ -61,7 +62,8 @@ export class PgReportRepository implements ReportRepository<StoredReport, Create
     interviewId: InterviewId,
     accountId: AccountId,
   ): Promise<StoredReport | null> {
-    return this.execution.inTransaction(
+    return runRepositoryTransaction(
+      this.execution,
       async (transaction) => {
         const interview = await loadInterviewAggregate(transaction, interviewId, accountId);
         if (interview === null) {
@@ -110,12 +112,12 @@ export class PgReportRepository implements ReportRepository<StoredReport, Create
         assertReportMatchesInterview(report.snapshot, interview);
         return report;
       },
-      { isolationLevel: "repeatable read", accessMode: "read only" },
+      { isolationLevel: "repeatable read", accessMode: "read write" },
     );
   }
 
   async insert(report: CreateStoredReport): Promise<void> {
-    await this.execution.inTransaction(async (transaction) => {
+    await runRepositoryTransaction(this.execution, async (transaction) => {
       const interviews = await transaction
         .select({
           status: interviewSessions.status,

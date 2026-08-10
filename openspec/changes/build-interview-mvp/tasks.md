@@ -22,7 +22,7 @@
 - [x] 3.3 Add database constraints for one active/report-pending interview per user, ordered unique question positions, immutable snapshot identity, and scoped Operation idempotency keys.
 - [x] 3.4 Implement repositories and transaction helpers for aggregate loading, optimistic version advancement, message/evaluation persistence, immutable reports, and history queries.
 - [x] 3.5 Implement Operation lease, stale-processing reclaim, retry, and duplicate-result behavior with Testcontainers integration tests.
-- [ ] 3.6 Implement lazy interview expiry, the periodic expiry sweeper, deletion marking, seven-day physical purge, and non-reversible purge audit persistence.
+- [x] 3.6 Implement lazy interview expiry, the periodic expiry sweeper, deletion marking, seven-day physical purge, and non-reversible purge audit persistence.
 - [ ] 3.7 Add migration and repository integration tests against a clean PostgreSQL Testcontainer.
 
 ## 4. Question Bank

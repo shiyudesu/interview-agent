@@ -9,6 +9,7 @@
     "drizzle"
   ],
   "bin": {
+    "interview-agent-db-maintenance": "./dist/cli/maintenance.js",
     "interview-agent-db-migrate": "./dist/cli/migrate.js"
   },
   "exports": {
@@ -25,6 +26,7 @@
     "build": "tsc -b",
     "clean": "tsc -b --clean",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:maintenance": "tsx src/cli/maintenance.ts",
     "db:migrate": "tsx src/cli/migrate.ts",
     "test": "pnpm run build && vitest run",
     "test:coverage": "pnpm run build && vitest run --coverage",

@@ -38,3 +38,32 @@ export function requireDatabaseUrl(
 
   return databaseUrl;
 }
+
+export function requirePurgeAuditHashSecret(
+  environment: Readonly<
+    Record<string, string | undefined> & {
+      PURGE_AUDIT_HASH_SECRET?: string;
+    }
+  > = process.env,
+): string {
+  const secret = environment.PURGE_AUDIT_HASH_SECRET ?? "";
+  if (secret.length < 32) {
+    throw new Error("PURGE_AUDIT_HASH_SECRET must contain at least 32 characters.");
+  }
+  return secret;
+}
+
+export function readBoundedIntegerEnvironment(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  const raw = environment[name]?.trim();
+  const value = raw ? Number(raw) : fallback;
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new RangeError(`${name} must be an integer from ${minimum} through ${maximum}.`);
+  }
+  return value;
+}

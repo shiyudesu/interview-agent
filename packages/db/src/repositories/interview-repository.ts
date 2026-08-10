@@ -34,6 +34,7 @@ import {
   RepositoryNotFoundError,
   RepositoryVersionConflictError,
 } from "./errors.js";
+import { expireInterviewOrSignal, runRepositoryTransaction } from "./interview-expiry-handling.js";
 import type { DatabaseExecutor } from "./transaction.js";
 import { RepositoryExecution } from "./transaction.js";
 import { validateInterviewSave } from "./transition-validation.js";
@@ -94,15 +95,33 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
   }
 
   findById(interviewId: InterviewId, accountId?: AccountId): Promise<Interview | null> {
-    return this.execution.inTransaction(
+    return runRepositoryTransaction(
+      this.execution,
       (transaction) => loadInterviewAggregate(transaction, interviewId, accountId),
-      { isolationLevel: "repeatable read", accessMode: "read only" },
+      { isolationLevel: "repeatable read", accessMode: "read write" },
     );
   }
 
   findActiveByAccountId(accountId: AccountId): Promise<Interview | null> {
-    return this.execution.inTransaction(
+    return runRepositoryTransaction(
+      this.execution,
       async (transaction) => {
+        const expiredRows = await transaction
+          .select({ id: interviewSessions.id })
+          .from(interviewSessions)
+          .where(
+            and(
+              eq(interviewSessions.ownerUserId, accountId),
+              eq(interviewSessions.status, "active"),
+              sql`statement_timestamp() - ${interviewSessions.lastEffectiveActivityAt} > interval '24 hours'`,
+            ),
+          );
+        for (const expired of expiredRows) {
+          await expireInterviewOrSignal(transaction, {
+            interviewId: decodeInterviewId(expired.id, "interview", expired.id),
+            accountId,
+          });
+        }
         const rows = await transaction
           .select({ id: interviewSessions.id })
           .from(interviewSessions)
@@ -133,12 +152,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
               accountId,
             );
       },
-      { isolationLevel: "repeatable read", accessMode: "read only" },
+      { isolationLevel: "repeatable read", accessMode: "read write" },
     );
   }
 
   create(interview: Interview): Promise<void> {
-    return this.execution.inTransaction(async (transaction) => {
+    return runRepositoryTransaction(this.execution, async (transaction) => {
       assertCreateState(interview);
       try {
         await transaction.insert(interviewSessions).values({
@@ -182,7 +201,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
 
   async save(change: InterviewSave): Promise<void> {
     validateInterviewSave(change);
-    return this.execution.inTransaction(async (transaction) => {
+    await runRepositoryTransaction(this.execution, async (transaction) => {
+      await expireInterviewOrSignal(transaction, {
+        interviewId: change.previous.id,
+        accountId: change.previous.accountId,
+        expectedVersion: change.previous.version,
+      });
       await this.validatePendingOperationReference(
         transaction,
         change.current.pendingOperation ?? change.previous.pendingOperation,
@@ -247,7 +271,8 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new RangeError("History limit must be an integer from 1 through 100");
     }
-    return this.execution.inTransaction(
+    return runRepositoryTransaction(
+      this.execution,
       async (transaction) => {
         const rows = await transaction
           .select({
@@ -404,7 +429,8 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
     interviewId: InterviewId,
     accountId: AccountId,
   ): Promise<InterviewDetail | null> {
-    return this.execution.inTransaction(
+    return runRepositoryTransaction(
+      this.execution,
       async (transaction) => {
         const interview = await loadInterviewAggregate(transaction, interviewId, accountId);
         if (interview === null) {
@@ -489,7 +515,7 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
           })),
         };
       },
-      { isolationLevel: "repeatable read", accessMode: "read only" },
+      { isolationLevel: "repeatable read", accessMode: "read write" },
     );
   }
 
@@ -773,6 +799,10 @@ export async function loadInterviewAggregate(
   interviewId: InterviewId,
   accountId?: AccountId,
 ): Promise<Interview | null> {
+  await expireInterviewOrSignal(executor, {
+    interviewId,
+    ...(accountId === undefined ? {} : { accountId }),
+  });
   const sessions = await executor
     .select({ session: interviewSessions })
     .from(interviewSessions)

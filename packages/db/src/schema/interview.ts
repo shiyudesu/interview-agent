@@ -586,27 +586,105 @@ export const deletionRequests = pgTable(
     requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
     inaccessibleAt: timestamp("inaccessible_at", { withTimezone: true }).defaultNow().notNull(),
     purgeDueAt: timestamp("purge_due_at", { withTimezone: true }).notNull(),
+    purgeDeadlineAt: timestamp("purge_deadline_at", { withTimezone: true }).notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseTokenHash: text("lease_token_hash"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    result: jsonb("result").$type<JsonObject>(),
-    error: jsonb("error").$type<JsonObject>(),
+    lastErrorCategory: text("last_error_category"),
+    lastErrorCode: text("last_error_code"),
   },
   (table) => [
     index("deletion_requests_owner_user_idx").on(table.ownerUserId),
     index("deletion_requests_interview_idx").on(table.interviewId),
-    index("deletion_requests_status_due_idx").on(table.status, table.purgeDueAt),
+    index("deletion_requests_status_due_idx").on(
+      table.status,
+      table.purgeDueAt,
+      table.leaseExpiresAt,
+    ),
+    uniqueIndex("deletion_requests_one_account_request_idx")
+      .on(table.ownerUserId)
+      .where(sql`${table.scope} = 'account'`),
+    uniqueIndex("deletion_requests_one_interview_request_idx")
+      .on(table.interviewId)
+      .where(sql`${table.scope} = 'interview'`),
     foreignKey({
       name: "deletion_requests_interview_owner_fk",
       columns: [table.interviewId, table.ownerUserId],
       foreignColumns: [interviewSessions.id, interviewSessions.ownerUserId],
     }).onDelete("restrict"),
     check(
-      "deletion_requests_due_within_seven_days_check",
-      sql`${table.purgeDueAt} >= ${table.requestedAt} and ${table.purgeDueAt} <= ${table.requestedAt} + interval '7 days'`,
+      "deletion_requests_purge_window_check",
+      sql`
+        ${table.purgeDueAt} >= ${table.requestedAt}
+        and ${table.purgeDueAt} < ${table.purgeDeadlineAt}
+        and ${table.purgeDeadlineAt} = ${table.requestedAt} + interval '7 days'
+      `,
     ),
     check(
       "deletion_requests_scope_target_check",
       sql`(${table.scope} = 'account' and ${table.interviewId} is null) or (${table.scope} = 'interview' and ${table.interviewId} is not null)`,
+    ),
+    check("deletion_requests_attempt_count_check", sql`${table.attemptCount} >= 0`),
+    check(
+      "deletion_requests_error_bounds_check",
+      sql`
+        (
+          ${table.lastErrorCategory} is null
+          and ${table.lastErrorCode} is null
+        )
+        or (
+          length(${table.lastErrorCategory}) between 1 and 32
+          and ${table.lastErrorCategory} ~ '^[a-z0-9_]+$'
+          and length(${table.lastErrorCode}) between 1 and 64
+          and ${table.lastErrorCode} ~ '^[a-z0-9_]+$'
+        )
+      `,
+    ),
+    check(
+      "deletion_requests_lifecycle_check",
+      sql`
+        (
+          ${table.status} = 'processing'
+          and ${table.processingStartedAt} is not null
+          and ${table.lastAttemptAt} is not null
+          and ${table.leaseExpiresAt} is not null
+          and ${table.leaseOwner} is not null
+          and ${table.leaseTokenHash} is not null
+          and length(trim(${table.leaseOwner})) > 0
+          and length(${table.leaseTokenHash}) = 64
+          and ${table.leaseExpiresAt} > ${table.processingStartedAt}
+          and ${table.completedAt} is null
+          and ${table.lastErrorCategory} is null
+          and ${table.lastErrorCode} is null
+        )
+        or (
+          ${table.status} in ('pending', 'failed')
+          and ${table.processingStartedAt} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.leaseOwner} is null
+          and ${table.leaseTokenHash} is null
+          and ${table.completedAt} is null
+          and (
+            (${table.status} = 'pending' and ${table.lastErrorCategory} is null and ${table.lastErrorCode} is null)
+            or
+            (${table.status} = 'failed' and ${table.lastErrorCategory} is not null and ${table.lastErrorCode} is not null)
+          )
+        )
+        or (
+          ${table.status} = 'completed'
+          and ${table.processingStartedAt} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.leaseOwner} is null
+          and ${table.leaseTokenHash} is null
+          and ${table.completedAt} is not null
+          and ${table.lastErrorCategory} is null
+          and ${table.lastErrorCode} is null
+        )
+      `,
     ),
   ],
 );
@@ -626,6 +704,10 @@ export const purgeAuditEvents = pgTable(
     }),
     index("purge_audit_events_subject_hash_idx").on(table.subjectIdentifierHash),
     index("purge_audit_events_purged_at_idx").on(table.purgedAt),
+    check(
+      "purge_audit_events_subject_hash_check",
+      sql`length(${table.subjectIdentifierHash}) = 64 and ${table.subjectIdentifierHash} ~ '^[0-9a-f]{64}$'`,
+    ),
   ],
 );
 

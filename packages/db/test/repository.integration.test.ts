@@ -26,7 +26,7 @@ import {
   parseReportId,
   parseRubricItemId,
 } from "@interview-agent/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -36,6 +36,7 @@ import {
   type EvaluationPersistence,
   interviewSessions,
   type JsonObject,
+  operations,
   PgInterviewRepository,
   PgOperationRepository,
   PgReportRepository,
@@ -44,6 +45,7 @@ import {
   type ReportPersistence,
   RepositoryCorruptionError,
   RepositoryImmutableConflictError,
+  type RepositoryInterviewExpiredError,
   RepositoryNotFoundError,
   type RepositoryVersionConflictError,
   reports,
@@ -53,7 +55,7 @@ import {
 } from "../src/index.js";
 import { runDatabaseMigrations } from "../src/migrate.js";
 
-const STARTED_AT = new Date("2026-08-01T00:00:00.000Z");
+const STARTED_AT = new Date("2026-08-10T12:00:00.000Z");
 const DOMAINS: readonly KnowledgeDomain[] = [
   "go_language",
   "concurrency_runtime_performance",
@@ -1230,6 +1232,238 @@ describe.sequential("PostgreSQL repositories", () => {
         events: missing.events,
       }),
     ).rejects.toBeInstanceOf(RepositoryNotFoundError);
+  });
+
+  it("rolls back unrelated UoW writes before persisting lazy expiry independently", async () => {
+    await seedOwner("save-expiry-unrelated-owner");
+    const unrelatedInterview = await createInterview({
+      ownerId: "save-expiry-unrelated-owner",
+      interviewId: "save-expiry-unrelated-interview",
+    });
+    const unrelatedOperationId = nextOperationId("save-expiry-unrelated");
+    await createOperationForTest(operationRepository, {
+      id: unrelatedOperationId,
+      accountId: unrelatedInterview.accountId,
+      interviewId: unrelatedInterview.id,
+      type: "submit_answer",
+      idempotencyKey: "save-expiry-unrelated",
+      expectedVersion: unrelatedInterview.version,
+      input: { questionPosition: 1, text: "unrelated answer" },
+      createdAt: STARTED_AT,
+    });
+    await claimOperationForTest(
+      operationRepository,
+      unrelatedOperationId,
+      unrelatedInterview.accountId,
+      STARTED_AT,
+    );
+
+    await seedOwner("save-expiry-owner");
+    const interview = await createInterview({
+      ownerId: "save-expiry-owner",
+      interviewId: "save-expiry-interview",
+    });
+    const operationId = nextOperationId("save-expiry");
+    await createOperationForTest(operationRepository, {
+      id: operationId,
+      accountId: interview.accountId,
+      interviewId: interview.id,
+      type: "submit_answer",
+      idempotencyKey: "save-expiry",
+      expectedVersion: interview.version,
+      input: { questionPosition: 1, text: "answer" },
+      createdAt: STARTED_AT,
+    });
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '24 hours 1 second'
+        where id = $1`,
+      [interview.id],
+    );
+    const transition = expectTransition(
+      handleInterviewCommand(interview, {
+        type: "mark_question_unknown",
+        interviewId: interview.id,
+        operationId: nextOperationId("save-expiry-command"),
+        expectedVersion: interview.version,
+        occurredAt: new Date(STARTED_AT.getTime() + 1_000),
+      }),
+    );
+
+    await expect(
+      unitOfWork.run(async (repositories) => {
+        await finishOperation(repositories.operations, {
+          operationId: unrelatedOperationId,
+          accountId: unrelatedInterview.accountId,
+          expectedStatus: "processing",
+          status: "succeeded",
+          result: { accepted: true },
+          completedAt: new Date(STARTED_AT.getTime() + 500),
+        });
+        await repositories.interviews.save({
+          previous: interview,
+          current: transition.interview,
+          events: transition.events,
+        });
+      }),
+    ).rejects.toMatchObject({
+      name: "RepositoryInterviewExpiredError",
+      interviewId: interview.id,
+      expectedVersion: 1,
+      actualVersion: 2,
+      expiredAt: expect.any(Date),
+    } satisfies Partial<RepositoryInterviewExpiredError>);
+
+    const persistedInterview = await client.database
+      .select({
+        status: interviewSessions.status,
+        activePhase: interviewSessions.activePhase,
+        version: interviewSessions.version,
+        endedAt: interviewSessions.endedAt,
+      })
+      .from(interviewSessions)
+      .where(eq(interviewSessions.id, interview.id));
+    expect(persistedInterview[0]).toMatchObject({
+      status: "abandoned",
+      activePhase: null,
+      version: 2,
+      endedAt: expect.any(Date),
+    });
+    const persistedOperation = await client.database
+      .select({
+        status: operations.status,
+        retryable: operations.retryable,
+        error: operations.error,
+        completedAt: operations.completedAt,
+      })
+      .from(operations)
+      .where(eq(operations.id, operationId));
+    expect(persistedOperation[0]).toMatchObject({
+      status: "failed",
+      retryable: false,
+      error: { code: "interview_expired" },
+      completedAt: expect.any(Date),
+    });
+    const unrelatedOperation = await client.database
+      .select({
+        status: operations.status,
+        result: operations.result,
+        completedAt: operations.completedAt,
+      })
+      .from(operations)
+      .where(eq(operations.id, unrelatedOperationId));
+    expect(unrelatedOperation[0]).toEqual({
+      status: "processing",
+      result: null,
+      completedAt: null,
+    });
+  });
+
+  it("surfaces expiry persistence failure without committing earlier UoW writes", async () => {
+    await seedOwner("save-expiry-failure-unrelated-owner");
+    const unrelatedInterview = await createInterview({
+      ownerId: "save-expiry-failure-unrelated-owner",
+      interviewId: "save-expiry-failure-unrelated-interview",
+    });
+    const unrelatedOperationId = nextOperationId("save-expiry-failure-unrelated");
+    await createOperationForTest(operationRepository, {
+      id: unrelatedOperationId,
+      accountId: unrelatedInterview.accountId,
+      interviewId: unrelatedInterview.id,
+      type: "submit_answer",
+      idempotencyKey: "save-expiry-failure-unrelated",
+      expectedVersion: unrelatedInterview.version,
+      input: { questionPosition: 1, text: "unrelated answer" },
+      createdAt: STARTED_AT,
+    });
+    await claimOperationForTest(
+      operationRepository,
+      unrelatedOperationId,
+      unrelatedInterview.accountId,
+      STARTED_AT,
+    );
+
+    await seedOwner("save-expiry-failure-owner");
+    const interview = await createInterview({
+      ownerId: "save-expiry-failure-owner",
+      interviewId: "save-expiry-failure-interview",
+    });
+    const expiringOperationId = nextOperationId("save-expiry-failure");
+    await createOperationForTest(operationRepository, {
+      id: expiringOperationId,
+      accountId: interview.accountId,
+      interviewId: interview.id,
+      type: "submit_answer",
+      idempotencyKey: "save-expiry-failure",
+      expectedVersion: interview.version,
+      input: { questionPosition: 1, text: "answer" },
+      createdAt: STARTED_AT,
+    });
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '24 hours 1 second'
+        where id = $1`,
+      [interview.id],
+    );
+    const transition = expectTransition(
+      handleInterviewCommand(interview, {
+        type: "mark_question_unknown",
+        interviewId: interview.id,
+        operationId: nextOperationId("save-expiry-failure-command"),
+        expectedVersion: interview.version,
+        occurredAt: new Date(STARTED_AT.getTime() + 1_000),
+      }),
+    );
+
+    await client.pool.query(
+      `alter table operations
+         add constraint injected_save_expiry_cancellation_failure
+         check (id <> '${expiringOperationId}' or status <> 'failed')`,
+    );
+    try {
+      await expect(
+        unitOfWork.run(async (repositories) => {
+          await finishOperation(repositories.operations, {
+            operationId: unrelatedOperationId,
+            accountId: unrelatedInterview.accountId,
+            expectedStatus: "processing",
+            status: "succeeded",
+            result: { accepted: true },
+            completedAt: new Date(STARTED_AT.getTime() + 500),
+          });
+          await repositories.interviews.save({
+            previous: interview,
+            current: transition.interview,
+            events: transition.events,
+          });
+        }),
+      ).rejects.toMatchObject({ cause: { code: "23514" } });
+    } finally {
+      await client.pool.query(
+        "alter table operations drop constraint injected_save_expiry_cancellation_failure",
+      );
+    }
+
+    const persistedInterviews = await client.database
+      .select({ id: interviewSessions.id, status: interviewSessions.status })
+      .from(interviewSessions)
+      .where(inArray(interviewSessions.id, [unrelatedInterview.id, interview.id]));
+    expect(persistedInterviews).toEqual(
+      expect.arrayContaining([
+        { id: unrelatedInterview.id, status: "active" },
+        { id: interview.id, status: "active" },
+      ]),
+    );
+    const persistedOperations = await client.database
+      .select({ id: operations.id, status: operations.status, result: operations.result })
+      .from(operations)
+      .where(inArray(operations.id, [unrelatedOperationId, expiringOperationId]));
+    expect(persistedOperations).toEqual(
+      expect.arrayContaining([
+        { id: unrelatedOperationId, status: "processing", result: null },
+        { id: expiringOperationId, status: "pending", result: null },
+      ]),
+    );
   });
 
   it("rejects a minimal report snapshot and leaves report-pending state unchanged", async () => {

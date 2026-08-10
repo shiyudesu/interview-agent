@@ -13,11 +13,14 @@ import {
   type DatabaseClient,
   interviewSessions,
   operations,
+  PgLifecycleRepository,
   PgOperationRepository,
   PgRepositoryUnitOfWork,
   questionBankVersions,
   RepositoryCorruptionError,
   RepositoryIdempotencyConflictError,
+  RepositoryInterviewExpiredError,
+  RepositoryInterviewUnavailableError,
   RepositoryOperationLeaseConflictError,
   RepositoryOperationRetryConflictError,
   RepositoryUnsafePayloadError,
@@ -35,6 +38,7 @@ let container: StartedTestContainer;
 let client: DatabaseClient;
 let repository: PgOperationRepository;
 let unitOfWork: PgRepositoryUnitOfWork;
+let lifecycleRepository: PgLifecycleRepository;
 let sequence = 0;
 
 function operationId(prefix: string): OperationId {
@@ -151,6 +155,7 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
     client = createDatabaseClient({ databaseUrl: databaseUrl.toString(), max: 8 });
     repository = new PgOperationRepository(client.database);
     unitOfWork = new PgRepositoryUnitOfWork(client.database);
+    lifecycleRepository = new PgLifecycleRepository(client.database);
   }, 120_000);
 
   beforeEach(async () => {
@@ -213,6 +218,216 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
     expect(duplicateAfterSuccess.operation.result).toEqual({ accepted: true });
   });
 
+  it("lazily expires the interview before rejecting a pending duplicate", async () => {
+    const id = operationId("expired-pending-duplicate");
+    await createOperation(id, { idempotencyKey: "expired-pending-duplicate-key" });
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [INTERVIEW_ID],
+    );
+
+    await expect(
+      createOperation(operationId("expired-pending-duplicate"), {
+        idempotencyKey: "expired-pending-duplicate-key",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewExpiredError);
+    expect(await repository.findById(id, OWNER_ID)).toMatchObject({
+      id,
+      status: "failed",
+      retryable: false,
+      error: { code: "interview_expired" },
+    });
+    expect(
+      (
+        await client.database
+          .select({
+            status: interviewSessions.status,
+            version: interviewSessions.version,
+          })
+          .from(interviewSessions)
+          .where(eq(interviewSessions.id, INTERVIEW_ID))
+      )[0],
+    ).toEqual({ status: "abandoned", version: 2 });
+  });
+
+  it("preserves a succeeded result after rejecting access to its expired interview", async () => {
+    const id = operationId("expired-success-duplicate");
+    await createOperation(id, { idempotencyKey: "expired-success-duplicate-key" });
+    const ownedClaim = await repository.claimPending(claim(id, "worker-a"));
+    const succeeded = await repository.completeSuccess({
+      operationId: id,
+      accountId: OWNER_ID,
+      ...completionLease(ownedClaim),
+      result: { accepted: true },
+    });
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [INTERVIEW_ID],
+    );
+
+    await expect(
+      createOperation(operationId("expired-success-duplicate"), {
+        idempotencyKey: "expired-success-duplicate-key",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewExpiredError);
+    expect(await repository.findById(id, OWNER_ID)).toEqual(succeeded);
+    expect(
+      (
+        await client.database
+          .select({
+            status: interviewSessions.status,
+            version: interviewSessions.version,
+          })
+          .from(interviewSessions)
+          .where(eq(interviewSessions.id, INTERVIEW_ID))
+      )[0],
+    ).toEqual({ status: "abandoned", version: 2 });
+  });
+
+  it("persists lazy expiry before a corrupt protected read can proceed", async () => {
+    const id = operationId("expired-corrupt-read");
+    await client.database.insert(operations).values({
+      id,
+      ownerUserId: OWNER_ID,
+      interviewId: INTERVIEW_ID,
+      idempotencyScope: "interview-command",
+      idempotencyKey: "expired-corrupt-read-key",
+      type: "submit_answer",
+      expectedVersion: 1,
+      inputHash: "0".repeat(64),
+      input: INPUT,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [INTERVIEW_ID],
+    );
+
+    await expect(repository.findById(id, OWNER_ID)).rejects.toBeInstanceOf(
+      RepositoryInterviewExpiredError,
+    );
+    expect(
+      (
+        await client.database
+          .select({
+            status: interviewSessions.status,
+            version: interviewSessions.version,
+          })
+          .from(interviewSessions)
+          .where(eq(interviewSessions.id, INTERVIEW_ID))
+      )[0],
+    ).toEqual({ status: "abandoned", version: 2 });
+    expect(
+      (
+        await client.database
+          .select({ status: operations.status, error: operations.error })
+          .from(operations)
+          .where(eq(operations.id, id))
+      )[0],
+    ).toEqual({ status: "failed", error: { code: "interview_expired" } });
+  });
+
+  it("aborts a transaction-bound read and persists expiry outside its transaction", async () => {
+    const id = operationId("expired-bound-read");
+    await createOperation(id);
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [INTERVIEW_ID],
+    );
+
+    await expect(
+      unitOfWork.run(async (repositories) => {
+        await repositories.operations.findById(id, OWNER_ID);
+        throw new Error("injected read failure");
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewExpiredError);
+
+    expect(
+      (
+        await client.database
+          .select({
+            status: interviewSessions.status,
+            version: interviewSessions.version,
+          })
+          .from(interviewSessions)
+          .where(eq(interviewSessions.id, INTERVIEW_ID))
+      )[0],
+    ).toEqual({ status: "abandoned", version: 2 });
+    expect(
+      (
+        await client.database
+          .select({ status: operations.status, error: operations.error })
+          .from(operations)
+          .where(eq(operations.id, id))
+      )[0],
+    ).toEqual({ status: "failed", error: { code: "interview_expired" } });
+  });
+
+  it("rolls back interview expiry when Operation cancellation is injected to fail", async () => {
+    const id = operationId("expired-completion");
+    await createOperation(id);
+    const ownedClaim = await repository.claimPending(claim(id, "worker-a"));
+    await client.pool.query(
+      `update interview_sessions
+          set last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [INTERVIEW_ID],
+    );
+
+    await client.pool.query(
+      `alter table operations
+         add constraint injected_expiry_cancellation_failure
+         check (status <> 'failed')`,
+    );
+    try {
+      await expect(
+        repository.completeSuccess({
+          operationId: id,
+          accountId: OWNER_ID,
+          ...completionLease(ownedClaim),
+          result: { accepted: true },
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await client.pool.query(
+        "alter table operations drop constraint injected_expiry_cancellation_failure",
+      );
+    }
+
+    expect(
+      (
+        await client.database
+          .select({
+            status: interviewSessions.status,
+            version: interviewSessions.version,
+          })
+          .from(interviewSessions)
+          .where(eq(interviewSessions.id, INTERVIEW_ID))
+      )[0],
+    ).toEqual({ status: "active", version: 1 });
+    expect(
+      (
+        await client.database
+          .select({
+            status: operations.status,
+            leaseOwner: operations.leaseOwner,
+            error: operations.error,
+          })
+          .from(operations)
+          .where(eq(operations.id, id))
+      )[0],
+    ).toEqual({ status: "processing", leaseOwner: "worker-a", error: null });
+  });
+
   it("rejects scoped key reuse with a different command, interview, or input fingerprint", async () => {
     await createOperation(operationId("conflict"), { idempotencyKey: "conflict-key" });
     const secondInterviewId = parseInterviewId("operation-interview-old");
@@ -242,6 +457,7 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
         numericKeys: { "2": "two", "10": "ten" },
       },
     });
+
     const duplicate = await createOperation(operationId("nested"), {
       idempotencyKey: "nested-key",
       input: {
@@ -269,6 +485,120 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
     await expect(repository.findById(corruptId, OWNER_ID)).rejects.toBeInstanceOf(
       RepositoryCorruptionError,
     );
+  });
+
+  it("never returns an existing key after its owner or interview is deletion-marked", async () => {
+    const id = operationId("deletion-hidden");
+    await createOperation(id, { idempotencyKey: "deletion-hidden-key" });
+
+    await client.database
+      .update(interviewSessions)
+      .set({ deletionRequestedAt: NOW })
+      .where(eq(interviewSessions.id, INTERVIEW_ID));
+    await expect(repository.findById(id, OWNER_ID)).resolves.toBeNull();
+    await expect(
+      repository.findByIdempotencyKey(OWNER_ID, "interview-command", "deletion-hidden-key"),
+    ).resolves.toBeNull();
+    await expect(
+      repository.claimPending(claim(id, "deletion-hidden-worker")),
+    ).rejects.toBeInstanceOf(RepositoryInterviewUnavailableError);
+    await expect(
+      createOperation(operationId("deletion-hidden"), {
+        idempotencyKey: "deletion-hidden-key",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewUnavailableError);
+
+    await client.database
+      .update(interviewSessions)
+      .set({ deletionRequestedAt: null })
+      .where(eq(interviewSessions.id, INTERVIEW_ID));
+    await client.database
+      .update(user)
+      .set({ deletionRequestedAt: NOW })
+      .where(eq(user.id, OWNER_ID));
+    await expect(repository.findById(id, OWNER_ID)).resolves.toBeNull();
+    await expect(
+      repository.findByIdempotencyKey(OWNER_ID, "interview-command", "deletion-hidden-key"),
+    ).resolves.toBeNull();
+    await expect(
+      createOperation(operationId("deletion-hidden"), {
+        idempotencyKey: "deletion-hidden-key",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewUnavailableError);
+  });
+
+  it("serializes Operation creation before account deletion and cancels the new row", async () => {
+    const id = operationId("create-before-delete");
+    let operationCreated: (() => void) | undefined;
+    const created = new Promise<void>((resolve) => {
+      operationCreated = resolve;
+    });
+    let releaseCreation: (() => void) | undefined;
+    const release = new Promise<void>((resolve) => {
+      releaseCreation = resolve;
+    });
+    const creation = unitOfWork.run(async (repositories) => {
+      const result = await repositories.operations.createOrLoad({
+        id,
+        accountId: OWNER_ID,
+        interviewId: INTERVIEW_ID,
+        idempotencyScope: "interview-command",
+        type: "submit_answer",
+        idempotencyKey: "create-before-delete-key",
+        expectedVersion: 1,
+        input: INPUT,
+        createdAt: NOW,
+      });
+      operationCreated?.();
+      await release;
+      return result;
+    });
+    await created;
+
+    const deletion = lifecycleRepository.markAccountDeleting(OWNER_ID);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseCreation?.();
+    await expect(creation).resolves.toMatchObject({ created: true });
+    await expect(deletion).resolves.toMatchObject({ scope: "account" });
+    expect(
+      (
+        await client.database
+          .select({ status: operations.status, error: operations.error })
+          .from(operations)
+          .where(eq(operations.id, id))
+      )[0],
+    ).toMatchObject({
+      status: "failed",
+      error: { code: "account_deletion_requested" },
+    });
+    await expect(repository.findById(id, OWNER_ID)).resolves.toBeNull();
+  });
+
+  it("waits for concurrent account deletion and refuses to insert afterward", async () => {
+    let deletionMarked: (() => void) | undefined;
+    const marked = new Promise<void>((resolve) => {
+      deletionMarked = resolve;
+    });
+    let releaseDeletion: (() => void) | undefined;
+    const release = new Promise<void>((resolve) => {
+      releaseDeletion = resolve;
+    });
+    const deletion = unitOfWork.run(async (repositories) => {
+      const result = await repositories.lifecycle.markAccountDeleting(OWNER_ID);
+      deletionMarked?.();
+      await release;
+      return result;
+    });
+    await marked;
+
+    const creation = createOperation(operationId("delete-before-create"), {
+      idempotencyKey: "delete-before-create-key",
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseDeletion?.();
+    await expect(deletion).resolves.toMatchObject({ scope: "account" });
+    await expect(creation).rejects.toBeInstanceOf(RepositoryInterviewUnavailableError);
+    expect(await client.database.select({ id: operations.id }).from(operations)).toHaveLength(0);
   });
 
   it("allows only one concurrent pending claimant", async () => {
@@ -361,6 +691,64 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
         retryable: false,
       },
     });
+  });
+
+  it("serializes retry with account deletion and never resurrects the Operation", async () => {
+    const id = operationId("retry-during-deletion");
+    await createOperation(id);
+    const initialClaim = await repository.claimPending(claim(id, "worker-a"));
+    await repository.completeFailure({
+      operationId: id,
+      accountId: OWNER_ID,
+      ...completionLease(initialClaim),
+      error: { code: "provider_unavailable" },
+      retryable: true,
+    });
+
+    let deletionMarked: (() => void) | undefined;
+    const marked = new Promise<void>((resolve) => {
+      deletionMarked = resolve;
+    });
+    let releaseDeletion: (() => void) | undefined;
+    const release = new Promise<void>((resolve) => {
+      releaseDeletion = resolve;
+    });
+    const deletion = unitOfWork.run(async (repositories) => {
+      const result = await repositories.lifecycle.markAccountDeleting(OWNER_ID);
+      deletionMarked?.();
+      await release;
+      return result;
+    });
+    await marked;
+
+    const retry = expect(
+      repository.retryFailedAndClaim({
+        ...claim(id, "worker-b"),
+        input: INPUT,
+      }),
+    ).rejects.toBeInstanceOf(RepositoryInterviewUnavailableError);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseDeletion?.();
+    await expect(deletion).resolves.toMatchObject({ scope: "account" });
+    await retry;
+
+    expect(
+      (
+        await client.database
+          .select({
+            status: operations.status,
+            retryable: operations.retryable,
+            error: operations.error,
+          })
+          .from(operations)
+          .where(eq(operations.id, id))
+      )[0],
+    ).toEqual({
+      status: "failed",
+      retryable: true,
+      error: { code: "provider_unavailable" },
+    });
+    await expect(repository.findById(id, OWNER_ID)).resolves.toBeNull();
   });
 
   it("rejects stale worker completion after a reclaim", async () => {
