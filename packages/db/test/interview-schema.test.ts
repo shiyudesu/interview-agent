@@ -46,6 +46,10 @@ function uniqueConstraintNames(table: PgTable): string[] {
   return getTableConfig(table).uniqueConstraints.map((item) => item.getName() ?? "");
 }
 
+function checkNames(table: PgTable): string[] {
+  return getTableConfig(table).checks.map((item) => item.name);
+}
+
 function foreignKey(
   table: PgTable,
   columnName: string,
@@ -167,8 +171,9 @@ describe("interview persistence PostgreSQL schema", () => {
     expectTypeOf<NewQuestionEvaluationRecord["modelMetadata"]>().toEqualTypeOf<ModelCallMetadata>();
   });
 
-  it("adds only composite-FK support keys while task 3.3 uniqueness remains deferred", () => {
+  it("defines task 3.3 ownership, ordering, and idempotency uniqueness", () => {
     expect(indexNames(interviewSessions)).toEqual([
+      "interview_sessions_one_open_per_user_idx",
       "interview_sessions_owner_user_idx",
       "interview_sessions_status_idx",
       "interview_sessions_last_activity_idx",
@@ -183,32 +188,38 @@ describe("interview persistence PostgreSQL schema", () => {
       "operations_status_lease_idx",
     ]);
 
-    for (const table of [interviewSessions, sessionQuestionSnapshots, operations]) {
-      expect(getTableConfig(table).indexes.every((item) => !item.config.unique)).toBe(true);
-    }
     expect(uniqueConstraintNames(interviewSessions)).toEqual([
       "interview_sessions_id_owner_fk_target_unique",
     ]);
     expect(uniqueConstraintNames(sessionQuestionSnapshots)).toEqual([
       "session_question_snapshots_id_interview_fk_target_unique",
+      "session_question_snapshots_interview_position_unique",
     ]);
-    expect(uniqueConstraintNames(operations)).toEqual(["operations_id_interview_fk_target_unique"]);
+    expect(uniqueConstraintNames(operations)).toEqual([
+      "operations_id_interview_fk_target_unique",
+      "operations_owner_scope_idempotency_unique",
+    ]);
 
-    expect(
-      getTableConfig(interviewSessions).indexes.some(
-        (item) => item.config.unique && item.config.where !== undefined,
-      ),
-    ).toBe(false);
-    expect(
-      getTableConfig(sessionQuestionSnapshots).uniqueConstraints.some((constraint) =>
-        constraint.columns.some((column) => column.name === "position"),
-      ),
-    ).toBe(false);
-    expect(
-      getTableConfig(operations).uniqueConstraints.some((constraint) =>
-        constraint.columns.some((column) => column.name === "idempotency_key"),
-      ),
-    ).toBe(false);
+    const oneOpenInterviewIndex = getTableConfig(interviewSessions).indexes[0]?.config;
+    expect(oneOpenInterviewIndex?.unique).toBe(true);
+    expect(oneOpenInterviewIndex?.where).toBeDefined();
+    expect(operations.idempotencyScope.enumValues).toEqual(operations.type.enumValues);
+    expect(operations.idempotencyScope.notNull).toBe(true);
+    expect(operations.idempotencyKey.notNull).toBe(true);
+    expect(checkNames(interviewSessions)).toEqual([
+      "interview_sessions_selected_question_count_check",
+      "interview_sessions_version_check",
+      "interview_sessions_current_position_check",
+    ]);
+    expect(checkNames(sessionQuestionSnapshots)).toContain(
+      "session_question_snapshots_position_check",
+    );
+    expect(checkNames(operations)).toEqual([
+      "operations_expected_version_check",
+      "operations_attempt_count_check",
+      "operations_idempotency_scope_check",
+      "operations_status_lease_check",
+    ]);
   });
 
   it("scopes duplicated owner and aggregate IDs through composite foreign keys", () => {

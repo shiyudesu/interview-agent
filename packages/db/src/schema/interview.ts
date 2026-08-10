@@ -29,6 +29,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth.js";
@@ -184,6 +185,9 @@ export const interviewSessions = pgTable(
   },
   (table) => [
     unique("interview_sessions_id_owner_fk_target_unique").on(table.id, table.ownerUserId),
+    uniqueIndex("interview_sessions_one_open_per_user_idx")
+      .on(table.ownerUserId)
+      .where(sql`${table.status} in ('active', 'report_pending')`),
     index("interview_sessions_owner_user_idx").on(table.ownerUserId),
     index("interview_sessions_status_idx").on(table.status),
     index("interview_sessions_last_activity_idx").on(table.lastEffectiveActivityAt),
@@ -192,7 +196,10 @@ export const interviewSessions = pgTable(
       sql`${table.selectedQuestionCount} in (5, 10, 15)`,
     ),
     check("interview_sessions_version_check", sql`${table.version} >= 1`),
-    check("interview_sessions_current_position_check", sql`${table.currentQuestionPosition} >= 1`),
+    check(
+      "interview_sessions_current_position_check",
+      sql`${table.currentQuestionPosition} between 1 and ${table.selectedQuestionCount}`,
+    ),
   ],
 );
 
@@ -254,6 +261,10 @@ export const sessionQuestionSnapshots = pgTable(
       table.id,
       table.interviewId,
     ),
+    unique("session_question_snapshots_interview_position_unique").on(
+      table.interviewId,
+      table.position,
+    ),
     index("session_question_snapshots_interview_idx").on(table.interviewId),
     index("session_question_snapshots_source_idx").on(
       table.sourceQuestionId,
@@ -313,7 +324,7 @@ export const operations = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
     interviewId: text("interview_id").notNull(),
-    idempotencyScope: text("idempotency_scope").notNull(),
+    idempotencyScope: operationTypeEnum("idempotency_scope").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     type: operationTypeEnum("type").notNull(),
     status: operationStatusEnum("status").default("pending").notNull(),
@@ -331,6 +342,11 @@ export const operations = pgTable(
   },
   (table) => [
     unique("operations_id_interview_fk_target_unique").on(table.id, table.interviewId),
+    unique("operations_owner_scope_idempotency_unique").on(
+      table.ownerUserId,
+      table.idempotencyScope,
+      table.idempotencyKey,
+    ),
     index("operations_owner_user_idx").on(table.ownerUserId),
     index("operations_interview_idx").on(table.interviewId),
     index("operations_status_lease_idx").on(table.status, table.leaseExpiresAt),
@@ -341,6 +357,23 @@ export const operations = pgTable(
     }).onDelete("cascade"),
     check("operations_expected_version_check", sql`${table.expectedVersion} >= 0`),
     check("operations_attempt_count_check", sql`${table.attemptCount} >= 0`),
+    check("operations_idempotency_scope_check", sql`${table.idempotencyScope} = ${table.type}`),
+    check(
+      "operations_status_lease_check",
+      sql`
+        (
+          ${table.status} = 'processing'
+          and ${table.leaseAcquiredAt} is not null
+          and ${table.leaseExpiresAt} is not null
+          and ${table.leaseExpiresAt} > ${table.leaseAcquiredAt}
+        )
+        or (
+          ${table.status} <> 'processing'
+          and ${table.leaseAcquiredAt} is null
+          and ${table.leaseExpiresAt} is null
+        )
+      `,
+    ),
   ],
 );
 

@@ -15,6 +15,13 @@
       "when": 1786330622136,
       "tag": "0001_interview_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786331381437,
+      "tag": "0002_interview_constraints",
+      "breakpoints": true
     }
   ]
 }

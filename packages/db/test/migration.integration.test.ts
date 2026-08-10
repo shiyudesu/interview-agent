@@ -1,13 +1,14 @@
 import { spawn } from "node:child_process";
-import { mkdir, rm, symlink } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const repositoryRoot = resolve(packageRoot, "../..");
+const migrationsRoot = resolve(packageRoot, "drizzle");
 const cliTarget = resolve(packageRoot, "dist/cli/migrate.js");
 const cliLink = resolve(packageRoot, ".test-artifacts/interview-agent-db-migrate");
 
@@ -15,6 +16,158 @@ interface ProcessResult {
   readonly exitCode: number | null;
   readonly stderr: string;
   readonly stdout: string;
+}
+
+const blueprintPositions = [1, 2, 3, 4, 5] as const;
+const initialMigrationNames = ["0000_initial_auth.sql", "0001_interview_persistence.sql"] as const;
+
+async function seedConstraintQuestions(client: PoolClient): Promise<void> {
+  for (const position of blueprintPositions) {
+    await client.query(
+      `insert into question_bank_versions
+         (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
+          knowledge_explanation, import_source_name, import_source_version)
+       values ($1, 1, 'go_language', $2, '[]', '[]', 'Explanation', 'constraint-fixture', 1)
+       on conflict do nothing`,
+      [`constraint-question-${position}`, `Question ${position}`],
+    );
+  }
+}
+
+async function insertInterviewBlueprint(
+  client: PoolClient,
+  interviewId: string,
+  ownerUserId: string,
+  positions: readonly number[] = blueprintPositions,
+  status = "active",
+): Promise<void> {
+  await client.query(
+    `insert into interview_sessions
+       (id, owner_user_id, selected_question_count, selection_seed, status)
+     values ($1, $2, 5, $3, $4)`,
+    [interviewId, ownerUserId, `${interviewId}-seed`, status],
+  );
+
+  for (const [index, position] of positions.entries()) {
+    const sourcePosition = Math.min(Math.max(position, 1), 5);
+    await client.query(
+      `insert into session_question_snapshots
+         (id, interview_id, position, source_question_id, source_question_version, domain,
+          source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
+       values ($1, $2, $3, $4, 1, 'go_language', $5, $5, '[]', '[]', 'Explanation')`,
+      [
+        `${interviewId}-snapshot-${index + 1}`,
+        interviewId,
+        position,
+        `constraint-question-${sourcePosition}`,
+        `Question ${sourcePosition}`,
+      ],
+    );
+  }
+}
+
+async function createInterviewWithBlueprint(
+  pool: Pool,
+  interviewId: string,
+  ownerUserId: string,
+  status = "active",
+): Promise<void> {
+  const client = await pool.connect();
+
+  try {
+    await client.query("begin");
+    await seedConstraintQuestions(client);
+    await insertInterviewBlueprint(client, interviewId, ownerUserId, blueprintPositions, status);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function databaseUrlFor(baseDatabaseUrl: string, databaseName: string): string {
+  const url = new URL(baseDatabaseUrl);
+  url.pathname = `/${databaseName}`;
+  return url.toString();
+}
+
+async function recreateDatabase(baseDatabaseUrl: string, databaseName: string): Promise<string> {
+  if (!/^[a-z][a-z0-9_]*$/.test(databaseName)) {
+    throw new Error(`Unsafe test database name: ${databaseName}`);
+  }
+
+  const adminPool = new Pool({ connectionString: baseDatabaseUrl });
+  try {
+    await adminPool.query(`drop database if exists "${databaseName}" with (force)`);
+    await adminPool.query(`create database "${databaseName}"`);
+  } finally {
+    await adminPool.end();
+  }
+
+  return databaseUrlFor(baseDatabaseUrl, databaseName);
+}
+
+async function dropDatabase(baseDatabaseUrl: string, databaseName: string): Promise<void> {
+  const adminPool = new Pool({ connectionString: baseDatabaseUrl });
+  try {
+    await adminPool.query(`drop database if exists "${databaseName}" with (force)`);
+  } finally {
+    await adminPool.end();
+  }
+}
+
+async function applySqlMigration(pool: Pool, migrationName: string): Promise<void> {
+  const sql = await readFile(resolve(migrationsRoot, migrationName), "utf8");
+  const statements = sql
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+  const client = await pool.connect();
+
+  try {
+    await client.query("begin");
+    for (const statement of statements) {
+      await client.query(statement);
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function applyInitialMigrations(pool: Pool): Promise<void> {
+  for (const migrationName of initialMigrationNames) {
+    await applySqlMigration(pool, migrationName);
+  }
+}
+
+async function seedUpgradeBlueprint(
+  pool: Pool,
+  interviewId: string,
+  positions: readonly number[],
+): Promise<void> {
+  const client = await pool.connect();
+
+  try {
+    await client.query("begin");
+    await client.query(
+      `insert into "user" (id, name, email)
+       values ('upgrade-owner', 'Upgrade Owner', 'upgrade-owner@example.com')`,
+    );
+    await seedConstraintQuestions(client);
+    await insertInterviewBlueprint(client, interviewId, "upgrade-owner", positions, "completed");
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function run(
@@ -226,11 +379,7 @@ describe.sequential("database migration CLI", () => {
         `insert into "user" (id, name, email)
          values ('user-3', 'Business Owner', 'business-owner@example.com')`,
       );
-      await pool.query(
-        `insert into interview_sessions
-           (id, owner_user_id, selected_question_count, selection_seed)
-         values ('interview-1', 'user-3', 5, 'selection-seed')`,
-      );
+      await createInterviewWithBlueprint(pool, "interview-1", "user-3");
       await expect(pool.query(`delete from "user" where id = 'user-3'`)).rejects.toMatchObject({
         code: "23001",
         constraint: "interview_sessions_owner_user_id_user_id_fk",
@@ -239,6 +388,68 @@ describe.sequential("database migration CLI", () => {
       await pool.query(`delete from "user" where id = 'user-3'`);
     } finally {
       await pool.end();
+    }
+  }, 120_000);
+
+  it("rejects upgrading an incomplete or gapped blueprint created under migration 0001", async () => {
+    const databaseName = "upgrade_invalid_blueprint";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyInitialMigrations(pool);
+      await seedUpgradeBlueprint(pool, "invalid-upgrade-interview", [1, 2, 4, 5]);
+
+      await expect(applySqlMigration(pool, "0002_interview_constraints.sql")).rejects.toMatchObject(
+        {
+          code: "23514",
+          constraint: "session_question_snapshots_complete_blueprint_check",
+        },
+      );
+
+      const rolledBackFunction = await pool.query<{ function_count: string }>(
+        `select count(*)::text as function_count
+           from pg_proc
+          where proname = 'assert_interview_blueprint_complete'`,
+      );
+      expect(rolledBackFunction.rows[0]?.function_count).toBe("0");
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("upgrades valid existing migration-0001 blueprints successfully", async () => {
+    const databaseName = "upgrade_valid_blueprint";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyInitialMigrations(pool);
+      await seedUpgradeBlueprint(pool, "valid-upgrade-interview", blueprintPositions);
+
+      await expect(
+        applySqlMigration(pool, "0002_interview_constraints.sql"),
+      ).resolves.toBeUndefined();
+
+      const migrationObjects = await pool.query<{ object_name: string }>(
+        `select proname as object_name
+           from pg_proc
+          where proname in (
+            'assert_interview_blueprint_complete',
+            'prevent_operation_delete_while_interview_exists',
+            'prevent_session_question_snapshot_delete_while_interview_exists'
+          )
+          order by proname`,
+      );
+      expect(migrationObjects.rows.map((row) => row.object_name)).toEqual([
+        "assert_interview_blueprint_complete",
+        "prevent_operation_delete_while_interview_exists",
+        "prevent_session_question_snapshot_delete_while_interview_exists",
+      ]);
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
     }
   }, 120_000);
 
@@ -251,34 +462,14 @@ describe.sequential("database migration CLI", () => {
          values ('aggregate-owner-a', 'Owner A', 'aggregate-a@example.com'),
                 ('aggregate-owner-b', 'Owner B', 'aggregate-b@example.com')`,
       );
-      await pool.query(
-        `insert into interview_sessions
-           (id, owner_user_id, selected_question_count, selection_seed)
-         values ('aggregate-interview-a', 'aggregate-owner-a', 5, 'seed-a'),
-                ('aggregate-interview-b', 'aggregate-owner-b', 5, 'seed-b')`,
-      );
-      await pool.query(
-        `insert into question_bank_versions
-           (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
-            knowledge_explanation, import_source_name, import_source_version)
-         values ('aggregate-question', 1, 'go_language', 'Question', '[]', '[]',
-                 'Explanation', 'fixture', 1)`,
-      );
-      await pool.query(
-        `insert into session_question_snapshots
-           (id, interview_id, position, source_question_id, source_question_version, domain,
-            source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
-         values ('aggregate-snapshot-a', 'aggregate-interview-a', 1, 'aggregate-question', 1,
-                 'go_language', 'Question', 'Question', '[]', '[]', 'Explanation'),
-                ('aggregate-snapshot-b', 'aggregate-interview-b', 1, 'aggregate-question', 1,
-                 'go_language', 'Question', 'Question', '[]', '[]', 'Explanation')`,
-      );
+      await createInterviewWithBlueprint(pool, "aggregate-interview-a", "aggregate-owner-a");
+      await createInterviewWithBlueprint(pool, "aggregate-interview-b", "aggregate-owner-b");
       await pool.query(
         `insert into operations
            (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
             expected_version, input)
          values ('aggregate-operation-a', 'aggregate-owner-a', 'aggregate-interview-a',
-                 'answer', 'operation-a', 'submit_answer', 1, '{}')`,
+                 'submit_answer', 'operation-a', 'submit_answer', 1, '{}')`,
       );
 
       await expect(
@@ -287,7 +478,7 @@ describe.sequential("database migration CLI", () => {
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
               expected_version, input)
            values ('cross-owner-operation', 'aggregate-owner-b', 'aggregate-interview-a',
-                   'answer', 'cross-owner', 'submit_answer', 1, '{}')`,
+                   'submit_answer', 'cross-owner', 'submit_answer', 1, '{}')`,
         ),
       ).rejects.toMatchObject({ code: "23503", constraint: "operations_interview_owner_fk" });
 
@@ -341,7 +532,7 @@ describe.sequential("database migration CLI", () => {
           `insert into interview_messages
              (id, interview_id, question_snapshot_id, role, kind, content)
            values ('cross-interview-snapshot-message', 'aggregate-interview-b',
-                   'aggregate-snapshot-a', 'assistant', 'main_question', 'Question')`,
+                   'aggregate-interview-a-snapshot-1', 'assistant', 'main_question', 'Question')`,
         ),
       ).rejects.toMatchObject({
         code: "23503",
@@ -379,7 +570,7 @@ describe.sequential("database migration CLI", () => {
           `insert into question_evaluations
              (id, question_snapshot_id, classification, rubric_results, outcome_kind, score,
               zero_score_reason, model_metadata)
-           values ($1, 'aggregate-snapshot-a', $2, '[]', $3, $4, $5, '{}')`,
+             values ($1, 'aggregate-interview-a-snapshot-1', $2, '[]', $3, $4, $5, '{}')`,
           [id, classification, outcome, score, reason],
         );
       }
@@ -390,7 +581,7 @@ describe.sequential("database migration CLI", () => {
             `insert into question_evaluations
                (id, question_snapshot_id, classification, rubric_results, outcome_kind, score,
                 zero_score_reason, model_metadata)
-             values ($1, 'aggregate-snapshot-a', 'relevant', '[]',
+               values ($1, 'aggregate-interview-a-snapshot-1', 'relevant', '[]',
                      $2::text::evaluation_outcome_kind, 0, null, '{}')`,
             [`invalid-evaluation-${outcome}`, outcome],
           ),
@@ -412,7 +603,7 @@ describe.sequential("database migration CLI", () => {
             `insert into question_evaluations
                (id, question_snapshot_id, classification, rubric_results, outcome_kind, score,
                 zero_score_reason, model_metadata)
-             values ($1, 'aggregate-snapshot-a', $2, '[]', $3, $4, $5, '{}')`,
+               values ($1, 'aggregate-interview-a-snapshot-1', $2, '[]', $3, $4, $5, '{}')`,
             [id, classification, outcome, score, reason],
           ),
         ).rejects.toMatchObject({
@@ -429,15 +620,12 @@ describe.sequential("database migration CLI", () => {
         ["snapshot-skipped", "skipped", 0, "skipped"],
       ] as const;
 
-      for (const [id, outcome, score, reason] of validSnapshotOutcomes) {
+      for (const [index, [, outcome, score, reason]] of validSnapshotOutcomes.entries()) {
         await pool.query(
-          `insert into session_question_snapshots
-             (id, interview_id, position, source_question_id, source_question_version, domain,
-              source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation,
-              outcome_kind, score, zero_score_reason)
-           values ($1, 'aggregate-interview-a', 2, 'aggregate-question', 1, 'go_language',
-                   'Question', 'Question', '[]', '[]', 'Explanation', $2, $3, $4)`,
-          [id, outcome, score, reason],
+          `update session_question_snapshots
+              set outcome_kind = $1, score = $2, zero_score_reason = $3
+            where id = $4`,
+          [outcome, score, reason, `aggregate-interview-a-snapshot-${index + 1}`],
         );
       }
 
@@ -449,16 +637,13 @@ describe.sequential("database migration CLI", () => {
         ["snapshot-invalid-skipped", "skipped", null, "skipped"],
       ] as const;
 
-      for (const [id, outcome, score, reason] of invalidSnapshotOutcomes) {
+      for (const [, outcome, score, reason] of invalidSnapshotOutcomes) {
         await expect(
           pool.query(
-            `insert into session_question_snapshots
-               (id, interview_id, position, source_question_id, source_question_version, domain,
-                source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation,
-                outcome_kind, score, zero_score_reason)
-             values ($1, 'aggregate-interview-a', 3, 'aggregate-question', 1, 'go_language',
-                     'Question', 'Question', '[]', '[]', 'Explanation', $2, $3, $4)`,
-            [id, outcome, score, reason],
+            `update session_question_snapshots
+                set outcome_kind = $1, score = $2, zero_score_reason = $3
+              where id = 'aggregate-interview-a-snapshot-1'`,
+            [outcome, score, reason],
           ),
         ).rejects.toMatchObject({
           code: "23514",
@@ -470,34 +655,529 @@ describe.sequential("database migration CLI", () => {
     }
   });
 
-  it("keeps task 3.3 business uniqueness explicitly deferred", async () => {
+  it("allows at most one active or report-pending interview, including concurrent inserts", async () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
     try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('open-owner', 'Open Owner', 'open-owner@example.com'),
+                ('concurrent-owner', 'Concurrent Owner', 'concurrent-owner@example.com')`,
+      );
+
+      await createInterviewWithBlueprint(pool, "open-interview-1", "open-owner");
       await expect(
-        pool.query(
-          `insert into interview_sessions
-             (id, owner_user_id, selected_question_count, selection_seed)
-           values ('second-active-interview', 'aggregate-owner-a', 5, 'second-seed')`,
-        ),
-      ).resolves.toMatchObject({ rowCount: 1 });
+        createInterviewWithBlueprint(pool, "blocked-active-interview", "open-owner"),
+      ).rejects.toMatchObject({
+        code: "23505",
+        constraint: "interview_sessions_one_open_per_user_idx",
+      });
+
+      await pool.query(
+        `update interview_sessions set status = 'report_pending' where id = 'open-interview-1'`,
+      );
       await expect(
-        pool.query(
+        createInterviewWithBlueprint(pool, "blocked-report-interview", "open-owner"),
+      ).rejects.toMatchObject({
+        code: "23505",
+        constraint: "interview_sessions_one_open_per_user_idx",
+      });
+
+      let openInterviewId = "open-interview-1";
+      for (const [index, terminalStatus] of [
+        "completed",
+        "early_ended",
+        "abandoned",
+        "deleting",
+      ].entries()) {
+        await pool.query(`update interview_sessions set status = $1 where id = $2`, [
+          terminalStatus,
+          openInterviewId,
+        ]);
+        openInterviewId = `terminal-allowance-${index}`;
+        await createInterviewWithBlueprint(pool, openInterviewId, "open-owner");
+      }
+
+      const concurrentResults = await Promise.allSettled([
+        createInterviewWithBlueprint(pool, "concurrent-interview-a", "concurrent-owner"),
+        createInterviewWithBlueprint(pool, "concurrent-interview-b", "concurrent-owner"),
+      ]);
+
+      expect(concurrentResults.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const rejectedConcurrentInsert = concurrentResults.find(
+        (result) => result.status === "rejected",
+      );
+      expect(rejectedConcurrentInsert).toMatchObject({
+        status: "rejected",
+        reason: {
+          code: "23505",
+          constraint: "interview_sessions_one_open_per_user_idx",
+        },
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("requires a unique contiguous complete blueprint within the selected question count", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+    const client = await pool.connect();
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('blueprint-owner', 'Blueprint Owner', 'blueprint-owner@example.com')`,
+      );
+      await seedConstraintQuestions(client);
+      await createInterviewWithBlueprint(
+        pool,
+        "valid-blueprint-interview",
+        "blueprint-owner",
+        "completed",
+      );
+
+      await client.query("begin");
+      await insertInterviewBlueprint(
+        client,
+        "duplicate-blueprint-interview",
+        "blueprint-owner",
+        [1, 2, 3, 4],
+        "completed",
+      );
+      await expect(
+        client.query(
           `insert into session_question_snapshots
              (id, interview_id, position, source_question_id, source_question_version, domain,
               source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
-           values ('duplicate-position-snapshot', 'aggregate-interview-a', 1,
-                   'aggregate-question', 1, 'go_language', 'Question', 'Question', '[]', '[]',
-                   'Explanation')`,
+           values ('duplicate-blueprint-position', 'duplicate-blueprint-interview', 4,
+                   'constraint-question-5', 1, 'go_language', 'Question 5', 'Question 5',
+                   '[]', '[]', 'Explanation')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23505",
+        constraint: "session_question_snapshots_interview_position_unique",
+      });
+      await client.query("rollback");
+
+      for (const [interviewId, positions] of [
+        ["gapped-blueprint-interview", [1, 2, 4, 5]],
+        ["out-of-range-blueprint-interview", [1, 2, 3, 4, 6]],
+      ] as const) {
+        await client.query("begin");
+        await insertInterviewBlueprint(
+          client,
+          interviewId,
+          "blueprint-owner",
+          positions,
+          "completed",
+        );
+        await expect(client.query("commit")).rejects.toMatchObject({
+          code: "23514",
+          constraint: "session_question_snapshots_complete_blueprint_check",
+        });
+        await client.query("rollback");
+      }
+
+      await client.query("begin");
+      await client.query(
+        `insert into interview_sessions
+           (id, owner_user_id, selected_question_count, selection_seed, status)
+         values ('negative-position-interview', 'blueprint-owner', 5, 'negative-seed',
+                 'completed')`,
+      );
+      await expect(
+        client.query(
+          `insert into session_question_snapshots
+             (id, interview_id, position, source_question_id, source_question_version, domain,
+              source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
+           values ('negative-position-snapshot', 'negative-position-interview', 0,
+                   'constraint-question-1', 1, 'go_language', 'Question 1', 'Question 1',
+                   '[]', '[]', 'Explanation')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "session_question_snapshots_position_check",
+      });
+      await client.query("rollback");
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  });
+
+  it("freezes interview blueprint ownership and selection while allowing lifecycle updates", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+    const client = await pool.connect();
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('frozen-blueprint-owner', 'Frozen Blueprint Owner',
+                 'frozen-blueprint-owner@example.com'),
+                ('frozen-blueprint-new-owner', 'Frozen Blueprint New Owner',
+                 'frozen-blueprint-new-owner@example.com')`,
+      );
+      await createInterviewWithBlueprint(
+        pool,
+        "frozen-blueprint-interview",
+        "frozen-blueprint-owner",
+      );
+
+      for (const update of [
+        "selected_question_count = 10",
+        "selection_seed = 'changed-seed'",
+        "owner_user_id = 'frozen-blueprint-new-owner'",
+      ]) {
+        await expect(
+          pool.query(
+            `update interview_sessions
+                set ${update}
+              where id = 'frozen-blueprint-interview'`,
+          ),
+        ).rejects.toMatchObject({
+          code: "23514",
+          constraint: "interview_sessions_immutable_blueprint_check",
+        });
+      }
+
+      await client.query("begin");
+      await client.query(
+        `insert into session_question_snapshots
+           (id, interview_id, position, source_question_id, source_question_version, domain,
+            source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
+         values ('frozen-blueprint-extra-snapshot', 'frozen-blueprint-interview', 6,
+                 'constraint-question-5', 1, 'go_language', 'Question 5', 'Question 5',
+                 '[]', '[]', 'Explanation')`,
+      );
+      await expect(client.query("commit")).rejects.toMatchObject({
+        code: "23514",
+        constraint: "session_question_snapshots_complete_blueprint_check",
+      });
+      await client.query("rollback");
+
+      await expect(
+        pool.query(
+          `update interview_sessions
+              set status = 'report_pending', active_phase = 'processing', version = version + 1,
+                  current_question_position = 5, last_effective_activity_at = now(),
+                  pending_operation_kind = 'answer_analysis',
+                  pending_operation_question_position = 5,
+                  pending_operation_accepted_at = now(),
+                  pending_operation_previous_phase = 'awaiting_response',
+                  pending_report_kind = 'complete', report_requested_at = now()
+            where id = 'frozen-blueprint-interview'`,
         ),
       ).resolves.toMatchObject({ rowCount: 1 });
+
+      const mutableState = await pool.query<{
+        active_phase: string;
+        current_question_position: number;
+        last_effective_activity_at: Date;
+        pending_operation_accepted_at: Date;
+        pending_operation_kind: string;
+        pending_operation_previous_phase: string;
+        pending_operation_question_position: number;
+        pending_report_kind: string;
+        report_requested_at: Date;
+        status: string;
+        version: number;
+      }>(
+        `select status, active_phase, version, current_question_position,
+                last_effective_activity_at,
+                pending_operation_kind, pending_operation_question_position,
+                pending_operation_accepted_at, pending_operation_previous_phase,
+                pending_report_kind, report_requested_at
+           from interview_sessions
+          where id = 'frozen-blueprint-interview'`,
+      );
+      expect(mutableState.rows[0]).toMatchObject({
+        status: "report_pending",
+        active_phase: "processing",
+        version: 2,
+        current_question_position: 5,
+        pending_operation_kind: "answer_analysis",
+        pending_operation_question_position: 5,
+        pending_operation_previous_phase: "awaiting_response",
+        pending_report_kind: "complete",
+      });
+      expect(mutableState.rows[0]?.last_effective_activity_at).toBeInstanceOf(Date);
+      expect(mutableState.rows[0]?.pending_operation_accepted_at).toBeInstanceOf(Date);
+      expect(mutableState.rows[0]?.report_requested_at).toBeInstanceOf(Date);
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  });
+
+  it("rejects snapshot identity/content and Operation command-input updates", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('immutable-owner', 'Immutable Owner', 'immutable-owner@example.com')`,
+      );
+      await createInterviewWithBlueprint(pool, "immutable-interview", "immutable-owner");
+      await pool.query(
+        `insert into operations
+           (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+            expected_version, input)
+         values ('immutable-operation', 'immutable-owner', 'immutable-interview',
+                 'submit_answer', 'immutable-key', 'submit_answer', 1, '{"answer":"original"}')`,
+      );
+
+      for (const update of [
+        "source_question_id = 'constraint-question-2'",
+        "source_question_version = 2",
+        "position = 2",
+        "interview_id = 'aggregate-interview-a'",
+        "display_wording = 'Changed wording'",
+        'rubric = \'[{"id":"changed"}]\'::jsonb',
+      ]) {
+        await expect(
+          pool.query(
+            `update session_question_snapshots
+                set ${update}
+              where id = 'immutable-interview-snapshot-1'`,
+          ),
+        ).rejects.toMatchObject({
+          code: "23514",
+          constraint: "session_question_snapshots_immutable_check",
+        });
+      }
+
+      await expect(
+        pool.query(
+          `update session_question_snapshots
+              set frozen = true, frozen_at = now(),
+                  outcome_kind = 'unknown', score = 0, zero_score_reason = 'unknown'
+            where id = 'immutable-interview-snapshot-1'`,
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      for (const update of [
+        "id = 'changed-operation-id'",
+        "idempotency_key = 'changed-key'",
+        "idempotency_scope = 'submit_supplement'",
+        "expected_version = 2",
+        'input = \'{"answer":"changed"}\'::jsonb',
+      ]) {
+        await expect(
+          pool.query(`update operations set ${update} where id = 'immutable-operation'`),
+        ).rejects.toMatchObject({
+          code: "23514",
+          constraint: "operations_immutable_input_check",
+        });
+      }
+
+      await expect(
+        pool.query(
+          `update operations
+              set status = 'failed', error = '{"code":"provider_error"}', completed_at = now()
+            where id = 'immutable-operation'`,
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("rejects direct child deletion and replacement but permits physical purge cascades", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('purge-owner', 'Purge Owner', 'purge-owner@example.com')`,
+      );
+      await pool.query(
+        `insert into account (id, account_id, provider_id, user_id, updated_at)
+         values ('purge-account', 'purge-external', 'github', 'purge-owner', now());
+         insert into session (id, expires_at, token, updated_at, user_id)
+         values ('purge-session', now() + interval '1 day', 'purge-token', now(), 'purge-owner')`,
+      );
+      await createInterviewWithBlueprint(pool, "purge-interview", "purge-owner");
+      await pool.query(
+        `insert into operations
+           (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+            expected_version, input)
+         values ('purge-operation', 'purge-owner', 'purge-interview',
+                 'submit_answer', 'purge-key', 'submit_answer', 1, '{"answer":"original"}')`,
+      );
+
+      await expect(
+        pool.query(
+          `delete from session_question_snapshots
+            where id = 'purge-interview-snapshot-1'`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "session_question_snapshots_immutable_delete_check",
+      });
+      await expect(
+        pool.query(`delete from operations where id = 'purge-operation'`),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "operations_immutable_input_delete_check",
+      });
+
+      await expect(
+        pool.query(
+          `with removed as (
+             delete from session_question_snapshots
+              where id = 'purge-interview-snapshot-1'
+              returning id
+           )
+           insert into session_question_snapshots
+             (id, interview_id, position, source_question_id, source_question_version, domain,
+              source_wording, display_wording, rubric, follow_up_goals, knowledge_explanation)
+           select id, 'purge-interview', 1, 'constraint-question-1', 1, 'go_language',
+                  'Question 1', 'Replacement wording', '[]', '[]', 'Replacement explanation'
+             from removed`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "session_question_snapshots_immutable_delete_check",
+      });
+      await expect(
+        pool.query(
+          `with removed as (
+             delete from operations
+              where id = 'purge-operation'
+              returning id
+           )
+           insert into operations
+             (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+              expected_version, input)
+           select id, 'purge-owner', 'purge-interview', 'submit_answer', 'purge-key',
+                  'submit_answer', 1, '{"answer":"original"}'
+             from removed`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "operations_immutable_input_delete_check",
+      });
+
+      await expect(
+        pool.query(`delete from interview_sessions where id = 'purge-interview'`),
+      ).resolves.toMatchObject({ rowCount: 1 });
+      const aggregateChildren = await pool.query<{ operations: string; snapshots: string }>(
+        `select
+           (select count(*)::text from operations where interview_id = 'purge-interview')
+             as operations,
+           (select count(*)::text from session_question_snapshots
+             where interview_id = 'purge-interview') as snapshots`,
+      );
+      expect(aggregateChildren.rows[0]).toEqual({ operations: "0", snapshots: "0" });
+
+      await expect(
+        pool.query(`delete from "user" where id = 'purge-owner'`),
+      ).resolves.toMatchObject({ rowCount: 1 });
+      const authenticationChildren = await pool.query<{ accounts: string; sessions: string }>(
+        `select
+           (select count(*)::text from account where user_id = 'purge-owner') as accounts,
+           (select count(*)::text from session where user_id = 'purge-owner') as sessions`,
+      );
+      expect(authenticationChildren.rows[0]).toEqual({ accounts: "0", sessions: "0" });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("scopes idempotency keys by authenticated user and command type", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('idempotency-owner-a', 'Idempotency A', 'idempotency-a@example.com'),
+                ('idempotency-owner-b', 'Idempotency B', 'idempotency-b@example.com')`,
+      );
+      await createInterviewWithBlueprint(pool, "idempotency-interview-a", "idempotency-owner-a");
+      await createInterviewWithBlueprint(pool, "idempotency-interview-b", "idempotency-owner-b");
+
+      await pool.query(
+        `insert into operations
+           (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+            expected_version, input)
+         values ('idempotency-operation-a', 'idempotency-owner-a', 'idempotency-interview-a',
+                 'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+      );
       await expect(
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
               expected_version, input)
-           values ('duplicate-idempotency-operation', 'aggregate-owner-a',
-                   'aggregate-interview-a', 'answer', 'operation-a', 'submit_answer', 1, '{}')`,
+           values ('idempotency-duplicate', 'idempotency-owner-a', 'idempotency-interview-a',
+                   'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23505",
+        constraint: "operations_owner_scope_idempotency_unique",
+      });
+      await expect(
+        pool.query(
+          `insert into operations
+             (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+              expected_version, input)
+           values ('idempotency-other-scope', 'idempotency-owner-a', 'idempotency-interview-a',
+                   'submit_supplement', 'shared-key', 'submit_supplement', 1, '{}'),
+                  ('idempotency-other-user', 'idempotency-owner-b', 'idempotency-interview-b',
+                   'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+        ),
+      ).resolves.toMatchObject({ rowCount: 2 });
+      await expect(
+        pool.query(
+          `insert into operations
+             (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+              expected_version, input)
+           values ('idempotency-scope-mismatch', 'idempotency-owner-a',
+                   'idempotency-interview-a', 'submit_answer', 'mismatched-scope',
+                   'submit_supplement', 1, '{}')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "operations_idempotency_scope_check",
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("enforces Operation version and processing lease consistency without lease behavior", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      for (const [id, columns, values, constraint] of [
+        ["negative-version", "", "", "operations_expected_version_check"],
+        [
+          "pending-with-lease",
+          ", lease_acquired_at, lease_expires_at",
+          ", now(), now() + interval '1 minute'",
+          "operations_status_lease_check",
+        ],
+        ["processing-without-lease", ", status", ", 'processing'", "operations_status_lease_check"],
+      ] as const) {
+        await expect(
+          pool.query(
+            `insert into operations
+               (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+                expected_version, input${columns})
+             values ($1, 'aggregate-owner-a', 'aggregate-interview-a', 'submit_answer', $1,
+                     'submit_answer', $2, '{}'${values})`,
+            [id, id === "negative-version" ? -1 : 1],
+          ),
+        ).rejects.toMatchObject({ code: "23514", constraint });
+      }
+
+      await expect(
+        pool.query(
+          `insert into operations
+             (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+              status, expected_version, input, lease_acquired_at, lease_expires_at)
+           values ('valid-processing-lease', 'aggregate-owner-a', 'aggregate-interview-a',
+                   'submit_answer', 'valid-processing-lease', 'submit_answer', 'processing', 1,
+                   '{}', now(), now() + interval '1 minute')`,
         ),
       ).resolves.toMatchObject({ rowCount: 1 });
     } finally {
