@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "algorithm": "sha256",
+  "migrations": {
+    "0000_initial_auth": "7a0cdc1994e08c970884195827255b38d511a81e0280b1bc3f4f1d01906281c4",
+    "0001_interview_persistence": "33145e31bb8a7b5c3fb4a760c3d4abda8b81641afd93e409e62a1b4df380aecb",
+    "0002_interview_constraints": "694c2b433c99a757ed870c1f374af266fda696429d93cae017040f5a3ec21bc4",
+    "0003_repository_invariants": "3e78d3de26e2298851d960a9b51a4688ab3e7960370751338ece5bc28ad5e36f",
+    "0004_operation_lifecycle": "7a7dc5744f71c6340193098644bd737bb3227a4d6c4bdca45be13efb3c81bd55",
+    "0005_deletion_lifecycle": "6788889fd1e2a33a3fa548532b00cfab84ff480f4c92d6c2df91c28bc4aa15e0",
+    "0006_deletion_request_minimization": "fd5eb66ab3d1dae3507c27b9315163471985198b338bd8355daaf53c329cc995",
+    "0007_deletion_safety": "19b14864b4022ce44401d130aed617b21473ebe563509237df83d6b662cf0f56"
+  }
+}

@@ -1,11 +1,9 @@
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import { eq } from "drizzle-orm";
-import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   account,
-  createDatabaseClient,
   createPurgeSubjectIdentifierHash,
   type DatabaseClient,
   deletionRequests,
@@ -28,15 +26,16 @@ import {
   user,
   verification,
 } from "../src/index.js";
-import { runDatabaseMigrations } from "../src/migrate.js";
 import { validateOperationPayload } from "../src/repositories/operation-payload.js";
+import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
 
 const HASH_SECRET = "lifecycle-test-secret-that-is-at-least-32-characters";
 const NOW = new Date("2026-08-10T00:00:00.000Z");
 const CREATED_AT = new Date("2026-08-01T00:00:00.000Z");
 const numericOverflowJson = "1e1000000";
 const unsupportedUnicodeEscapeJson = String.raw`{"link":{"userId":"\u0000"}}`;
-let container: StartedTestContainer;
+let harness: PostgresTestHarness;
+let testDatabase: PostgresTestDatabase;
 let client: DatabaseClient;
 let lifecycleRepository: PgLifecycleRepository;
 let lifecycle: LifecycleService;
@@ -209,23 +208,9 @@ function createLifecycle(leaseOwner: string, purgeBatchSize = 10): LifecycleServ
 
 describe.sequential("interview expiry and deletion lifecycle", () => {
   beforeAll(async () => {
-    container = await new GenericContainer("postgres:18.4-alpine")
-      .withEnvironment({
-        POSTGRES_DB: "interview",
-        POSTGRES_PASSWORD: "interview",
-        POSTGRES_USER: "interview",
-      })
-      .withExposedPorts(5432)
-      .withWaitStrategy(Wait.forLogMessage("database system is ready to accept connections", 2))
-      .withStartupTimeout(120_000)
-      .start();
-    const databaseUrl = new URL("postgresql://localhost/interview");
-    databaseUrl.hostname = container.getHost();
-    databaseUrl.port = String(container.getMappedPort(5432));
-    databaseUrl.username = "interview";
-    databaseUrl.password = "interview";
-    await runDatabaseMigrations({ databaseUrl: databaseUrl.toString() });
-    client = createDatabaseClient({ databaseUrl: databaseUrl.toString(), max: 12 });
+    harness = await PostgresTestHarness.start();
+    testDatabase = await harness.createDatabase({ name: "lifecycle_tests" });
+    client = testDatabase.client;
     lifecycleRepository = new PgLifecycleRepository(client.database, undefined, {
       deletionRequestId: () => `deletion-request-${++requestSequence}`,
     });
@@ -244,8 +229,7 @@ describe.sequential("interview expiry and deletion lifecycle", () => {
   });
 
   afterAll(async () => {
-    await client?.close();
-    await container?.stop();
+    await harness?.stop();
   });
 
   it("keeps the exact 24-hour boundary active and lazily expires strictly older activity", async () => {

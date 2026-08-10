@@ -5,11 +5,9 @@ import {
   parseOperationId,
 } from "@interview-agent/domain";
 import { eq } from "drizzle-orm";
-import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  createDatabaseClient,
   type DatabaseClient,
   interviewSessions,
   operations,
@@ -27,14 +25,15 @@ import {
   sessionQuestionSnapshots,
   user,
 } from "../src/index.js";
-import { runDatabaseMigrations } from "../src/migrate.js";
+import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
 
 const NOW = new Date("2026-08-10T00:00:00.000Z");
 const OWNER_ID = parseAccountId("operation-owner");
 const INTERVIEW_ID = parseInterviewId("operation-interview");
 const INPUT = { questionPosition: 1, text: "immutable answer" } as const;
 
-let container: StartedTestContainer;
+let harness: PostgresTestHarness;
+let testDatabase: PostgresTestDatabase;
 let client: DatabaseClient;
 let repository: PgOperationRepository;
 let unitOfWork: PgRepositoryUnitOfWork;
@@ -136,23 +135,9 @@ async function createOperation(
 
 describe.sequential("PostgreSQL Operation lifecycle", () => {
   beforeAll(async () => {
-    container = await new GenericContainer("postgres:18.4-alpine")
-      .withEnvironment({
-        POSTGRES_DB: "interview",
-        POSTGRES_PASSWORD: "interview",
-        POSTGRES_USER: "interview",
-      })
-      .withExposedPorts(5432)
-      .withWaitStrategy(Wait.forLogMessage("database system is ready to accept connections", 2))
-      .withStartupTimeout(120_000)
-      .start();
-    const databaseUrl = new URL("postgresql://localhost/interview");
-    databaseUrl.hostname = container.getHost();
-    databaseUrl.port = String(container.getMappedPort(5432));
-    databaseUrl.username = "interview";
-    databaseUrl.password = "interview";
-    await runDatabaseMigrations({ databaseUrl: databaseUrl.toString() });
-    client = createDatabaseClient({ databaseUrl: databaseUrl.toString(), max: 8 });
+    harness = await PostgresTestHarness.start();
+    testDatabase = await harness.createDatabase({ name: "operation_lifecycle_tests" });
+    client = testDatabase.client;
     repository = new PgOperationRepository(client.database);
     unitOfWork = new PgRepositoryUnitOfWork(client.database);
     lifecycleRepository = new PgLifecycleRepository(client.database);
@@ -188,8 +173,7 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
   });
 
   afterAll(async () => {
-    await client?.close();
-    await container?.stop();
+    await harness?.stop();
   });
 
   it("creates once and loads the immutable canonical Operation and result", async () => {

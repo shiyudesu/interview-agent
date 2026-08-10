@@ -14,6 +14,10 @@
       "passThroughEnv": ["DATABASE_URL"],
       "outputs": ["drizzle/**"]
     },
+    "db:check": {
+      "cache": false,
+      "outputs": []
+    },
     "db:migrate": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]

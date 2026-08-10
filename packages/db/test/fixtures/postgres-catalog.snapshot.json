@@ -1,0 +1,4540 @@
+{
+  "formatVersion": 1,
+  "catalogHash": "d960b0c0b43e515ec7e8948a984bdfe39c49a1ce4bdb8601ce91546df666b41f",
+  "catalog": {
+    "tables": [
+      {
+        "name": "account",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "account_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "provider_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "access_token",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "refresh_token",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "id_token",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "access_token_expires_at",
+            "type": "timestamp without time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "refresh_token_expires_at",
+            "type": "timestamp without time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "scope",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "password",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "created_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "updated_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "deletion_requests",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "owner_user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "scope",
+            "type": "deletion_scope",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "interview_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "status",
+            "type": "deletion_status",
+            "nullable": false,
+            "default": "'pending'::deletion_status",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "requested_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "inaccessible_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "purge_due_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "processing_started_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "completed_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "attempt_count",
+            "type": "integer",
+            "nullable": false,
+            "default": "0",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 14,
+            "name": "last_attempt_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 15,
+            "name": "lease_expires_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 16,
+            "name": "lease_owner",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 17,
+            "name": "lease_token_hash",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 18,
+            "name": "last_error_category",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 19,
+            "name": "last_error_code",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 20,
+            "name": "purge_deadline_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "interview_messages",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "interview_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "question_snapshot_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "question_position",
+            "type": "smallint",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "role",
+            "type": "interview_message_role",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "kind",
+            "type": "interview_message_kind",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "answer_material_kind",
+            "type": "answer_material_kind",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "content",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "operation_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "metadata",
+            "type": "jsonb",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "sequence",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "interview_sessions",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "owner_user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "direction",
+            "type": "interview_direction",
+            "nullable": false,
+            "default": "'go_backend'::interview_direction",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "selected_question_count",
+            "type": "smallint",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "selection_seed",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "status",
+            "type": "interview_status",
+            "nullable": false,
+            "default": "'active'::interview_status",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "active_phase",
+            "type": "interview_phase",
+            "nullable": true,
+            "default": "'awaiting_response'::interview_phase",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "version",
+            "type": "integer",
+            "nullable": false,
+            "default": "1",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "current_question_position",
+            "type": "smallint",
+            "nullable": false,
+            "default": "1",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "pending_operation_kind",
+            "type": "pending_interview_operation_kind",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "pending_operation_question_position",
+            "type": "smallint",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "pending_operation_accepted_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "pending_operation_previous_phase",
+            "type": "interview_phase",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 14,
+            "name": "pending_report_kind",
+            "type": "report_kind",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 15,
+            "name": "report_requested_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 16,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 17,
+            "name": "last_effective_activity_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 18,
+            "name": "ended_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 19,
+            "name": "deletion_requested_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 20,
+            "name": "pending_operation_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "operations",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "owner_user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "interview_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "idempotency_scope",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "idempotency_key",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "type",
+            "type": "operation_type",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "status",
+            "type": "operation_status",
+            "nullable": false,
+            "default": "'pending'::operation_status",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "expected_version",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "attempt_count",
+            "type": "integer",
+            "nullable": false,
+            "default": "0",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "last_attempt_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "lease_acquired_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "lease_expires_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "input",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 14,
+            "name": "result",
+            "type": "jsonb",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 15,
+            "name": "error",
+            "type": "jsonb",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 16,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 17,
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 18,
+            "name": "completed_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 19,
+            "name": "input_hash",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 20,
+            "name": "lease_owner",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 21,
+            "name": "lease_token_hash",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 22,
+            "name": "completed_lease_owner",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 23,
+            "name": "completed_lease_token_hash",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 24,
+            "name": "retryable",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "purge_audit_events",
+        "columns": [
+          {
+            "position": 1,
+            "name": "subject_identifier_hash",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "data_category",
+            "type": "purge_data_category",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "result",
+            "type": "purge_result",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "purged_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "question_bank_versions",
+        "columns": [
+          {
+            "position": 1,
+            "name": "question_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "content_version",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "domain",
+            "type": "knowledge_domain",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "difficulty",
+            "type": "question_difficulty",
+            "nullable": false,
+            "default": "'medium'::question_difficulty",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "source_wording",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "rubric",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "follow_up_goals",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "knowledge_explanation",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "active",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "reviewed",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "reviewed_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "reviewed_by",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "import_source_name",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 14,
+            "name": "import_source_version",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 15,
+            "name": "imported_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "question_evaluations",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "question_snapshot_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "classification",
+            "type": "response_classification",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "rubric_results",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "outcome_kind",
+            "type": "evaluation_outcome_kind",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "score",
+            "type": "smallint",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "zero_score_reason",
+            "type": "zero_score_reason",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "model_metadata",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "reports",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "interview_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "owner_user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "kind",
+            "type": "report_kind",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "schema_version",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "snapshot",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "model_metadata",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "session",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "expires_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "token",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "created_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "updated_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "ip_address",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "user_agent",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "user_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "session_question_snapshots",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "interview_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "position",
+            "type": "smallint",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "source_question_id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "source_question_version",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "domain",
+            "type": "knowledge_domain",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "source_wording",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "display_wording",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 9,
+            "name": "rubric",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 10,
+            "name": "follow_up_goals",
+            "type": "jsonb",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 11,
+            "name": "knowledge_explanation",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 12,
+            "name": "frozen",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 13,
+            "name": "outcome_kind",
+            "type": "question_outcome_kind",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 14,
+            "name": "score",
+            "type": "smallint",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 15,
+            "name": "zero_score_reason",
+            "type": "zero_score_reason",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 16,
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 17,
+            "name": "frozen_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "user",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "name",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "email",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "email_verified",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "image",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "created_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 7,
+            "name": "updated_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 8,
+            "name": "deletion_requested_at",
+            "type": "timestamp with time zone",
+            "nullable": true,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      },
+      {
+        "name": "verification",
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 2,
+            "name": "identifier",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 3,
+            "name": "value",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 4,
+            "name": "expires_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 5,
+            "name": "created_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 6,
+            "name": "updated_at",
+            "type": "timestamp without time zone",
+            "nullable": false,
+            "default": "now()",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          }
+        ]
+      }
+    ],
+    "enums": [
+      {
+        "name": "answer_material_kind",
+        "labels": ["main_answer", "follow_up_answer", "supplement"]
+      },
+      {
+        "name": "deletion_scope",
+        "labels": ["account", "interview"]
+      },
+      {
+        "name": "deletion_status",
+        "labels": ["pending", "processing", "completed", "failed"]
+      },
+      {
+        "name": "evaluation_outcome_kind",
+        "labels": ["scored", "incorrect", "irrelevant"]
+      },
+      {
+        "name": "interview_direction",
+        "labels": ["go_backend"]
+      },
+      {
+        "name": "interview_message_kind",
+        "labels": [
+          "main_question",
+          "main_answer",
+          "follow_up_answer",
+          "supplement",
+          "question_clarification",
+          "system_follow_up",
+          "transition"
+        ]
+      },
+      {
+        "name": "interview_message_role",
+        "labels": ["user", "assistant", "system"]
+      },
+      {
+        "name": "interview_phase",
+        "labels": ["awaiting_response", "processing", "awaiting_continue"]
+      },
+      {
+        "name": "interview_status",
+        "labels": ["active", "report_pending", "completed", "early_ended", "abandoned", "deleting"]
+      },
+      {
+        "name": "knowledge_domain",
+        "labels": [
+          "go_language",
+          "concurrency_runtime_performance",
+          "http_rpc_api",
+          "database_storage",
+          "cache_messaging_distributed",
+          "testing_observability_engineering"
+        ]
+      },
+      {
+        "name": "operation_status",
+        "labels": ["pending", "processing", "succeeded", "failed"]
+      },
+      {
+        "name": "operation_type",
+        "labels": [
+          "create_interview",
+          "submit_answer",
+          "submit_supplement",
+          "request_question_clarification",
+          "mark_question_unknown",
+          "skip_question",
+          "continue_interview",
+          "end_interview_early",
+          "abandon_interview",
+          "retry_operation",
+          "generate_report"
+        ]
+      },
+      {
+        "name": "pending_interview_operation_kind",
+        "labels": ["answer_analysis", "question_clarification"]
+      },
+      {
+        "name": "purge_data_category",
+        "labels": [
+          "account",
+          "authentication",
+          "interview",
+          "message",
+          "evaluation",
+          "operation",
+          "report"
+        ]
+      },
+      {
+        "name": "purge_result",
+        "labels": ["succeeded", "failed"]
+      },
+      {
+        "name": "question_difficulty",
+        "labels": ["medium"]
+      },
+      {
+        "name": "question_outcome_kind",
+        "labels": ["scored", "incorrect", "unknown", "skipped", "irrelevant"]
+      },
+      {
+        "name": "report_kind",
+        "labels": ["complete", "incomplete"]
+      },
+      {
+        "name": "response_classification",
+        "labels": ["relevant", "ambiguous", "irrelevant"]
+      },
+      {
+        "name": "zero_score_reason",
+        "labels": ["unknown", "skipped", "irrelevant", "incorrect"]
+      }
+    ],
+    "indexes": [
+      {
+        "table": "account",
+        "name": "account_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "account",
+        "name": "account_providerId_accountId_idx",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "provider_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "account_id"
+          }
+        ]
+      },
+      {
+        "table": "account",
+        "name": "account_userId_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "user_id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_interview_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_one_account_request_idx",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": "scope = 'account'::deletion_scope",
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_one_interview_request_idx",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": "scope = 'interview'::deletion_scope",
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_owner_user_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_status_due_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "status"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "purge_due_at"
+          },
+          {
+            "position": 3,
+            "key": true,
+            "definition": "lease_expires_at"
+          }
+        ]
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_interview_position_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "question_position"
+          }
+        ]
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_interview_sequence_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "sequence"
+          }
+        ]
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_operation_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "operation_id"
+          }
+        ]
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_id_owner_fk_target_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_last_activity_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "last_effective_activity_at"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_one_open_per_user_idx",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": "status = ANY (ARRAY['active'::interview_status, 'report_pending'::interview_status])",
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_owner_user_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_status_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "status"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_id_interview_fk_target_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_interview_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_owner_scope_idempotency_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "idempotency_scope"
+          },
+          {
+            "position": 3,
+            "key": true,
+            "definition": "idempotency_key"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_owner_user_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "operations",
+        "name": "operations_status_lease_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "status"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "lease_expires_at"
+          }
+        ]
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_pk",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "subject_identifier_hash"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "data_category"
+          },
+          {
+            "position": 3,
+            "key": true,
+            "definition": "purged_at"
+          }
+        ]
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_purged_at_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "purged_at"
+          }
+        ]
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_subject_hash_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "subject_identifier_hash"
+          }
+        ]
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_active_reviewed_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "active"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "reviewed"
+          }
+        ]
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_domain_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "domain"
+          }
+        ]
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_pk",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "question_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "content_version"
+          }
+        ]
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_snapshot_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "question_snapshot_id"
+          }
+        ]
+      },
+      {
+        "table": "reports",
+        "name": "reports_interview_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "reports",
+        "name": "reports_owner_user_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "owner_user_id"
+          }
+        ]
+      },
+      {
+        "table": "reports",
+        "name": "reports_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "session",
+        "name": "session_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "session",
+        "name": "session_token_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "token"
+          }
+        ]
+      },
+      {
+        "table": "session",
+        "name": "session_userId_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "user_id"
+          }
+        ]
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_id_interview_fk_target_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_interview_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          }
+        ]
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_interview_position_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "interview_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "\"position\""
+          }
+        ]
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "source_question_id"
+          },
+          {
+            "position": 2,
+            "key": true,
+            "definition": "source_question_version"
+          }
+        ]
+      },
+      {
+        "table": "user",
+        "name": "user_email_unique",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "email"
+          }
+        ]
+      },
+      {
+        "table": "user",
+        "name": "user_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      },
+      {
+        "table": "verification",
+        "name": "verification_identifier_idx",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "identifier"
+          }
+        ]
+      },
+      {
+        "table": "verification",
+        "name": "verification_pkey",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": null,
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "id"
+          }
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "table": "account",
+        "name": "account_account_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL account_id"
+      },
+      {
+        "table": "account",
+        "name": "account_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "account",
+        "name": "account_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "account",
+        "name": "account_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "account",
+        "name": "account_provider_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL provider_id"
+      },
+      {
+        "table": "account",
+        "name": "account_updated_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL updated_at"
+      },
+      {
+        "table": "account",
+        "name": "account_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL user_id"
+      },
+      {
+        "table": "account",
+        "name": "account_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (user_id) REFERENCES \"user\"(id) ON DELETE CASCADE"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_attempt_count_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (attempt_count >= 0)"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_attempt_count_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL attempt_count"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_error_bounds_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (last_error_category IS NULL AND last_error_code IS NULL OR length(last_error_category) >= 1 AND length(last_error_category) <= 32 AND last_error_category ~ '^[a-z0-9_]+$'::text AND length(last_error_code) >= 1 AND length(last_error_code) <= 64 AND last_error_code ~ '^[a-z0-9_]+$'::text)"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_inaccessible_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL inaccessible_at"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_interview_owner_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (interview_id, owner_user_id) REFERENCES interview_sessions(id, owner_user_id) ON DELETE RESTRICT"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_lifecycle_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (status = 'processing'::deletion_status AND processing_started_at IS NOT NULL AND last_attempt_at IS NOT NULL AND lease_expires_at IS NOT NULL AND lease_owner IS NOT NULL AND lease_token_hash IS NOT NULL AND length(TRIM(BOTH FROM lease_owner)) > 0 AND length(lease_token_hash) = 64 AND lease_expires_at > processing_started_at AND completed_at IS NULL AND last_error_category IS NULL AND last_error_code IS NULL OR (status = ANY (ARRAY['pending'::deletion_status, 'failed'::deletion_status])) AND processing_started_at IS NULL AND lease_expires_at IS NULL AND lease_owner IS NULL AND lease_token_hash IS NULL AND completed_at IS NULL AND (status = 'pending'::deletion_status AND last_error_category IS NULL AND last_error_code IS NULL OR status = 'failed'::deletion_status AND last_error_category IS NOT NULL AND last_error_code IS NOT NULL) OR status = 'completed'::deletion_status AND processing_started_at IS NULL AND lease_expires_at IS NULL AND lease_owner IS NULL AND lease_token_hash IS NULL AND completed_at IS NOT NULL AND last_error_category IS NULL AND last_error_code IS NULL)"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_owner_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL owner_user_id"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_owner_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (owner_user_id) REFERENCES \"user\"(id) ON DELETE RESTRICT"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_purge_deadline_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL purge_deadline_at"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_purge_due_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL purge_due_at"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_purge_window_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (purge_due_at >= requested_at AND purge_due_at < purge_deadline_at AND purge_deadline_at = (requested_at + '7 days'::interval))"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_requested_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL requested_at"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_scope_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL scope"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_scope_target_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (scope = 'account'::deletion_scope AND interview_id IS NULL OR scope = 'interview'::deletion_scope AND interview_id IS NOT NULL)"
+      },
+      {
+        "table": "deletion_requests",
+        "name": "deletion_requests_status_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL status"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_content_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL content"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_interview_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (interview_id) REFERENCES interview_sessions(id) ON DELETE CASCADE"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_interview_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL interview_id"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_interview_sequence_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (interview_id, sequence)"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_kind_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL kind"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_operation_aggregate_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (operation_id, interview_id) REFERENCES operations(id, interview_id)"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_question_position_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (question_position IS NULL OR question_position >= 1)"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_role_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL role"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_sequence_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (sequence > 0)"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_sequence_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL sequence"
+      },
+      {
+        "table": "interview_messages",
+        "name": "interview_messages_snapshot_aggregate_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (question_snapshot_id, interview_id) REFERENCES session_question_snapshots(id, interview_id) ON DELETE CASCADE"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_complete_blueprint_trigger",
+        "type": "t",
+        "deferrable": true,
+        "deferred": true,
+        "validated": true,
+        "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_current_position_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (current_question_position >= 1 AND current_question_position <= selected_question_count)"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_current_question_position_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL current_question_position"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_direction_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL direction"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_id_owner_fk_target_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (id, owner_user_id)"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_last_effective_activity_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL last_effective_activity_at"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_owner_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL owner_user_id"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_owner_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (owner_user_id) REFERENCES \"user\"(id) ON DELETE RESTRICT"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_pending_operation_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (active_phase IS DISTINCT FROM 'processing'::interview_phase AND pending_operation_id IS NULL AND pending_operation_kind IS NULL AND pending_operation_question_position IS NULL AND pending_operation_accepted_at IS NULL AND pending_operation_previous_phase IS NULL OR status = 'active'::interview_status AND active_phase = 'processing'::interview_phase AND pending_operation_id IS NOT NULL AND pending_operation_kind IS NOT NULL AND pending_operation_question_position IS NOT NULL AND pending_operation_accepted_at IS NOT NULL AND (pending_operation_previous_phase = ANY (ARRAY['awaiting_response'::interview_phase, 'awaiting_continue'::interview_phase])))"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_selected_question_count_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (selected_question_count = ANY (ARRAY[5, 10, 15]))"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_selected_question_count_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL selected_question_count"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_selection_seed_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL selection_seed"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_status_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL status"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_version_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (version >= 1)"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL version"
+      },
+      {
+        "table": "operations",
+        "name": "operations_attempt_count_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (attempt_count >= 0)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_attempt_count_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL attempt_count"
+      },
+      {
+        "table": "operations",
+        "name": "operations_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "operations",
+        "name": "operations_expected_version_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (expected_version >= 0)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_expected_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL expected_version"
+      },
+      {
+        "table": "operations",
+        "name": "operations_id_interview_fk_target_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (id, interview_id)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "operations",
+        "name": "operations_idempotency_key_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL idempotency_key"
+      },
+      {
+        "table": "operations",
+        "name": "operations_idempotency_scope_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL idempotency_scope"
+      },
+      {
+        "table": "operations",
+        "name": "operations_identity_hash_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (length(TRIM(BOTH FROM idempotency_scope)) > 0 AND length(input_hash) = 64)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_input_hash_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL input_hash"
+      },
+      {
+        "table": "operations",
+        "name": "operations_input_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL input"
+      },
+      {
+        "table": "operations",
+        "name": "operations_interview_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL interview_id"
+      },
+      {
+        "table": "operations",
+        "name": "operations_interview_owner_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (interview_id, owner_user_id) REFERENCES interview_sessions(id, owner_user_id) ON DELETE CASCADE"
+      },
+      {
+        "table": "operations",
+        "name": "operations_lifecycle_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (status = 'processing'::operation_status AND lease_acquired_at IS NOT NULL AND lease_expires_at IS NOT NULL AND lease_owner IS NOT NULL AND lease_token_hash IS NOT NULL AND length(TRIM(BOTH FROM lease_owner)) > 0 AND length(lease_token_hash) = 64 AND lease_expires_at > lease_acquired_at AND result IS NULL AND error IS NULL AND completed_at IS NULL AND completed_lease_owner IS NULL AND completed_lease_token_hash IS NULL AND retryable = false OR status = 'pending'::operation_status AND lease_acquired_at IS NULL AND lease_expires_at IS NULL AND lease_owner IS NULL AND lease_token_hash IS NULL AND completed_lease_owner IS NULL AND completed_lease_token_hash IS NULL AND result IS NULL AND error IS NULL AND completed_at IS NULL AND retryable = false OR status = 'succeeded'::operation_status AND lease_acquired_at IS NULL AND lease_expires_at IS NULL AND lease_owner IS NULL AND lease_token_hash IS NULL AND completed_lease_owner IS NOT NULL AND completed_lease_token_hash IS NOT NULL AND length(TRIM(BOTH FROM completed_lease_owner)) > 0 AND length(completed_lease_token_hash) = 64 AND result IS NOT NULL AND error IS NULL AND completed_at IS NOT NULL AND retryable = false OR status = 'failed'::operation_status AND lease_acquired_at IS NULL AND lease_expires_at IS NULL AND lease_owner IS NULL AND lease_token_hash IS NULL AND completed_lease_owner IS NOT NULL AND completed_lease_token_hash IS NOT NULL AND length(TRIM(BOTH FROM completed_lease_owner)) > 0 AND length(completed_lease_token_hash) = 64 AND result IS NULL AND error IS NOT NULL AND completed_at IS NOT NULL)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_owner_scope_idempotency_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (owner_user_id, idempotency_scope, idempotency_key)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_owner_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL owner_user_id"
+      },
+      {
+        "table": "operations",
+        "name": "operations_owner_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (owner_user_id) REFERENCES \"user\"(id) ON DELETE RESTRICT"
+      },
+      {
+        "table": "operations",
+        "name": "operations_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "operations",
+        "name": "operations_retryable_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL retryable"
+      },
+      {
+        "table": "operations",
+        "name": "operations_status_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL status"
+      },
+      {
+        "table": "operations",
+        "name": "operations_type_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL type"
+      },
+      {
+        "table": "operations",
+        "name": "operations_updated_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL updated_at"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_data_category_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL data_category"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_pk",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (subject_identifier_hash, data_category, purged_at)"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_purged_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL purged_at"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_result_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL result"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_subject_hash_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (length(subject_identifier_hash) = 64 AND subject_identifier_hash ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "table": "purge_audit_events",
+        "name": "purge_audit_events_subject_identifier_hash_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL subject_identifier_hash"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_active_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL active"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_content_version_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (content_version >= 1)"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_content_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL content_version"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_difficulty_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL difficulty"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_domain_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL domain"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_follow_up_goals_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL follow_up_goals"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_import_source_name_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL import_source_name"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_import_source_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL import_source_version"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_imported_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL imported_at"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_knowledge_explanation_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL knowledge_explanation"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_pk",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (question_id, content_version)"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_question_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL question_id"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_reviewed_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL reviewed"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_rubric_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL rubric"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_source_wording_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_wording"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_classification_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL classification"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_model_metadata_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL model_metadata"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_outcome_integrity_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK ((outcome_kind = 'scored'::evaluation_outcome_kind AND (classification = ANY (ARRAY['relevant'::response_classification, 'ambiguous'::response_classification])) AND score >= 1 AND score <= 100 AND zero_score_reason IS NULL OR outcome_kind = 'incorrect'::evaluation_outcome_kind AND (classification = ANY (ARRAY['relevant'::response_classification, 'ambiguous'::response_classification])) AND score = 0 AND zero_score_reason = 'incorrect'::zero_score_reason OR outcome_kind = 'irrelevant'::evaluation_outcome_kind AND classification = 'irrelevant'::response_classification AND score = 0 AND zero_score_reason = 'irrelevant'::zero_score_reason) IS TRUE)"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_outcome_kind_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL outcome_kind"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_question_snapshot_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL question_snapshot_id"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_question_snapshot_id_session_question_snap",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (question_snapshot_id) REFERENCES session_question_snapshots(id) ON DELETE CASCADE"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_rubric_results_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL rubric_results"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_score_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL score"
+      },
+      {
+        "table": "question_evaluations",
+        "name": "question_evaluations_snapshot_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (question_snapshot_id)"
+      },
+      {
+        "table": "reports",
+        "name": "reports_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "reports",
+        "name": "reports_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "reports",
+        "name": "reports_interview_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL interview_id"
+      },
+      {
+        "table": "reports",
+        "name": "reports_interview_owner_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (interview_id, owner_user_id) REFERENCES interview_sessions(id, owner_user_id) ON DELETE CASCADE"
+      },
+      {
+        "table": "reports",
+        "name": "reports_interview_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (interview_id)"
+      },
+      {
+        "table": "reports",
+        "name": "reports_kind_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL kind"
+      },
+      {
+        "table": "reports",
+        "name": "reports_model_metadata_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL model_metadata"
+      },
+      {
+        "table": "reports",
+        "name": "reports_owner_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL owner_user_id"
+      },
+      {
+        "table": "reports",
+        "name": "reports_owner_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (owner_user_id) REFERENCES \"user\"(id) ON DELETE RESTRICT"
+      },
+      {
+        "table": "reports",
+        "name": "reports_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "reports",
+        "name": "reports_schema_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL schema_version"
+      },
+      {
+        "table": "reports",
+        "name": "reports_snapshot_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL snapshot"
+      },
+      {
+        "table": "session",
+        "name": "session_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "session",
+        "name": "session_expires_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL expires_at"
+      },
+      {
+        "table": "session",
+        "name": "session_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "session",
+        "name": "session_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "session",
+        "name": "session_token_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL token"
+      },
+      {
+        "table": "session",
+        "name": "session_token_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (token)"
+      },
+      {
+        "table": "session",
+        "name": "session_updated_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL updated_at"
+      },
+      {
+        "table": "session",
+        "name": "session_user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL user_id"
+      },
+      {
+        "table": "session",
+        "name": "session_user_id_user_id_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (user_id) REFERENCES \"user\"(id) ON DELETE CASCADE"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_complete_blueprint_trigger",
+        "type": "t",
+        "deferrable": true,
+        "deferred": true,
+        "validated": true,
+        "definition": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_display_wording_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL display_wording"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_domain_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL domain"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_follow_up_goals_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL follow_up_goals"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_frozen_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL frozen"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_id_interview_fk_target_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (id, interview_id)"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_interview_id_interview_sessions_id_f",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (interview_id) REFERENCES interview_sessions(id) ON DELETE CASCADE"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_interview_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL interview_id"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_interview_position_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (interview_id, \"position\")"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_knowledge_explanation_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL knowledge_explanation"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_outcome_integrity_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK ((outcome_kind IS NULL AND score IS NULL AND zero_score_reason IS NULL OR outcome_kind = 'scored'::question_outcome_kind AND score >= 1 AND score <= 100 AND zero_score_reason IS NULL OR outcome_kind = 'incorrect'::question_outcome_kind AND score = 0 AND zero_score_reason = 'incorrect'::zero_score_reason OR outcome_kind = 'irrelevant'::question_outcome_kind AND score = 0 AND zero_score_reason = 'irrelevant'::zero_score_reason OR outcome_kind = 'unknown'::question_outcome_kind AND score = 0 AND zero_score_reason = 'unknown'::zero_score_reason OR outcome_kind = 'skipped'::question_outcome_kind AND score = 0 AND zero_score_reason = 'skipped'::zero_score_reason) IS TRUE)"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_position_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (\"position\" >= 1)"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_position_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL \"position\""
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_rubric_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL rubric"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_question_fk",
+        "type": "f",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "FOREIGN KEY (source_question_id, source_question_version) REFERENCES question_bank_versions(question_id, content_version) ON DELETE RESTRICT"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_question_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_question_id"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_question_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_question_version"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_version_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (source_question_version >= 1)"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_source_wording_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_wording"
+      },
+      {
+        "table": "user",
+        "name": "user_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "user",
+        "name": "user_email_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL email"
+      },
+      {
+        "table": "user",
+        "name": "user_email_unique",
+        "type": "u",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "UNIQUE (email)"
+      },
+      {
+        "table": "user",
+        "name": "user_email_verified_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL email_verified"
+      },
+      {
+        "table": "user",
+        "name": "user_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "user",
+        "name": "user_name_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL name"
+      },
+      {
+        "table": "user",
+        "name": "user_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "user",
+        "name": "user_updated_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL updated_at"
+      },
+      {
+        "table": "verification",
+        "name": "verification_created_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL created_at"
+      },
+      {
+        "table": "verification",
+        "name": "verification_expires_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL expires_at"
+      },
+      {
+        "table": "verification",
+        "name": "verification_id_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL id"
+      },
+      {
+        "table": "verification",
+        "name": "verification_identifier_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL identifier"
+      },
+      {
+        "table": "verification",
+        "name": "verification_pkey",
+        "type": "p",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "table": "verification",
+        "name": "verification_updated_at_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL updated_at"
+      },
+      {
+        "table": "verification",
+        "name": "verification_value_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL value"
+      }
+    ],
+    "triggers": [
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_complete_blueprint_trigger",
+        "enabled": "O",
+        "definition": "CREATE CONSTRAINT TRIGGER interview_sessions_complete_blueprint_trigger AFTER INSERT OR UPDATE ON interview_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_interview_blueprint_from_session()"
+      },
+      {
+        "table": "interview_sessions",
+        "name": "interview_sessions_immutable_blueprint_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER interview_sessions_immutable_blueprint_trigger BEFORE UPDATE ON interview_sessions FOR EACH ROW EXECUTE FUNCTION prevent_interview_blueprint_update()"
+      },
+      {
+        "table": "operations",
+        "name": "operations_immutable_input_delete_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER operations_immutable_input_delete_trigger BEFORE DELETE ON operations FOR EACH ROW EXECUTE FUNCTION prevent_operation_delete_while_interview_exists()"
+      },
+      {
+        "table": "operations",
+        "name": "operations_immutable_input_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER operations_immutable_input_trigger BEFORE UPDATE ON operations FOR EACH ROW EXECUTE FUNCTION prevent_operation_identity_update()"
+      },
+      {
+        "table": "session",
+        "name": "session_user_not_deleting_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER session_user_not_deleting_trigger BEFORE INSERT OR UPDATE ON session FOR EACH ROW EXECUTE FUNCTION reject_session_for_deleting_user()"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_complete_blueprint_trigger",
+        "enabled": "O",
+        "definition": "CREATE CONSTRAINT TRIGGER session_question_snapshots_complete_blueprint_trigger AFTER INSERT OR DELETE OR UPDATE ON session_question_snapshots DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_interview_blueprint_from_snapshot()"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_immutable_delete_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER session_question_snapshots_immutable_delete_trigger BEFORE DELETE ON session_question_snapshots FOR EACH ROW EXECUTE FUNCTION prevent_session_question_snapshot_delete_while_interview_exists()"
+      },
+      {
+        "table": "session_question_snapshots",
+        "name": "session_question_snapshots_immutable_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER session_question_snapshots_immutable_trigger BEFORE UPDATE ON session_question_snapshots FOR EACH ROW EXECUTE FUNCTION prevent_session_question_snapshot_identity_update()"
+      },
+      {
+        "table": "verification",
+        "name": "verification_user_not_deleting_trigger",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER verification_user_not_deleting_trigger BEFORE INSERT OR UPDATE ON verification FOR EACH ROW EXECUTE FUNCTION reject_verification_for_deleting_user()"
+      }
+    ],
+    "functions": [
+      {
+        "name": "assert_interview_blueprint_complete",
+        "identityArguments": "target_interview_id text",
+        "result": "void",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION assert_interview_blueprint_complete(target_interview_id text)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  expected_count smallint;\n  actual_count bigint;\n  minimum_position smallint;\n  maximum_position smallint;\nBEGIN\n  SELECT selected_question_count\n    INTO expected_count\n    FROM interview_sessions\n   WHERE id = target_interview_id;\n\n  IF NOT FOUND THEN\n    RETURN;\n  END IF;\n\n  SELECT count(*), min(position), max(position)\n    INTO actual_count, minimum_position, maximum_position\n    FROM session_question_snapshots\n   WHERE interview_id = target_interview_id;\n\n  IF actual_count <> expected_count\n     OR minimum_position <> 1\n     OR maximum_position <> expected_count THEN\n    RAISE EXCEPTION\n      'interview % requires contiguous question positions 1..%, found count %, min %, max %',\n      target_interview_id,\n      expected_count,\n      actual_count,\n      minimum_position,\n      maximum_position\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'session_question_snapshots_complete_blueprint_check';\n  END IF;\nEND;\n$function$"
+      },
+      {
+        "name": "check_interview_blueprint_from_session",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION check_interview_blueprint_from_session()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  PERFORM assert_interview_blueprint_complete(NEW.id);\n  RETURN NULL;\nEND;\n$function$"
+      },
+      {
+        "name": "check_interview_blueprint_from_snapshot",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION check_interview_blueprint_from_snapshot()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'DELETE' THEN\n    PERFORM assert_interview_blueprint_complete(OLD.interview_id);\n  ELSE\n    PERFORM assert_interview_blueprint_complete(NEW.interview_id);\n    IF TG_OP = 'UPDATE' AND OLD.interview_id IS DISTINCT FROM NEW.interview_id THEN\n      PERFORM assert_interview_blueprint_complete(OLD.interview_id);\n    END IF;\n  END IF;\n  RETURN NULL;\nEND;\n$function$"
+      },
+      {
+        "name": "prevent_interview_blueprint_update",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION prevent_interview_blueprint_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(\n    OLD.owner_user_id,\n    OLD.direction,\n    OLD.selected_question_count,\n    OLD.selection_seed\n  ) IS DISTINCT FROM ROW(\n    NEW.owner_user_id,\n    NEW.direction,\n    NEW.selected_question_count,\n    NEW.selection_seed\n  ) THEN\n    RAISE EXCEPTION 'interview blueprint ownership and selection are immutable'\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'interview_sessions_immutable_blueprint_check';\n  END IF;\n  RETURN NEW;\nEND;\n$function$"
+      },
+      {
+        "name": "prevent_operation_delete_while_interview_exists",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION prevent_operation_delete_while_interview_exists()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT 1\n      FROM interview_sessions\n     WHERE id = OLD.interview_id\n  ) THEN\n    RAISE EXCEPTION 'operations cannot be deleted while their interview exists'\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'operations_immutable_input_delete_check';\n  END IF;\n  RETURN OLD;\nEND;\n$function$"
+      },
+      {
+        "name": "prevent_operation_identity_update",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION prevent_operation_identity_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(\n    OLD.id,\n    OLD.owner_user_id,\n    OLD.interview_id,\n    OLD.idempotency_scope,\n    OLD.idempotency_key,\n    OLD.type,\n    OLD.expected_version,\n    OLD.input_hash,\n    OLD.input,\n    OLD.created_at\n  ) IS DISTINCT FROM ROW(\n    NEW.id,\n    NEW.owner_user_id,\n    NEW.interview_id,\n    NEW.idempotency_scope,\n    NEW.idempotency_key,\n    NEW.type,\n    NEW.expected_version,\n    NEW.input_hash,\n    NEW.input,\n    NEW.created_at\n  ) THEN\n    RAISE EXCEPTION 'operation identity and command input are immutable'\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'operations_immutable_input_check';\n  END IF;\n  RETURN NEW;\nEND;\n$function$"
+      },
+      {
+        "name": "prevent_session_question_snapshot_delete_while_interview_exists",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION prevent_session_question_snapshot_delete_while_interview_exists()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT 1\n      FROM interview_sessions\n     WHERE id = OLD.interview_id\n  ) THEN\n    RAISE EXCEPTION 'session question snapshots cannot be deleted while their interview exists'\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'session_question_snapshots_immutable_delete_check';\n  END IF;\n  RETURN OLD;\nEND;\n$function$"
+      },
+      {
+        "name": "prevent_session_question_snapshot_identity_update",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION prevent_session_question_snapshot_identity_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(\n    OLD.id,\n    OLD.interview_id,\n    OLD.position,\n    OLD.source_question_id,\n    OLD.source_question_version,\n    OLD.domain,\n    OLD.source_wording,\n    OLD.display_wording,\n    OLD.rubric,\n    OLD.follow_up_goals,\n    OLD.knowledge_explanation,\n    OLD.created_at\n  ) IS DISTINCT FROM ROW(\n    NEW.id,\n    NEW.interview_id,\n    NEW.position,\n    NEW.source_question_id,\n    NEW.source_question_version,\n    NEW.domain,\n    NEW.source_wording,\n    NEW.display_wording,\n    NEW.rubric,\n    NEW.follow_up_goals,\n    NEW.knowledge_explanation,\n    NEW.created_at\n  ) THEN\n    RAISE EXCEPTION 'session question snapshot identity and content are immutable'\n      USING ERRCODE = '23514',\n            CONSTRAINT = 'session_question_snapshots_immutable_check';\n  END IF;\n  RETURN NEW;\nEND;\n$function$"
+      },
+      {
+        "name": "reject_session_for_deleting_user",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION reject_session_for_deleting_user()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  account_deletion_requested_at timestamp with time zone;\nBEGIN\n  SELECT \"deletion_requested_at\"\n    INTO account_deletion_requested_at\n    FROM \"user\"\n   WHERE \"id\" = NEW.\"user_id\"\n   FOR UPDATE;\n\n  IF FOUND AND account_deletion_requested_at IS NOT NULL THEN\n    RAISE EXCEPTION 'Cannot issue a session for a deletion-marked account'\n      USING\n        ERRCODE = '23514',\n        CONSTRAINT = 'session_user_not_deleting_check';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$"
+      },
+      {
+        "name": "reject_verification_for_deleting_user",
+        "identityArguments": "",
+        "result": "trigger",
+        "language": "plpgsql",
+        "volatility": "v",
+        "parallel": "u",
+        "strict": false,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION reject_verification_for_deleting_user()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  candidate_identifiers text[] := ARRAY[NEW.\"identifier\"];\n  candidate_values text[] := ARRAY[NEW.\"value\"];\n  candidate_link_user_ids text[] := ARRAY[]::text[];\n  matched_user_ids text[] := ARRAY[]::text[];\n  account_owner record;\nBEGIN\n  IF TG_OP = 'UPDATE' THEN\n    candidate_identifiers := candidate_identifiers || OLD.\"identifier\";\n    candidate_values := candidate_values || OLD.\"value\";\n  END IF;\n\n  SELECT coalesce(array_agg(DISTINCT candidate.\"link_user_id\"), ARRAY[]::text[])\n    INTO candidate_link_user_ids\n    FROM (\n      SELECT safe_verification_value_jsonb(candidate_value) #>> '{link,userId}'\n        AS \"link_user_id\"\n        FROM unnest(candidate_values) AS values_to_parse(candidate_value)\n    ) AS candidate\n   WHERE candidate.\"link_user_id\" IS NOT NULL;\n\n  FOR account_owner IN\n    SELECT account_user.\"id\", account_user.\"deletion_requested_at\"\n      FROM \"user\" AS account_user\n     WHERE EXISTS (\n       SELECT 1\n         FROM unnest(candidate_identifiers, candidate_values)\n           AS candidate(\"identifier\", \"value\")\n        WHERE candidate.\"identifier\" = 'email-verification-otp-' || account_user.\"email\"\n           OR candidate.\"identifier\" = 'sign-in-otp-' || account_user.\"email\"\n           OR candidate.\"identifier\" = 'forget-password-otp-' || account_user.\"email\"\n           OR starts_with(\n             candidate.\"identifier\",\n             'change-email-otp-' || account_user.\"email\" || '-'\n           )\n           OR safe_verification_value_jsonb(candidate.\"value\") #>> '{link,userId}'\n             = account_user.\"id\"\n           OR safe_verification_value_jsonb(candidate.\"value\") #>> '{link,email}'\n             = account_user.\"email\"\n     )\n     ORDER BY account_user.\"id\"\n     FOR UPDATE\n  LOOP\n    matched_user_ids := array_append(matched_user_ids, account_owner.\"id\");\n    IF account_owner.\"deletion_requested_at\" IS NOT NULL THEN\n      RAISE EXCEPTION 'Cannot write verification data for a deletion-marked account'\n        USING\n          ERRCODE = '23514',\n          CONSTRAINT = 'verification_user_not_deleting_check';\n    END IF;\n  END LOOP;\n\n  IF EXISTS (\n    SELECT 1\n      FROM unnest(candidate_link_user_ids) AS linked_owner(\"user_id\")\n     WHERE NOT linked_owner.\"user_id\" = ANY(matched_user_ids)\n  ) THEN\n    RAISE EXCEPTION 'Cannot write account-link state without an active account'\n      USING\n        ERRCODE = '23514',\n        CONSTRAINT = 'verification_user_not_deleting_check';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$"
+      },
+      {
+        "name": "safe_verification_value_jsonb",
+        "identityArguments": "value text",
+        "result": "jsonb",
+        "language": "plpgsql",
+        "volatility": "i",
+        "parallel": "s",
+        "strict": true,
+        "securityDefiner": false,
+        "leakproof": false,
+        "definition": "CREATE OR REPLACE FUNCTION safe_verification_value_jsonb(value text)\n RETURNS jsonb\n LANGUAGE plpgsql\n IMMUTABLE PARALLEL SAFE STRICT\nAS $function$\nBEGIN\n  RETURN value::jsonb;\nEXCEPTION\n  WHEN data_exception THEN\n    RETURN NULL;\nEND;\n$function$"
+      }
+    ]
+  }
+}

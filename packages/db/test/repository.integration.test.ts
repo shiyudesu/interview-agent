@@ -27,7 +27,6 @@ import {
   parseRubricItemId,
 } from "@interview-agent/domain";
 import { and, eq, inArray } from "drizzle-orm";
-import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -53,7 +52,7 @@ import {
   user,
   withTransaction,
 } from "../src/index.js";
-import { runDatabaseMigrations } from "../src/migrate.js";
+import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
 
 const STARTED_AT = new Date("2026-08-10T12:00:00.000Z");
 const DOMAINS: readonly KnowledgeDomain[] = [
@@ -75,7 +74,8 @@ const metadata: ModelCallMetadata = {
   outputTokens: 5,
 };
 
-let container: StartedTestContainer;
+let harness: PostgresTestHarness;
+let testDatabase: PostgresTestDatabase;
 let client: DatabaseClient;
 let databaseUrl: string;
 let interviewRepository: PgInterviewRepository;
@@ -551,24 +551,10 @@ async function completeWithZeroScores(
 
 describe.sequential("PostgreSQL repositories", () => {
   beforeAll(async () => {
-    container = await new GenericContainer("postgres:18.4-alpine")
-      .withEnvironment({
-        POSTGRES_DB: "interview",
-        POSTGRES_PASSWORD: "interview",
-        POSTGRES_USER: "interview",
-      })
-      .withExposedPorts(5432)
-      .withWaitStrategy(Wait.forLogMessage("database system is ready to accept connections", 2))
-      .withStartupTimeout(120_000)
-      .start();
-    const database = new URL("postgresql://localhost/interview");
-    database.hostname = container.getHost();
-    database.port = String(container.getMappedPort(5432));
-    database.username = "interview";
-    database.password = "interview";
-    databaseUrl = database.toString();
-    await runDatabaseMigrations({ databaseUrl });
-    client = createDatabaseClient({ databaseUrl, max: 5 });
+    harness = await PostgresTestHarness.start();
+    testDatabase = await harness.createDatabase({ name: "repository_tests" });
+    databaseUrl = testDatabase.databaseUrl;
+    client = testDatabase.client;
     interviewRepository = new PgInterviewRepository(client.database);
     operationRepository = new PgOperationRepository(client.database);
     reportRepository = new PgReportRepository(client.database);
@@ -584,8 +570,7 @@ describe.sequential("PostgreSQL repositories", () => {
   });
 
   afterAll(async () => {
-    await client?.close();
-    await container?.stop();
+    await harness?.stop();
   });
 
   it("creates and loads an exact aggregate roundtrip", async () => {
