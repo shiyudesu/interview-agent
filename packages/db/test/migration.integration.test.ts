@@ -6,6 +6,12 @@ import { Pool, type PoolClient } from "pg";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { mapQuestionBankQuestionDtoToDefinition } from "../../contracts/src/question-bank-mappings.js";
+import {
+  createDatabaseClient,
+  PgQuestionBankRepository,
+  QuestionBankImportService,
+} from "../src/index.js";
 import { validateOperationPayload } from "../src/repositories/operation-payload.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -26,13 +32,34 @@ const blueprintPositions = [1, 2, 3, 4, 5] as const;
 const initialMigrationNames = ["0000_initial_auth.sql", "0001_interview_persistence.sql"] as const;
 
 async function seedConstraintQuestions(client: PoolClient): Promise<void> {
+  const sourceHashExists =
+    (
+      await client.query(
+        `select 1
+           from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'question_bank_versions'
+            and column_name = 'source_hash'`,
+      )
+    ).rowCount === 1;
   for (const position of blueprintPositions) {
     await client.query(
-      `insert into question_bank_versions
-         (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
-          knowledge_explanation, import_source_name, import_source_version)
-       values ($1, 1, 'go_language', $2, '[]', '[]', 'Explanation', 'constraint-fixture', 1)
-       on conflict do nothing`,
+      sourceHashExists
+        ? `insert into question_bank_versions
+             (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
+              knowledge_explanation, import_source_name, import_source_version, source_hash)
+           values (
+             $1, 1, 'go_language', $2, '[]', '[]', 'Explanation', 'constraint-fixture', 1,
+             encode(sha256(convert_to($1, 'UTF8')), 'hex')
+           )
+           on conflict do nothing`
+        : `insert into question_bank_versions
+             (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
+              knowledge_explanation, import_source_name, import_source_version)
+           values (
+             $1, 1, 'go_language', $2, '[]', '[]', 'Explanation', 'constraint-fixture', 1
+           )
+           on conflict do nothing`,
       [`constraint-question-${position}`, `Question ${position}`],
     );
   }
@@ -165,6 +192,11 @@ async function applyThroughMigration0006(pool: Pool): Promise<void> {
   await applySqlMigration(pool, "0004_operation_lifecycle.sql");
   await applySqlMigration(pool, "0005_deletion_lifecycle.sql");
   await applySqlMigration(pool, "0006_deletion_request_minimization.sql");
+}
+
+async function applyThroughMigration0007(pool: Pool): Promise<void> {
+  await applyThroughMigration0006(pool);
+  await applySqlMigration(pool, "0007_deletion_safety.sql");
 }
 
 async function seedLegacyPendingOperationState(
@@ -917,6 +949,172 @@ describe.sequential("database migration CLI", () => {
           )`,
       );
       expect(helpers.rows[0]?.count).toBe("0");
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("backfills runtime-compatible question hashes and permits an identical no-op import", async () => {
+    const databaseName = "upgrade_question_bank_hash";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+    const sourceWording = "请解释 Go context 取消信号如何传播，以及调用方如何响应。";
+    const rubric = [
+      {
+        id: "propagation",
+        description: "说明取消信号沿派生 Context 传播",
+        weight: 60,
+      },
+      {
+        id: "cleanup",
+        description: "说明调用方观察 Done 并释放资源",
+        weight: 40,
+      },
+    ];
+    const followUpGoals = [
+      {
+        id: "clarify",
+        kind: "clarification",
+        goal: "澄清取消信号传播的调用链范围",
+      },
+      {
+        id: "depth",
+        kind: "depth",
+        goal: "说明 goroutine 如何及时退出",
+      },
+    ];
+    let runtimeClient: ReturnType<typeof createDatabaseClient> | undefined;
+
+    try {
+      await applyThroughMigration0007(pool);
+      await pool.query(
+        `insert into question_bank_versions
+           (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
+            knowledge_explanation, active, reviewed, reviewed_at, reviewed_by,
+            import_source_name, import_source_version)
+         values (
+           'go.upgrade.hash', 1, 'go_language', $1, $2::jsonb, $3::jsonb,
+           'Context 通过 Done 通道传播取消，调用方应停止工作并释放资源。',
+           true, true, '2026-08-10T00:00:00.000Z', 'reviewer-id',
+           'repository-question-bank', 1
+         )`,
+        [sourceWording, JSON.stringify(rubric), JSON.stringify(followUpGoals)],
+      );
+
+      await applySqlMigration(pool, "0008_question_bank_sync.sql");
+      runtimeClient = createDatabaseClient({ databaseUrl: upgradeDatabaseUrl });
+      const service = new QuestionBankImportService(
+        new PgQuestionBankRepository(runtimeClient.database),
+      );
+      const result = await service.synchronize({
+        sourceName: "repository-question-bank",
+        sourceVersion: 1,
+        entries: [
+          {
+            definition: mapQuestionBankQuestionDtoToDefinition({
+              id: "go.upgrade.hash",
+              contentVersion: 1,
+              domain: "go_language",
+              difficulty: "medium",
+              questionType: "conceptual",
+              sourceWording,
+              rubric,
+              followUpGoals,
+              knowledgeExplanation: "Context 通过 Done 通道传播取消，调用方应停止工作并释放资源。",
+              active: true,
+              reviewed: true,
+              reviewMetadata: {
+                reviewedBy: "reviewer-id",
+                reviewedAt: "2026-08-10T00:00:00.000Z",
+                simplifiedChineseVerified: true,
+                technicalTermsVerified: true,
+              },
+            }),
+            schemaVersion: "1.0",
+            sourceFile: "legacy",
+          },
+        ],
+      });
+      expect(result).toMatchObject({
+        insertedCount: 0,
+        noOpCount: 1,
+        activatedCount: 0,
+        retiredCount: 0,
+      });
+
+      const stored = await pool.query<{ column_default: string | null; source_hash: string }>(
+        `select versions.source_hash, columns.column_default
+           from question_bank_versions versions
+           cross join information_schema.columns columns
+          where versions.question_id = 'go.upgrade.hash'
+            and columns.table_schema = 'public'
+            and columns.table_name = 'question_bank_versions'
+            and columns.column_name = 'source_hash'`,
+      );
+      expect(stored.rows).toEqual([
+        {
+          source_hash: expect.stringMatching(/^(?!0{64}$)[0-9a-f]{64}$/u),
+          column_default: null,
+        },
+      ]);
+    } finally {
+      await runtimeClient?.close();
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("retires older active versions when the highest legacy version is a tombstone", async () => {
+    const databaseName = "upgrade_question_bank_tombstone";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0007(pool);
+      await pool.query(
+        `insert into question_bank_versions
+           (question_id, content_version, domain, source_wording, rubric, follow_up_goals,
+            knowledge_explanation, active, reviewed, reviewed_at, reviewed_by,
+            import_source_name, import_source_version)
+         values
+           (
+             'go.upgrade.tombstone', 1, 'go_language', 'Active v1', '[]', '[]',
+             'Version one', true, true, '2026-08-09T00:00:00.000Z', 'reviewer-id',
+             'legacy-bank', 1
+           ),
+           (
+             'go.upgrade.tombstone', 2, 'go_language', 'Inactive v2', '[]', '[]',
+             'Version two', false, false, null, null, 'legacy-bank', 2
+           )`,
+      );
+
+      await applySqlMigration(pool, "0008_question_bank_sync.sql");
+      const rows = await pool.query<{
+        active: boolean;
+        content_version: number;
+        source_active: boolean;
+        source_hash: string;
+      }>(
+        `select content_version, active, source_active, source_hash
+           from question_bank_versions
+          where question_id = 'go.upgrade.tombstone'
+          order by content_version`,
+      );
+      expect(rows.rows).toEqual([
+        {
+          content_version: 1,
+          active: false,
+          source_active: true,
+          source_hash: expect.stringMatching(/^(?!0{64}$)[0-9a-f]{64}$/u),
+        },
+        {
+          content_version: 2,
+          active: false,
+          source_active: false,
+          source_hash: expect.stringMatching(/^(?!0{64}$)[0-9a-f]{64}$/u),
+        },
+      ]);
     } finally {
       await pool.end();
       await dropDatabase(databaseUrl, databaseName);

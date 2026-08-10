@@ -16,8 +16,36 @@ Development validation permits an empty bank and does not enforce release counts
 pnpm question-bank:validate
 ```
 
+After applying database migrations, synchronize validated repository content with PostgreSQL:
+
+```sh
+DATABASE_URL=postgresql://... pnpm question-bank:import
+```
+
+The import command also permits an empty development bank and succeeds as a no-op. Release
+cardinality remains a separate task 4.12 gate.
+
 The 90-question, 15-per-domain release gate belongs to OpenSpec task 4.12 and will use a
 separate release command.
+
+## PostgreSQL synchronization policy
+
+- Stable identity is `(id, contentVersion)`. Reimporting identical content is a no-op; changing
+  any content or provenance for an existing identity is an immutable conflict.
+- A new version must be greater than every persisted version for that question. Versions are
+  monotonic but do not need to be contiguous.
+- `source_active` records the immutable YAML intent; `active` is the synchronized eligibility
+  state. Only the latest imported version can remain active. Importing any newer version retires
+  the previous active row atomically, and a newer `active: false` version is an explicit
+  tombstone that leaves the question with no active version.
+- Active content must be reviewed. Review state, reviewer, review time, source schema version,
+  repository source file, canonical per-question SHA-256 source hash, import source/version, and
+  PostgreSQL `statement_timestamp()` import time are retained.
+- Removing a YAML file or question from the repository does not delete or retire its persisted
+  versions. Retirement requires a newer explicit inactive version.
+- One import is one PostgreSQL transaction. A transaction-scoped advisory lock serializes
+  concurrent imports, and immutable/version/validation errors roll back every change.
+- Historical `session_question_snapshots` and reports are never rewritten by synchronization.
 
 ## Format
 

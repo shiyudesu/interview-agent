@@ -28,6 +28,7 @@ import {
 } from "../src/index.js";
 import { validateOperationPayload } from "../src/repositories/operation-payload.js";
 import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
 const HASH_SECRET = "lifecycle-test-secret-that-is-at-least-32-characters";
 const NOW = new Date("2026-08-10T00:00:00.000Z");
@@ -78,9 +79,11 @@ async function seedQuestionBank(): Promise<void> {
       ],
       knowledgeExplanation: "Internal",
       active: true,
+      sourceActive: true,
       reviewed: true,
       importSourceName: "lifecycle-test",
       importSourceVersion: 1,
+      sourceHash: questionBankFixtureSourceHash(`lifecycle-question-${index + 1}`),
     })),
   );
 }

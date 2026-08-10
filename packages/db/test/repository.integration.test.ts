@@ -53,6 +53,7 @@ import {
   withTransaction,
 } from "../src/index.js";
 import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
 const STARTED_AT = new Date("2026-08-10T12:00:00.000Z");
 const DOMAINS: readonly KnowledgeDomain[] = [
@@ -266,9 +267,11 @@ async function seedQuestionBank(): Promise<void> {
         ],
         knowledgeExplanation: "Internal explanation",
         active: true,
+        sourceActive: true,
         reviewed: true,
         importSourceName: "repository-fixture",
         importSourceVersion: 1,
+        sourceHash: questionBankFixtureSourceHash(`bank-question-${position}`),
       };
     }),
   );

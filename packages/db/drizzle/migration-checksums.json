@@ -9,6 +9,7 @@
     "0004_operation_lifecycle": "7a7dc5744f71c6340193098644bd737bb3227a4d6c4bdca45be13efb3c81bd55",
     "0005_deletion_lifecycle": "6788889fd1e2a33a3fa548532b00cfab84ff480f4c92d6c2df91c28bc4aa15e0",
     "0006_deletion_request_minimization": "fd5eb66ab3d1dae3507c27b9315163471985198b338bd8355daaf53c329cc995",
-    "0007_deletion_safety": "19b14864b4022ce44401d130aed617b21473ebe563509237df83d6b662cf0f56"
+    "0007_deletion_safety": "19b14864b4022ce44401d130aed617b21473ebe563509237df83d6b662cf0f56",
+    "0008_question_bank_sync": "347d451c421aa5b10658dbed35be38f6db0ede7aaa817eae9dde60a3f0f6cb00"
   }
 }

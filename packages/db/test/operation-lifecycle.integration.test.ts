@@ -26,6 +26,7 @@ import {
   user,
 } from "../src/index.js";
 import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
 const NOW = new Date("2026-08-10T00:00:00.000Z");
 const OWNER_ID = parseAccountId("operation-owner");
@@ -166,6 +167,7 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
           knowledgeExplanation: "Internal",
           importSourceName: "operation-test",
           importSourceVersion: 1,
+          sourceHash: questionBankFixtureSourceHash(`operation-question-${position}`),
         };
       }),
     );

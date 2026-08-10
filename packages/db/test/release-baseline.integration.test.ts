@@ -50,6 +50,7 @@ import {
   PostgresTestHarness,
   readMigrationJournal,
 } from "./support/postgres-test-harness.js";
+import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const migrationCli = resolve(packageRoot, "dist/cli/migrate.js");
@@ -167,9 +168,11 @@ describe.sequential("clean PostgreSQL release integration baseline", () => {
         followUpGoals: question.followUpGoals,
         knowledgeExplanation: question.knowledgeExplanation,
         active: true,
+        sourceActive: true,
         reviewed: true,
         importSourceName: "release-baseline",
         importSourceVersion: 1,
+        sourceHash: questionBankFixtureSourceHash(String(question.questionId)),
       })),
     );
 

@@ -25,3 +25,17 @@ checked-in migration assets, so an operator can run:
 ```bash
 ./node_modules/.bin/interview-agent-db-migrate
 ```
+
+## Question bank
+
+Validate repository YAML without a release-size requirement, then atomically synchronize it into
+the migrated PostgreSQL database:
+
+```bash
+pnpm question-bank:validate
+DATABASE_URL=postgresql://... pnpm question-bank:import
+```
+
+An empty development bank is valid and imports as a no-op. Source removal does not retire
+persisted questions; add a newer inactive version as an explicit tombstone. See
+[`question-bank/README.md`](question-bank/README.md) for version and activation rules.

@@ -78,7 +78,7 @@ describe("migration integrity", () => {
     expect(() =>
       validateMigrationMetadata({
         ...metadata,
-        sqlTags: [...metadata.sqlTags, "0008_orphan"],
+        sqlTags: [...metadata.sqlTags, "0009_orphan"],
       }),
     ).toThrow(/SQL migrations/);
     expect(() =>
@@ -86,7 +86,7 @@ describe("migration integrity", () => {
         ...metadata,
         snapshots: {
           ...metadata.snapshots,
-          "0008_snapshot.json": {
+          "0009_snapshot.json": {
             id: "orphan",
             prevId: "orphan-parent",
             version: "7",

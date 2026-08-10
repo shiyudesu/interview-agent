@@ -8,6 +8,7 @@ import type {
   KnowledgeDomain,
   ModelCallMetadata,
   QuestionOutcomeKind,
+  QuestionType,
   ReportKind,
   ResponseClassification,
   RubricItemEvaluation,
@@ -64,6 +65,12 @@ export const knowledgeDomainEnum = pgEnum("knowledge_domain", [
   "testing_observability_engineering",
 ]);
 export const questionDifficultyEnum = pgEnum("question_difficulty", ["medium"]);
+export const questionTypeEnum = pgEnum("question_type", [
+  "conceptual",
+  "scenario",
+  "design",
+  "troubleshooting",
+]);
 export const questionOutcomeKindEnum = pgEnum("question_outcome_kind", [
   "scored",
   "incorrect",
@@ -227,16 +234,24 @@ export const questionBankVersions = pgTable(
     contentVersion: integer("content_version").notNull(),
     domain: knowledgeDomainEnum("domain").$type<KnowledgeDomain>().notNull(),
     difficulty: questionDifficultyEnum("difficulty").default("medium").notNull(),
+    questionType: questionTypeEnum("question_type")
+      .$type<QuestionType>()
+      .default("conceptual")
+      .notNull(),
     sourceWording: text("source_wording").notNull(),
     rubric: jsonb("rubric").$type<readonly RubricItemSnapshot[]>().notNull(),
     followUpGoals: jsonb("follow_up_goals").$type<readonly FollowUpGoalSnapshot[]>().notNull(),
     knowledgeExplanation: text("knowledge_explanation").notNull(),
     active: boolean("active").default(false).notNull(),
+    sourceActive: boolean("source_active").default(false).notNull(),
     reviewed: boolean("reviewed").default(false).notNull(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewedBy: text("reviewed_by"),
     importSourceName: text("import_source_name").notNull(),
     importSourceVersion: integer("import_source_version").notNull(),
+    sourceSchemaVersion: text("source_schema_version").default("1.0").notNull(),
+    importSourceFile: text("import_source_file").default("legacy").notNull(),
+    sourceHash: text("source_hash").notNull(),
     importedAt: timestamp("imported_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -246,7 +261,18 @@ export const questionBankVersions = pgTable(
     }),
     index("question_bank_versions_domain_idx").on(table.domain),
     index("question_bank_versions_active_reviewed_idx").on(table.active, table.reviewed),
+    uniqueIndex("question_bank_versions_one_active_question_idx")
+      .on(table.questionId)
+      .where(sql`${table.active}`),
     check("question_bank_versions_content_version_check", sql`${table.contentVersion} >= 1`),
+    check(
+      "question_bank_versions_active_eligibility_check",
+      sql`not ${table.active} or (${table.sourceActive} and ${table.reviewed})`,
+    ),
+    check(
+      "question_bank_versions_source_hash_check",
+      sql`${table.sourceHash} ~ '^[0-9a-f]{64}$' and ${table.sourceHash} <> repeat('0', 64)`,
+    ),
   ],
 );
 

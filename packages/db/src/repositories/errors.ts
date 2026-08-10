@@ -132,3 +132,28 @@ export class RepositoryCorruptionError extends RepositoryError {
     this.name = "RepositoryCorruptionError";
   }
 }
+
+export class QuestionBankVersionConflictError extends RepositoryError {
+  constructor(
+    readonly questionId: string,
+    readonly attemptedVersion: number,
+    readonly latestVersion: number,
+  ) {
+    super(
+      "question_bank_version_conflict",
+      `Question ${questionId} content version ${attemptedVersion} must be greater than persisted version ${latestVersion}`,
+    );
+    this.name = "QuestionBankVersionConflictError";
+  }
+}
+
+export class QuestionBankValidationError extends RepositoryError {
+  constructor(
+    readonly questionId: string | undefined,
+    readonly contentVersion: number | undefined,
+    readonly validationCode: string,
+  ) {
+    super("question_bank_validation", `Question-bank validation failed (${validationCode})`);
+    this.name = "QuestionBankValidationError";
+  }
+}

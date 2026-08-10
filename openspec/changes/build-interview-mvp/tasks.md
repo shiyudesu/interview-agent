@@ -28,7 +28,7 @@
 ## 4. Question Bank
 
 - [x] 4.1 Define the versioned YAML format and validator for stable IDs, domains, wording, Rubric weights, follow-up goals, knowledge explanations, and prohibited coding tasks.
-- [ ] 4.2 Implement question-bank import and version synchronization into PostgreSQL without mutating historical interview snapshots.
+- [x] 4.2 Implement question-bank import and version synchronization into PostgreSQL without mutating historical interview snapshots.
 - [ ] 4.3 Implement deterministic seeded blueprint selection for 5, 10, and 15 questions with domain coverage and recent-three-interview avoidance.
 - [ ] 4.4 Implement creation and persistence of complete per-session question snapshots and test that later bank changes do not affect existing interviews.
 - [ ] 4.5 Add representative development fixtures for all six domains so end-to-end development can proceed before the release bank is complete.

@@ -57,6 +57,13 @@
       "when": 1786344521813,
       "tag": "0007_deletion_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786367055106,
+      "tag": "0008_question_bank_sync",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,7 @@ import {
   type QuestionBankValidationIssue,
   validateQuestionBankSource,
 } from "../packages/contracts/src/question-bank.js";
+import { normalizeQuestionBankSourcePath } from "../packages/db/src/question-bank-source-path.js";
 
 const SUPPORTED_SCHEMA_VERSION = "1.0";
 const MAX_FILE_BYTES = 1_000_000;
@@ -45,6 +46,16 @@ export interface QuestionBankValidationResult {
   readonly questionCount: number;
   readonly activeReviewedCount: number;
   readonly issues: readonly QuestionBankFileIssue[];
+}
+
+export interface LoadedQuestionBankFile {
+  readonly file: string;
+  readonly schemaVersion: "1.0";
+  readonly questions: QuestionBankSourceDto["questions"];
+}
+
+export interface QuestionBankLoadResult extends QuestionBankValidationResult {
+  readonly files: readonly LoadedQuestionBankFile[];
 }
 
 interface CliIo {
@@ -392,7 +403,7 @@ function questionIdAtPath(value: unknown, path: string): string | undefined {
 
 function relativeFile(root: string, file: string): string {
   const path = relative(root, file);
-  return path.length === 0 ? "." : path;
+  return path.length === 0 ? "." : normalizeQuestionBankSourcePath(path);
 }
 
 async function discoverYamlFiles(root: string): Promise<{
@@ -471,12 +482,13 @@ async function discoverYamlFiles(root: string): Promise<{
   return { files, issues };
 }
 
-export async function validateQuestionBankDirectory(
+export async function loadQuestionBankDirectory(
   rootInput: string,
-): Promise<QuestionBankValidationResult> {
+): Promise<QuestionBankLoadResult> {
   const root = resolve(rootInput);
   const discovery = await discoverYamlFiles(root);
   const issues: QuestionBankFileIssue[] = [...discovery.issues];
+  const loadedFiles: LoadedQuestionBankFile[] = [];
   const versions = new Map<string, { readonly file: string; readonly questionId: string }>();
   let questionCount = 0;
   let activeReviewedCount = 0;
@@ -559,6 +571,11 @@ export async function validateQuestionBankDirectory(
         versions.set(key, { file: fileName, questionId: question.id });
       }
     });
+    loadedFiles.push({
+      file: fileName,
+      schemaVersion: bankSource.schemaVersion,
+      questions: bankSource.questions,
+    });
   }
 
   return {
@@ -568,7 +585,15 @@ export async function validateQuestionBankDirectory(
     questionCount,
     activeReviewedCount,
     issues,
+    files: loadedFiles,
   };
+}
+
+export async function validateQuestionBankDirectory(
+  rootInput: string,
+): Promise<QuestionBankValidationResult> {
+  const { files: _files, ...result } = await loadQuestionBankDirectory(rootInput);
+  return result;
 }
 
 function parseCliOptions(args: readonly string[]): CliOptions {

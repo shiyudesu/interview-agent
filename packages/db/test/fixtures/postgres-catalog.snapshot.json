@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "catalogHash": "d960b0c0b43e515ec7e8948a984bdfe39c49a1ce4bdb8601ce91546df666b41f",
+  "catalogHash": "8f271e956c3d339265759c61f15121d3128ef0b5ebe2b104ad7a12f953137622",
   "catalog": {
     "tables": [
       {
@@ -1095,6 +1095,56 @@
             "identity": "",
             "generated": "",
             "collation": null
+          },
+          {
+            "position": 16,
+            "name": "question_type",
+            "type": "question_type",
+            "nullable": false,
+            "default": "'conceptual'::question_type",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 17,
+            "name": "source_active",
+            "type": "boolean",
+            "nullable": false,
+            "default": "false",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 18,
+            "name": "source_schema_version",
+            "type": "text",
+            "nullable": false,
+            "default": "'1.0'::text",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 19,
+            "name": "import_source_file",
+            "type": "text",
+            "nullable": false,
+            "default": "'legacy'::text",
+            "identity": "",
+            "generated": "",
+            "collation": null
+          },
+          {
+            "position": 20,
+            "name": "source_hash",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "identity": "",
+            "generated": "",
+            "collation": null
           }
         ]
       },
@@ -1794,6 +1844,10 @@
         "labels": ["scored", "incorrect", "unknown", "skipped", "irrelevant"]
       },
       {
+        "name": "question_type",
+        "labels": ["conceptual", "scenario", "design", "troubleshooting"]
+      },
+      {
         "name": "report_kind",
         "labels": ["complete", "incomplete"]
       },
@@ -2439,6 +2493,25 @@
             "position": 1,
             "key": true,
             "definition": "domain"
+          }
+        ]
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_one_active_question_idx",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "clustered": false,
+        "replicaIdentity": false,
+        "method": "btree",
+        "predicate": "active",
+        "columns": [
+          {
+            "position": 1,
+            "key": true,
+            "definition": "question_id"
           }
         ]
       },
@@ -3582,6 +3655,15 @@
       },
       {
         "table": "question_bank_versions",
+        "name": "question_bank_versions_active_eligibility_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (NOT active OR source_active AND reviewed)"
+      },
+      {
+        "table": "question_bank_versions",
         "name": "question_bank_versions_active_not_null",
         "type": "n",
         "deferrable": false,
@@ -3633,6 +3715,15 @@
         "deferred": false,
         "validated": true,
         "definition": "NOT NULL follow_up_goals"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_import_source_file_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL import_source_file"
       },
       {
         "table": "question_bank_versions",
@@ -3690,6 +3781,15 @@
       },
       {
         "table": "question_bank_versions",
+        "name": "question_bank_versions_question_type_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL question_type"
+      },
+      {
+        "table": "question_bank_versions",
         "name": "question_bank_versions_reviewed_not_null",
         "type": "n",
         "deferrable": false,
@@ -3705,6 +3805,42 @@
         "deferred": false,
         "validated": true,
         "definition": "NOT NULL rubric"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_source_active_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_active"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_source_hash_check",
+        "type": "c",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "CHECK (source_hash ~ '^[0-9a-f]{64}$'::text AND source_hash <> repeat('0'::text, 64))"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_source_hash_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_hash"
+      },
+      {
+        "table": "question_bank_versions",
+        "name": "question_bank_versions_source_schema_version_not_null",
+        "type": "n",
+        "deferrable": false,
+        "deferred": false,
+        "validated": true,
+        "definition": "NOT NULL source_schema_version"
       },
       {
         "table": "question_bank_versions",
