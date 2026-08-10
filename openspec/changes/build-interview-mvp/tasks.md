@@ -18,7 +18,7 @@
 ## 3. Database and Persistence
 
 - [x] 3.1 Configure Drizzle with `pg`, create Better Auth tables, and generate the initial checked-in PostgreSQL migration.
-- [ ] 3.2 Add interview sessions, question-bank versions, session question snapshots, messages, Operations, evaluations, reports, deletion requests, and purge audit tables.
+- [x] 3.2 Add interview sessions, question-bank versions, session question snapshots, messages, Operations, evaluations, reports, deletion requests, and purge audit tables.
 - [ ] 3.3 Add database constraints for one active/report-pending interview per user, ordered unique question positions, immutable snapshot identity, and scoped Operation idempotency keys.
 - [ ] 3.4 Implement repositories and transaction helpers for aggregate loading, optimistic version advancement, message/evaluation persistence, immutable reports, and history queries.
 - [ ] 3.5 Implement Operation lease, stale-processing reclaim, retry, and duplicate-result behavior with Testcontainers integration tests.

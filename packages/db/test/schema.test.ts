@@ -31,7 +31,7 @@ describe("Better Auth PostgreSQL schema", () => {
     ]);
   });
 
-  it("uses timestamp without time zone and generator-compatible defaults", () => {
+  it("keeps framework timestamps compatible and uses timestamptz for project deletion state", () => {
     expect(user.createdAt.columnType).toBe("PgTimestamp");
     expect(user.createdAt.withTimezone).toBe(false);
     expect(user.createdAt.hasDefault).toBe(true);
@@ -42,6 +42,7 @@ describe("Better Auth PostgreSQL schema", () => {
     expect(session.updatedAt.defaultFn).toBeUndefined();
     expect(session.updatedAt.onUpdateFn).toBeTypeOf("function");
     expect(verification.updatedAt.hasDefault).toBe(true);
+    expect(user.deletionRequestedAt.withTimezone).toBe(true);
   });
 
   it("supports linking while preserving the user primary email", () => {

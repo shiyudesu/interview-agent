@@ -8,6 +8,13 @@
       "when": 1786284547928,
       "tag": "0000_initial_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786330622136,
+      "tag": "0001_interview_persistence",
+      "breakpoints": true
     }
   ]
 }
