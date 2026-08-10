@@ -32,7 +32,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
-    "question-bank:validate": "turbo run question-bank:validate",
+    "question-bank:validate": "tsx scripts/validate-question-bank.ts --mode development",
     "services:down": "docker compose down",
     "services:logs": "docker compose logs --follow",
     "services:up": "docker compose up --detach --wait",
@@ -40,7 +40,7 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run test:e2e",
-    "typecheck": "pnpm workspace:check && turbo run typecheck",
+    "typecheck": "pnpm workspace:check && tsc -p tsconfig.scripts.json --pretty false && turbo run typecheck",
     "workspace:check": "node scripts/check-workspace-dependencies.mjs"
   },
   "devDependencies": {
@@ -50,7 +50,9 @@
     "@vitest/coverage-v8": "catalog:",
     "tsx": "catalog:",
     "turbo": "catalog:",
+    "typebox": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }

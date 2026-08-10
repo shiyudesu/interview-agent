@@ -1,0 +1,31 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.context.cancellation
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 context.Context 如何在调用链中传播取消信号。"
+    rubric:
+      - id: cancellation-propagation
+        description: "说明取消信号沿派生 Context 传播"
+        weight: 60
+      - id: resource-release
+        description: "说明接收方应观察 Done 并及时释放资源"
+        weight: 40
+    followUpGoals:
+      - id: clarify-propagation
+        kind: clarification
+        goal: "澄清取消信号影响的调用链范围"
+      - id: deepen-cleanup
+        kind: depth
+        goal: "说明 goroutine 如何响应取消并退出"
+    knowledgeExplanation: "Context 通过 Done 通道传播取消，调用方和被调用方共同负责及时停止工作。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: reviewer-id
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

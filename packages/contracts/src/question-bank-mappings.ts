@@ -97,16 +97,17 @@ function semanticQuestionIssues(value: SemanticQuestionValue): readonly {
 
 export function mapQuestionBankQuestionDtoToDefinition(value: unknown): QuestionDefinition {
   const dto = checkDto(QuestionBankQuestionSchema, value, "question-bank question");
-  const issues = [...validateQuestionBankQuestion(dto), ...semanticQuestionIssues(dto)];
+  const issues = validateQuestionBankQuestion(dto);
   if (issues.length > 0) {
     throw new ContractMappingError("question-bank question", issues);
   }
 
   return {
     questionId: parseQuestionId(dto.id),
-    questionVersion: dto.version,
+    questionVersion: dto.contentVersion,
     domain: dto.domain,
     difficulty: dto.difficulty,
+    questionType: dto.questionType,
     sourceWording: dto.sourceWording,
     rubric: dto.rubric.map((item) => ({
       id: parseRubricItemId(item.id),
@@ -120,6 +121,16 @@ export function mapQuestionBankQuestionDtoToDefinition(value: unknown): Question
     })),
     knowledgeExplanation: dto.knowledgeExplanation,
     active: dto.active,
+    reviewed: dto.reviewed,
+    reviewMetadata:
+      dto.reviewMetadata === null
+        ? null
+        : {
+            reviewedBy: dto.reviewMetadata.reviewedBy,
+            reviewedAt: new Date(dto.reviewMetadata.reviewedAt),
+            simplifiedChineseVerified: true,
+            technicalTermsVerified: true,
+          },
   };
 }
 
@@ -130,9 +141,10 @@ export function mapQuestionDefinitionToQuestionBankDto(
     QuestionBankQuestionSchema,
     {
       id: String(definition.questionId),
-      version: definition.questionVersion,
+      contentVersion: definition.questionVersion,
       domain: definition.domain,
       difficulty: definition.difficulty,
+      questionType: definition.questionType,
       sourceWording: definition.sourceWording,
       rubric: definition.rubric.map((item) => ({
         id: String(item.id),
@@ -146,13 +158,22 @@ export function mapQuestionDefinitionToQuestionBankDto(
       })),
       knowledgeExplanation: definition.knowledgeExplanation,
       active: definition.active,
+      reviewed: definition.reviewed,
+      reviewMetadata:
+        definition.reviewMetadata === null
+          ? null
+          : {
+              reviewedBy: definition.reviewMetadata.reviewedBy,
+              reviewedAt: definition.reviewMetadata.reviewedAt.toISOString(),
+              simplifiedChineseVerified: true,
+              technicalTermsVerified: true,
+            },
     },
     "question-bank question",
   );
   const issues = validateQuestionBankQuestion(dto);
-  const semanticIssues = semanticQuestionIssues(dto);
-  if (issues.length > 0 || semanticIssues.length > 0) {
-    throw new ContractMappingError("question-bank question", [...issues, ...semanticIssues]);
+  if (issues.length > 0) {
+    throw new ContractMappingError("question-bank question", issues);
   }
   return dto;
 }

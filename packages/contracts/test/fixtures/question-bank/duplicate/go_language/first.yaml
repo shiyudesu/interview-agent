@@ -1,0 +1,25 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.duplicate.question
+    contentVersion: 2
+    domain: go_language
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "请说明服务请求取消后，后台 goroutine 应如何退出。"
+    rubric:
+      - id: cancellation
+        description: "说明监听取消信号"
+        weight: 100
+    followUpGoals:
+      - id: clarification
+        kind: clarification
+        goal: "澄清退出触发条件"
+    knowledgeExplanation: "后台 goroutine 应监听请求取消并释放资源。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: reviewer-id
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

@@ -1,0 +1,24 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.invalid.question
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "   "
+    rubric:
+      - id: duplicated
+        description: "第一个评分点"
+        weight: 40
+      - id: duplicated
+        description: "第二个评分点"
+        weight: 40
+    followUpGoals:
+      - id: depth-only
+        kind: depth
+        goal: "继续深入"
+    knowledgeExplanation: "内部知识说明"
+    active: true
+    reviewed: false
+    reviewMetadata: null

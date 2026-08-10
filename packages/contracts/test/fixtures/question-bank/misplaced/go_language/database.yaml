@@ -1,0 +1,25 @@
+schemaVersion: "1.0"
+domain: database_storage
+questions:
+  - id: database.transaction.isolation
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释事务隔离级别需要解决哪些并发访问问题。"
+    rubric:
+      - id: anomalies
+        description: "说明脏读、不可重复读或幻读等并发现象"
+        weight: 100
+    followUpGoals:
+      - id: clarification
+        kind: clarification
+        goal: "澄清不同并发现象之间的区别"
+    knowledgeExplanation: "事务隔离级别在并发性和读取一致性之间进行权衡。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: reviewer-id
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

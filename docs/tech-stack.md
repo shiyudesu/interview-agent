@@ -146,8 +146,9 @@ Interview Engine 位于 `packages/domain`，负责：
 | `@earendil-works/pi-ai` | `0.84.1` | Provider abstraction and controlled calls |
 | `typebox` | `1.3.7` | Model and tool schemas |
 | `yaml` | `2.9.0` | Question-bank source parsing |
+| `opencc-js` | `1.4.1` | Context-aware Traditional-to-Simplified question wording validation |
 
-Pi packages 必须保持相同版本并精确锁定。TypeBox、YAML 和 OpenTelemetry API 与 Pi 当前依赖版本对齐。
+Pi packages 必须保持相同版本并精确锁定。TypeBox、YAML 和 OpenTelemetry API 与 Pi 当前依赖版本对齐。OpenCC 精确锁定为 `1.4.1`，用于题目措辞的上下文繁简转换校验。
 
 职责划分：
 

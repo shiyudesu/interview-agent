@@ -43,10 +43,6 @@
       ],
       "persistent": true
     },
-    "question-bank:validate": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/question-bank/**"],
-      "outputs": []
-    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []

@@ -19,7 +19,9 @@ import {
   OperationEventSchema,
   OperationStatusResponseSchema,
   PublicReportQuestionFeedbackSchema,
+  QuestionBankImportSchema,
   QuestionBankQuestionSchema,
+  QuestionBankSourceSchema,
   ReportPendingInterviewResponseSchema,
   RequestClarificationRequestSchema,
   RetryOperationRequestSchema,
@@ -30,6 +32,7 @@ import {
   SubmitSupplementRequestSchema,
   validateInternalReportSnapshot,
   validateQuestionBankQuestion,
+  validateQuestionBankSource,
   validateReportResponse,
 } from "../src/index.js";
 
@@ -51,9 +54,10 @@ const modelMetadata = {
 
 const questionBankQuestion = {
   id: "go.context.001",
-  version: 1,
+  contentVersion: 1,
   domain: "go_language",
   difficulty: "medium",
+  questionType: "conceptual",
   sourceWording: "请解释 context.Context 的用途。",
   rubric: [
     {
@@ -81,6 +85,13 @@ const questionBankQuestion = {
   ],
   knowledgeExplanation: "Context 在调用链上传递取消、截止时间和请求范围值。",
   active: true,
+  reviewed: true,
+  reviewMetadata: {
+    reviewedBy: "reviewer-1",
+    reviewedAt: now,
+    simplifiedChineseVerified: true,
+    technicalTermsVerified: true,
+  },
 };
 
 const incompleteDomains = [
@@ -541,6 +552,201 @@ describe("question-bank schemas", () => {
         },
       }),
     ).toBe(false);
+    expect(
+      Check(QuestionBankQuestionSchema, {
+        ...questionBankQuestion,
+        questionType: "coding",
+      }),
+    ).toBe(false);
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        questionType: "scenario",
+        sourceWording: "请阅读以下代码并说明输出结果。",
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "prohibited_coding_task" })]),
+    );
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        sourceWording: "请阅读以下内容并回答：\n```go\nfunc main() {}\n```",
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "prohibited_coding_task" })]),
+    );
+  });
+
+  it.each([
+    "请实现一个反转链表的算法。",
+    "请编写一个处理 HTTP 请求的函数。",
+    "请写出生产者消费者模型的伪代码。",
+    "请提交一个可执行程序解决该问题。",
+    "请完成这道在线评测任务。",
+    "请用 Go 实现一个并发安全的缓存。",
+    "请用 Go 写一个并发安全的缓存函数。",
+    "请用代码实现一个并发安全的缓存。",
+    "请完成一道关于并发控制的编程题。",
+    "请给出一个 Go 函数来解决这个问题。",
+    "请实现一个并发安全的 LRU 缓存。",
+    "用 Go 实现一个并发安全的缓存。",
+    "请解释在线评测系统的隔离机制；请用 Go 实现一个并发安全的缓存。",
+    "请先说明缓存淘汰策略，然后提供完整源代码。",
+    "请解释缓存一致性，然后实现一个并发安全的缓存。",
+    "请解释缓存一致性，并且创建一个并发安全的缓存。",
+    "请分析任务积压的原因，同时开发一个并发安全的队列。",
+    "请说明限流方案，此外编码一个并发安全的服务组件。",
+    "请讨论锁的选择，接着实现一个并发安全的数据结构。",
+    "在回答的最后，请提供完整源代码。",
+    "候选人需要创建一个可执行脚本来验证结果。",
+    "请实现一个并发安全的队列。",
+    "请实现一个并发安全的服务。",
+    "请实现一个并发安全的组件。",
+    "请实现一个并发安全的数据结构。",
+    "请用 Go 实现二叉树遍历。",
+    "请实现一个数据库连接池。",
+    "请基于 Go 编写一个 HTTP 服务器。",
+    "请基于 Go 写一个 HTTP 服务器。",
+    "请你实现一个并发安全的缓存。",
+    "请构建一个并发安全的缓存服务。",
+    "请根据以下代码判断输出结果。",
+    "请阅读下面的代码并说明输出结果。",
+    "请查看下面的代码并指出其中的问题。",
+    "能否写一个并发安全的缓存函数？",
+    "可以写一个并发安全的缓存函数吗？",
+    "你能写一个函数吗？",
+    "能不能构建一个缓存服务？",
+    "可否写一段代码？",
+    "是否能写一个 Java 方法来反转字符串？",
+    "请写一个 SQL 查询统计用户数量。",
+    "可以构建一个 REST API endpoint 吗？",
+    "请写 SQL 统计用户数量。",
+    "请构建一个 REST API。",
+    "请写入一段代码到文件。",
+    "请写操作系统内核代码。",
+    "请修复这个函数中的竞态条件。",
+    "请修改以下 SQL 查询以正确统计用户数量。",
+    "请阅读这个函数并指出其中的错误。",
+    "请阅读以下 SQL，说明该查询为什么会返回重复行。",
+    "请解释缓存一致性并实现一个数据库连接池。",
+    "请说明连接复用的优点，并编写数据库连接池。",
+    "请分析请求延迟，然后创建负载生成器。",
+    "请讨论事务边界并提供数据库访问层。",
+  ])("rejects Chinese coding instruction wording: %s", (sourceWording) => {
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        sourceWording,
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "prohibited_coding_task" })]),
+    );
+  });
+
+  it("scans follow-up goals but not internal knowledge explanations for coding markers", () => {
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        followUpGoals: [
+          {
+            ...questionBankQuestion.followUpGoals[0],
+            goal: "请用 Go 编写一个函数验证你的回答",
+          },
+          questionBankQuestion.followUpGoals[1],
+        ],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "/followUpGoals/0/goal",
+          code: "prohibited_coding_task",
+        }),
+      ]),
+    );
+
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        knowledgeExplanation: "内部说明可包含示例：\n```go\nfunc main() {}\n```",
+      }).filter((issue) => issue.code === "prohibited_coding_task"),
+    ).toEqual([]);
+  });
+
+  it.each([
+    "请解释在线评测系统通常如何隔离不可信进程。",
+    "请说明 Go 程序运行时 GC 的触发条件。",
+    "请解释 HTTP 处理程序的执行流程。",
+    "请解释 Go 调度器的实现如何减少函数调用开销。",
+    "请说明标准库如何实现 HTTP 处理程序的超时控制。",
+    "实现 HTTP 处理程序时需要考虑哪些超时设置？",
+    "请给出数据库索引失效的常见原因。",
+    "请解释如何实现缓存一致性。",
+    "请说明 Go map 是如何实现的。",
+    "请说明写操作对存储引擎的影响。",
+    "请解释构建过程中的依赖解析机制。",
+    "请解释 Go 写屏障的作用和工作原理。",
+    "请说明写入操作对存储引擎的影响。",
+    "请解释构建器模式的适用场景和主要取舍。",
+    "请分析 Go 写屏障如何影响函数调用开销。",
+    "请解释构建器模式在程序设计中的取舍。",
+    "能否解释为什么系统需要写代码而不是使用配置？",
+  ])("allows conceptual discussion of coding infrastructure: %s", (sourceWording) => {
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        sourceWording,
+      }),
+    ).toEqual([]);
+  });
+
+  it("requires meaningful Simplified Chinese while allowing English technical terms", () => {
+    for (const sourceWording of [
+      "请 explain Go GC behavior.",
+      "请解释 Go のガベージコレクション机制。",
+      "请解释 Go의 가비지 컬렉션机制。",
+      "請解释 Go GC 的作用和主要阶段。",
+    ]) {
+      expect(
+        validateQuestionBankQuestion({
+          ...questionBankQuestion,
+          sourceWording,
+        }),
+      ).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: "source_wording_language" })]),
+      );
+    }
+
+    for (const sourceWording of [
+      "请说明 Go 的 GC 如何降低暂停时间。",
+      "请解释 HTTP keep-alive 对连接复用的影响。",
+      "请解释 Go scheduler 如何调度 goroutine 并减少线程切换。",
+      "请说明 Go 是著名的并发编程语言之一。",
+    ]) {
+      expect(
+        validateQuestionBankQuestion({
+          ...questionBankQuestion,
+          sourceWording,
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  it("requires auditable review metadata for active questions", () => {
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        reviewed: false,
+        reviewMetadata: null,
+      }),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ code: "active_not_reviewed" })]));
+    expect(
+      validateQuestionBankQuestion({
+        ...questionBankQuestion,
+        reviewMetadata: null,
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "invalid_review_metadata" })]),
+    );
   });
 
   it("reports Rubric totals that JSON Schema cannot express", () => {
@@ -607,6 +813,50 @@ describe("question-bank schemas", () => {
       ]),
     );
   });
+
+  it("validates strict versioned domain files and duplicate versions", () => {
+    const source = {
+      schemaVersion: "1.0",
+      domain: "go_language",
+      questions: [questionBankQuestion],
+    };
+    expect(Check(QuestionBankSourceSchema, source)).toBe(true);
+    expect(validateQuestionBankSource(source)).toEqual([]);
+    expect(
+      validateQuestionBankSource({
+        ...source,
+        questions: [questionBankQuestion, questionBankQuestion],
+      }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "duplicate_question_version" })]),
+    );
+    expect(Check(QuestionBankSourceSchema, { ...source, schemaVersion: "2.0" })).toBe(false);
+    expect(Check(QuestionBankSourceSchema, { ...source, notes: "unknown" })).toBe(false);
+  });
+
+  it("bounds persisted numeric versions to PostgreSQL integer range", () => {
+    expect(
+      Check(QuestionBankQuestionSchema, {
+        ...questionBankQuestion,
+        contentVersion: 2_147_483_647,
+      }),
+    ).toBe(true);
+    expect(
+      Check(QuestionBankQuestionSchema, {
+        ...questionBankQuestion,
+        contentVersion: 2_147_483_648,
+      }),
+    ).toBe(false);
+    expect(
+      Check(QuestionBankImportSchema, {
+        schemaVersion: "1.0",
+        sourceName: "reviewed-bank",
+        sourceVersion: 2_147_483_648,
+        importedAt: now,
+        questions: [questionBankQuestion],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("structured evaluation schema", () => {
@@ -669,6 +919,9 @@ describe("internal and public report schemas", () => {
       "questionVersions",
       "schemaVersion",
       "sourceWording",
+      "questionType",
+      "reviewed",
+      "reviewMetadata",
       "referenceAnswer",
       "followUpGoals",
       "knowledgeExplanation",

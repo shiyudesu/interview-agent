@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@interview-agent/domain": "workspace:*",
+    "opencc-js": "catalog:",
     "typebox": "catalog:"
   },
   "devDependencies": {

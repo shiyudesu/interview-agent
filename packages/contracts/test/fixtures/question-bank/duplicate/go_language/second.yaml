@@ -1,0 +1,25 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.duplicate.question
+    contentVersion: 2
+    domain: go_language
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请排查请求结束后 goroutine 仍未退出的原因。"
+    rubric:
+      - id: diagnosis
+        description: "说明检查取消信号传递和阻塞点"
+        weight: 100
+    followUpGoals:
+      - id: clarification
+        kind: clarification
+        goal: "澄清 goroutine 的阻塞位置"
+    knowledgeExplanation: "排查时应确认 Context 传播、阻塞调用和退出路径。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: reviewer-id
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

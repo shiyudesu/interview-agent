@@ -48,6 +48,9 @@ export type ZeroScoreReason = (typeof ZERO_SCORE_REASONS)[number];
 export const FOLLOW_UP_KINDS = ["clarification", "depth"] as const;
 export type FollowUpKind = (typeof FOLLOW_UP_KINDS)[number];
 
+export const QUESTION_TYPES = ["conceptual", "scenario", "design", "troubleshooting"] as const;
+export type QuestionType = (typeof QUESTION_TYPES)[number];
+
 export const FOLLOW_UP_PURPOSES = [
   "answer_clarification",
   "irrelevant_response_clarification",
@@ -92,11 +95,19 @@ export interface QuestionDefinition {
   readonly questionVersion: number;
   readonly domain: KnowledgeDomain;
   readonly difficulty: "medium";
+  readonly questionType: QuestionType;
   readonly sourceWording: string;
   readonly rubric: readonly RubricItemSnapshot[];
   readonly followUpGoals: readonly FollowUpGoalSnapshot[];
   readonly knowledgeExplanation: string;
   readonly active: boolean;
+  readonly reviewed: boolean;
+  readonly reviewMetadata: {
+    readonly reviewedBy: string;
+    readonly reviewedAt: Date;
+    readonly simplifiedChineseVerified: true;
+    readonly technicalTermsVerified: true;
+  } | null;
 }
 
 export interface QuestionSnapshot {

@@ -53,9 +53,10 @@ const later = new Date("2026-08-09T13:00:00.000Z");
 
 const questionBankQuestion = {
   id: "go.context.001",
-  version: 7,
+  contentVersion: 7,
   domain: "go_language",
   difficulty: "medium",
+  questionType: "conceptual",
   sourceWording: "请解释 context.Context 的用途。",
   rubric: [
     {
@@ -83,6 +84,13 @@ const questionBankQuestion = {
   ],
   knowledgeExplanation: "Context 传递取消、截止时间和请求范围值。",
   active: true,
+  reviewed: true,
+  reviewMetadata: {
+    reviewedBy: "reviewer-1",
+    reviewedAt: occurredAt,
+    simplifiedChineseVerified: true,
+    technicalTermsVerified: true,
+  },
 };
 
 const modelMetadata = {
