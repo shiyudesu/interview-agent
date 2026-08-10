@@ -209,9 +209,11 @@ describe("interview persistence PostgreSQL schema", () => {
     const oneOpenInterviewIndex = getTableConfig(interviewSessions).indexes[0]?.config;
     expect(oneOpenInterviewIndex?.unique).toBe(true);
     expect(oneOpenInterviewIndex?.where).toBeDefined();
-    expect(operations.idempotencyScope.enumValues).toEqual(operations.type.enumValues);
+    expect(operations.idempotencyScope.columnType).toBe("PgText");
     expect(operations.idempotencyScope.notNull).toBe(true);
     expect(operations.idempotencyKey.notNull).toBe(true);
+    expect(operations.inputHash.notNull).toBe(true);
+    expect(operations.retryable.default).toBe(false);
     expect(checkNames(interviewSessions)).toEqual([
       "interview_sessions_selected_question_count_check",
       "interview_sessions_version_check",
@@ -224,8 +226,8 @@ describe("interview persistence PostgreSQL schema", () => {
     expect(checkNames(operations)).toEqual([
       "operations_expected_version_check",
       "operations_attempt_count_check",
-      "operations_idempotency_scope_check",
-      "operations_status_lease_check",
+      "operations_identity_hash_check",
+      "operations_lifecycle_check",
     ]);
   });
 

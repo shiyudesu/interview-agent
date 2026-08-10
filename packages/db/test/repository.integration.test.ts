@@ -1,4 +1,5 @@
 import {
+  type AccountId,
   aggregateDomainScores,
   cancelInterviewOperation,
   completeInterviewOperation,
@@ -12,6 +13,7 @@ import {
   type InterviewTransition,
   type KnowledgeDomain,
   type ModelCallMetadata,
+  type OperationId,
   parseAccountId,
   parseAnswerMaterialId,
   parseEvaluationId,
@@ -33,6 +35,7 @@ import {
   type DatabaseClient,
   type EvaluationPersistence,
   interviewSessions,
+  type JsonObject,
   PgInterviewRepository,
   PgOperationRepository,
   PgReportRepository,
@@ -78,10 +81,96 @@ let operationRepository: PgOperationRepository;
 let reportRepository: PgReportRepository;
 let unitOfWork: PgRepositoryUnitOfWork;
 let operationSequence = 0;
+const operationLeases = new Map<
+  string,
+  { readonly attemptCount: number; readonly leaseOwner: string; readonly leaseToken: string }
+>();
 
 function nextOperationId(prefix = "operation") {
   operationSequence += 1;
   return parseOperationId(`${prefix}-${operationSequence}`);
+}
+
+async function claimOperationForTest(
+  repository: PgOperationRepository,
+  operationId: OperationId,
+  accountId: AccountId,
+  _claimedAt: Date,
+): Promise<void> {
+  const claimed = await repository.claimPending({
+    operationId,
+    accountId,
+    leaseOwner: `test-worker-${operationId}`,
+    leaseDurationMs: 60_000,
+  });
+  if (claimed === null) {
+    throw new Error(`Operation ${operationId} was not claimable`);
+  }
+  operationLeases.set(operationId, {
+    leaseOwner: claimed.leaseOwner,
+    leaseToken: claimed.leaseToken,
+    attemptCount: claimed.attemptCount,
+  });
+}
+
+async function finishOperation(
+  repository: PgOperationRepository,
+  update:
+    | {
+        readonly operationId: OperationId;
+        readonly accountId: AccountId;
+        readonly expectedStatus: "pending" | "processing";
+        readonly status: "succeeded";
+        readonly result: JsonObject;
+        readonly completedAt: Date;
+      }
+    | {
+        readonly operationId: OperationId;
+        readonly accountId: AccountId;
+        readonly expectedStatus: "pending" | "processing";
+        readonly status: "failed";
+        readonly error: JsonObject;
+        readonly completedAt: Date;
+      },
+): Promise<void> {
+  let lease = operationLeases.get(update.operationId);
+  if (lease === undefined) {
+    await claimOperationForTest(
+      repository,
+      update.operationId,
+      update.accountId,
+      new Date(update.completedAt.getTime() - 1),
+    );
+    lease = required(operationLeases.get(update.operationId));
+  }
+  if (update.status === "succeeded") {
+    await repository.completeSuccess({
+      operationId: update.operationId,
+      accountId: update.accountId,
+      ...lease,
+      result: update.result,
+    });
+    return;
+  }
+  await repository.completeFailure({
+    operationId: update.operationId,
+    accountId: update.accountId,
+    ...lease,
+    error: update.error,
+    retryable: false,
+  });
+}
+
+async function createOperationForTest(
+  repository: PgOperationRepository,
+  operation: Omit<Parameters<PgOperationRepository["create"]>[0], "idempotencyScope"> & {
+    readonly idempotencyScope?: string;
+  },
+) {
+  return repository.create({
+    ...operation,
+    idempotencyScope: operation.idempotencyScope ?? "interview-command",
+  });
 }
 
 function blueprint(prefix: string, questionCount: InterviewQuestionCount = 5): InterviewBlueprint {
@@ -212,13 +301,12 @@ async function saveAcceptedOperation(
   plan: InterviewOperationPlan,
 ): Promise<void> {
   await unitOfWork.run(async (repositories) => {
-    await repositories.operations.startProcessing({
-      operationId: plan.operationId,
-      accountId: previous.accountId,
-      expectedStatus: "pending",
-      startedAt: plan.acceptedAt,
-      leaseExpiresAt: new Date(plan.acceptedAt.getTime() + 60_000),
-    });
+    await claimOperationForTest(
+      repositories.operations,
+      plan.operationId,
+      previous.accountId,
+      plan.acceptedAt,
+    );
     await repositories.interviews.save({
       previous,
       current: plan.interview,
@@ -235,7 +323,7 @@ async function saveSuccessfulCompletion(input: {
 }): Promise<void> {
   const completedAt = required(input.events.at(-1)).occurredAt;
   await unitOfWork.run(async (repositories) => {
-    await repositories.operations.updateResult({
+    await finishOperation(repositories.operations, {
       operationId: required(input.previous.pendingOperation).operationId,
       accountId: input.previous.accountId,
       expectedStatus: "processing",
@@ -486,6 +574,7 @@ describe.sequential("PostgreSQL repositories", () => {
   }, 120_000);
 
   beforeEach(async () => {
+    operationLeases.clear();
     await client.pool.query(
       `truncate table "user", question_bank_versions restart identity cascade`,
     );
@@ -518,7 +607,7 @@ describe.sequential("PostgreSQL repositories", () => {
     });
 
     const cancelledOperationId = nextOperationId("cancelled-answer");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: cancelledOperationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -546,7 +635,7 @@ describe.sequential("PostgreSQL repositories", () => {
 
     const cancelled = cancelInterviewOperation(interview, cancelledPlan);
     await unitOfWork.run(async (repositories) => {
-      await repositories.operations.updateResult({
+      await finishOperation(repositories.operations, {
         operationId: cancelledOperationId,
         accountId: interview.accountId,
         expectedStatus: "processing",
@@ -565,7 +654,7 @@ describe.sequential("PostgreSQL repositories", () => {
     expect(interview.pendingOperation).toBeNull();
 
     const answerOperationId = nextOperationId("answer");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: answerOperationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -630,7 +719,7 @@ describe.sequential("PostgreSQL repositories", () => {
     expect(interview.questions[0]?.evaluation?.id).toBe(parseEvaluationId("evaluation-original"));
 
     const supplementOperationId = nextOperationId("supplement");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: supplementOperationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -677,7 +766,7 @@ describe.sequential("PostgreSQL repositories", () => {
     expect(interview.questions[0]?.systemFollowUps).toHaveLength(1);
 
     const followUpAnswerOperationId = nextOperationId("follow-up-answer");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: followUpAnswerOperationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -768,7 +857,7 @@ describe.sequential("PostgreSQL repositories", () => {
     });
     const rejectedId = nextOperationId("acceptance-succeeded");
     const rejectedAt = new Date(STARTED_AT.getTime() + 1_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: rejectedId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -789,7 +878,7 @@ describe.sequential("PostgreSQL repositories", () => {
         text: "answer",
       }),
     );
-    await operationRepository.updateResult({
+    await finishOperation(operationRepository, {
       operationId: rejectedId,
       accountId: interview.accountId,
       expectedStatus: "pending",
@@ -810,7 +899,7 @@ describe.sequential("PostgreSQL repositories", () => {
 
     const cancelledId = nextOperationId("cancel-failed");
     const cancelledAt = new Date(STARTED_AT.getTime() + 2_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: cancelledId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -835,7 +924,7 @@ describe.sequential("PostgreSQL repositories", () => {
     interview = cancelledPlan.interview;
     const cancelled = cancelInterviewOperation(interview, cancelledPlan);
     await unitOfWork.run(async (repositories) => {
-      await repositories.operations.updateResult({
+      await finishOperation(repositories.operations, {
         operationId: cancelledId,
         accountId: interview.accountId,
         expectedStatus: "processing",
@@ -862,7 +951,7 @@ describe.sequential("PostgreSQL repositories", () => {
       interviewId: "atomic-success",
     });
     const succeededOperationId = nextOperationId("atomic-success");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: succeededOperationId,
       accountId: succeededInterview.accountId,
       interviewId: succeededInterview.id,
@@ -883,7 +972,7 @@ describe.sequential("PostgreSQL repositories", () => {
     );
 
     await unitOfWork.run(async (repositories) => {
-      await repositories.operations.updateResult({
+      await finishOperation(repositories.operations, {
         operationId: succeededOperationId,
         accountId: succeededInterview.accountId,
         expectedStatus: "pending",
@@ -915,7 +1004,7 @@ describe.sequential("PostgreSQL repositories", () => {
       occurredAt: new Date(STARTED_AT.getTime() + 2_000),
     });
     const rolledBackOperationId = nextOperationId("atomic-rollback");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: rolledBackOperationId,
       accountId: rolledBackInterview.accountId,
       interviewId: rolledBackInterview.id,
@@ -937,7 +1026,7 @@ describe.sequential("PostgreSQL repositories", () => {
 
     await expect(
       unitOfWork.run(async (repositories) => {
-        await repositories.operations.updateResult({
+        await finishOperation(repositories.operations, {
           operationId: rolledBackOperationId,
           accountId: rolledBackInterview.accountId,
           expectedStatus: "pending",
@@ -972,7 +1061,7 @@ describe.sequential("PostgreSQL repositories", () => {
       interviewId: "event-interview",
     });
     const operationId = nextOperationId("event-answer");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: operationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -1153,7 +1242,7 @@ describe.sequential("PostgreSQL repositories", () => {
     const reportId = parseReportId("invalid-minimal-report");
     const operationId = nextOperationId("invalid-report");
     const occurredAt = new Date(STARTED_AT.getTime() + 20_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: operationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -1176,7 +1265,7 @@ describe.sequential("PostgreSQL repositories", () => {
     );
     await expect(
       unitOfWork.run(async (repositories) => {
-        await repositories.operations.updateResult({
+        await finishOperation(repositories.operations, {
           operationId,
           accountId: interview.accountId,
           expectedStatus: "pending",
@@ -1330,7 +1419,7 @@ describe.sequential("PostgreSQL repositories", () => {
       const answerAt = new Date(STARTED_AT.getTime() + 1_000);
       const answerOperationId = nextOperationId(`report-facts-${suffix}-answer`);
       const materialId = parseAnswerMaterialId(`report-facts-${suffix}-material`);
-      await operationRepository.create({
+      await createOperationForTest(operationRepository, {
         id: answerOperationId,
         accountId: interview.accountId,
         interviewId: interview.id,
@@ -1437,7 +1526,7 @@ describe.sequential("PostgreSQL repositories", () => {
         },
       };
       const reportOperationId = nextOperationId(`report-facts-${suffix}-operation`);
-      await operationRepository.create({
+      await createOperationForTest(operationRepository, {
         id: reportOperationId,
         accountId: interview.accountId,
         interviewId: interview.id,
@@ -1460,7 +1549,7 @@ describe.sequential("PostgreSQL repositories", () => {
       );
       await expect(
         unitOfWork.run(async (repositories) => {
-          await repositories.operations.updateResult({
+          await finishOperation(repositories.operations, {
             operationId: reportOperationId,
             accountId: interview.accountId,
             expectedStatus: "pending",
@@ -1488,7 +1577,7 @@ describe.sequential("PostgreSQL repositories", () => {
     const operationId = nextOperationId("partial-report-answer");
     const materialId = parseAnswerMaterialId("partial-report-material");
     const answerAt = new Date(STARTED_AT.getTime() + 1_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: operationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -1581,7 +1670,7 @@ describe.sequential("PostgreSQL repositories", () => {
       interviewId: "pending-matrix-interview",
     });
     const operationId = nextOperationId("pending-matrix");
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: operationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -1614,7 +1703,7 @@ describe.sequential("PostgreSQL repositories", () => {
       .update(interviewSessions)
       .set({ pendingOperationPreviousPhase: "awaiting_response" })
       .where(eq(interviewSessions.id, interview.id));
-    await operationRepository.updateResult({
+    await finishOperation(operationRepository, {
       operationId,
       accountId: interview.accountId,
       expectedStatus: "processing",
@@ -1759,7 +1848,7 @@ describe.sequential("PostgreSQL repositories", () => {
     });
     const processingOperationId = nextOperationId("processing-corrupt");
     const processingAt = new Date(STARTED_AT.getTime() + 1_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: processingOperationId,
       accountId: processing.accountId,
       interviewId: processing.id,
@@ -1769,13 +1858,12 @@ describe.sequential("PostgreSQL repositories", () => {
       input: { questionPosition: 1, text: "supplement" },
       createdAt: processingAt,
     });
-    await operationRepository.startProcessing({
-      operationId: processingOperationId,
-      accountId: processing.accountId,
-      expectedStatus: "pending",
-      startedAt: processingAt,
-      leaseExpiresAt: new Date(processingAt.getTime() + 60_000),
-    });
+    await claimOperationForTest(
+      operationRepository,
+      processingOperationId,
+      processing.accountId,
+      processingAt,
+    );
     await client.database
       .update(interviewSessions)
       .set({
@@ -1828,7 +1916,7 @@ describe.sequential("PostgreSQL repositories", () => {
     expect(pendingDetail.interview.questions).toHaveLength(5);
     const reportOperationId = nextOperationId("report-complete");
     const reportCreatedAt = new Date(STARTED_AT.getTime() + 20_000);
-    await operationRepository.create({
+    await createOperationForTest(operationRepository, {
       id: reportOperationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -1850,7 +1938,7 @@ describe.sequential("PostgreSQL repositories", () => {
       }),
     );
     await unitOfWork.run(async (repositories) => {
-      await repositories.operations.updateResult({
+      await finishOperation(repositories.operations, {
         operationId: reportOperationId,
         accountId: interview.accountId,
         expectedStatus: "pending",
@@ -2109,7 +2197,7 @@ describe.sequential("PostgreSQL repositories", () => {
     }
   });
 
-  it("provides scoped Operation processing and result helpers without reclaim behavior", async () => {
+  it("loads duplicate scoped Operations and completes through an owned lease", async () => {
     await seedOwner("operation-owner");
     await seedOwner("operation-other");
     const interview = await createInterview({
@@ -2117,7 +2205,7 @@ describe.sequential("PostgreSQL repositories", () => {
       interviewId: "operation-interview",
     });
     const operationId = parseOperationId("operation-basic");
-    const created = await operationRepository.create({
+    const created = await createOperationForTest(operationRepository, {
       id: operationId,
       accountId: interview.accountId,
       interviewId: interview.id,
@@ -2129,24 +2217,28 @@ describe.sequential("PostgreSQL repositories", () => {
     });
     expect(created.status).toBe("pending");
     await expect(
-      operationRepository.findByIdempotencyKey(interview.accountId, "submit_answer", "shared-key"),
+      operationRepository.findByIdempotencyKey(
+        interview.accountId,
+        "interview-command",
+        "shared-key",
+      ),
     ).resolves.toEqual(created);
     await expect(
       operationRepository.findById(operationId, parseAccountId("operation-other")),
     ).resolves.toBeNull();
-    await expect(
-      operationRepository.create({
-        ...created,
-        id: parseOperationId("operation-duplicate-key"),
-        type: "submit_answer",
-        createdAt: STARTED_AT,
-      }),
-    ).rejects.toBeInstanceOf(RepositoryImmutableConflictError);
+    const duplicate = await operationRepository.createOrLoad({
+      ...created,
+      id: parseOperationId("operation-duplicate-key"),
+      type: "submit_answer",
+      createdAt: STARTED_AT,
+    });
+    expect(duplicate).toEqual({ operation: created, created: false });
 
-    const otherScope = await operationRepository.create({
+    const otherScope = await createOperationForTest(operationRepository, {
       id: parseOperationId("operation-other-scope"),
       accountId: interview.accountId,
       interviewId: interview.id,
+      idempotencyScope: "supplement-command",
       type: "submit_supplement",
       idempotencyKey: "shared-key",
       expectedVersion: interview.version,
@@ -2154,7 +2246,7 @@ describe.sequential("PostgreSQL repositories", () => {
       createdAt: STARTED_AT,
     });
     expect(otherScope.type).toBe("submit_supplement");
-    const succeeded = await operationRepository.updateResult({
+    await finishOperation(operationRepository, {
       operationId,
       accountId: interview.accountId,
       expectedStatus: "pending",
@@ -2162,6 +2254,9 @@ describe.sequential("PostgreSQL repositories", () => {
       result: { accepted: true },
       completedAt: new Date(STARTED_AT.getTime() + 1_000),
     });
+    const succeeded = required(
+      await operationRepository.findById(operationId, interview.accountId),
+    );
     expect(succeeded.status).toBe("succeeded");
     expect(succeeded.result).toEqual({ accepted: true });
   });

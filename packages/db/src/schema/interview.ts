@@ -341,15 +341,21 @@ export const operations = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
     interviewId: text("interview_id").notNull(),
-    idempotencyScope: operationTypeEnum("idempotency_scope").notNull(),
+    idempotencyScope: text("idempotency_scope").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     type: operationTypeEnum("type").notNull(),
     status: operationStatusEnum("status").default("pending").notNull(),
     expectedVersion: integer("expected_version").notNull(),
+    inputHash: text("input_hash").notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     leaseAcquiredAt: timestamp("lease_acquired_at", { withTimezone: true }),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseTokenHash: text("lease_token_hash"),
+    completedLeaseOwner: text("completed_lease_owner"),
+    completedLeaseTokenHash: text("completed_lease_token_hash"),
+    retryable: boolean("retryable").default(false).notNull(),
     input: jsonb("input").$type<JsonObject>().notNull(),
     result: jsonb("result").$type<JsonObject>(),
     error: jsonb("error").$type<JsonObject>(),
@@ -374,20 +380,73 @@ export const operations = pgTable(
     }).onDelete("cascade"),
     check("operations_expected_version_check", sql`${table.expectedVersion} >= 0`),
     check("operations_attempt_count_check", sql`${table.attemptCount} >= 0`),
-    check("operations_idempotency_scope_check", sql`${table.idempotencyScope} = ${table.type}`),
     check(
-      "operations_status_lease_check",
+      "operations_identity_hash_check",
+      sql`
+        length(trim(${table.idempotencyScope})) > 0
+        and length(${table.inputHash}) = 64
+      `,
+    ),
+    check(
+      "operations_lifecycle_check",
       sql`
         (
           ${table.status} = 'processing'
           and ${table.leaseAcquiredAt} is not null
           and ${table.leaseExpiresAt} is not null
+          and ${table.leaseOwner} is not null
+          and ${table.leaseTokenHash} is not null
+          and length(trim(${table.leaseOwner})) > 0
+          and length(${table.leaseTokenHash}) = 64
           and ${table.leaseExpiresAt} > ${table.leaseAcquiredAt}
+          and ${table.result} is null
+          and ${table.error} is null
+          and ${table.completedAt} is null
+          and ${table.completedLeaseOwner} is null
+          and ${table.completedLeaseTokenHash} is null
+          and ${table.retryable} = false
         )
         or (
-          ${table.status} <> 'processing'
+          ${table.status} = 'pending'
           and ${table.leaseAcquiredAt} is null
           and ${table.leaseExpiresAt} is null
+          and ${table.leaseOwner} is null
+          and ${table.leaseTokenHash} is null
+          and ${table.completedLeaseOwner} is null
+          and ${table.completedLeaseTokenHash} is null
+          and ${table.result} is null
+          and ${table.error} is null
+          and ${table.completedAt} is null
+          and ${table.retryable} = false
+        )
+        or (
+          ${table.status} = 'succeeded'
+          and ${table.leaseAcquiredAt} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.leaseOwner} is null
+          and ${table.leaseTokenHash} is null
+          and ${table.completedLeaseOwner} is not null
+          and ${table.completedLeaseTokenHash} is not null
+          and length(trim(${table.completedLeaseOwner})) > 0
+          and length(${table.completedLeaseTokenHash}) = 64
+          and ${table.result} is not null
+          and ${table.error} is null
+          and ${table.completedAt} is not null
+          and ${table.retryable} = false
+        )
+        or (
+          ${table.status} = 'failed'
+          and ${table.leaseAcquiredAt} is null
+          and ${table.leaseExpiresAt} is null
+          and ${table.leaseOwner} is null
+          and ${table.leaseTokenHash} is null
+          and ${table.completedLeaseOwner} is not null
+          and ${table.completedLeaseTokenHash} is not null
+          and length(trim(${table.completedLeaseOwner})) > 0
+          and length(${table.completedLeaseTokenHash}) = 64
+          and ${table.result} is null
+          and ${table.error} is not null
+          and ${table.completedAt} is not null
         )
       `,
     ),

@@ -1323,7 +1323,6 @@ function pendingOperationMatchesRow(
     operation.interviewId === interview.id &&
     operation.ownerUserId === interview.accountId &&
     operation.type === expectedType &&
-    operation.idempotencyScope === expectedType &&
     operation.expectedVersion === interview.version &&
     operation.createdAt.getTime() === pending.acceptedAt.getTime() &&
     operation.status === expectedStatus &&

@@ -116,20 +116,24 @@ export const OPERATION_TYPES = [
 
 export type OperationType = (typeof OPERATION_TYPES)[number];
 export type OperationStatus = "pending" | "processing" | "succeeded" | "failed";
+export type OperationIdempotencyScope = string;
 
 export interface StoredOperation {
   readonly id: OperationId;
   readonly accountId: AccountId;
   readonly interviewId: InterviewId;
-  readonly idempotencyScope: OperationType;
+  readonly idempotencyScope: OperationIdempotencyScope;
   readonly idempotencyKey: string;
   readonly type: OperationType;
   readonly status: OperationStatus;
   readonly expectedVersion: number;
+  readonly inputHash: string;
   readonly attemptCount: number;
   readonly lastAttemptAt: Date | null;
   readonly leaseAcquiredAt: Date | null;
   readonly leaseExpiresAt: Date | null;
+  readonly leaseOwner: string | null;
+  readonly retryable: boolean;
   readonly input: JsonObject;
   readonly result: JsonObject | null;
   readonly error: JsonObject | null;
@@ -142,6 +146,7 @@ export interface CreateOperation {
   readonly id: OperationId;
   readonly accountId: AccountId;
   readonly interviewId: InterviewId;
+  readonly idempotencyScope: OperationIdempotencyScope;
   readonly type: OperationType;
   readonly idempotencyKey: string;
   readonly expectedVersion: number;
@@ -149,28 +154,42 @@ export interface CreateOperation {
   readonly createdAt: Date;
 }
 
-export interface StartProcessingOperation {
-  readonly operationId: OperationId;
-  readonly accountId: AccountId;
-  readonly expectedStatus: "pending";
-  readonly startedAt: Date;
-  readonly leaseExpiresAt: Date;
+export interface CreateOrLoadOperationResult {
+  readonly operation: StoredOperation;
+  readonly created: boolean;
 }
 
-export type OperationResultUpdate =
-  | {
-      readonly operationId: OperationId;
-      readonly accountId: AccountId;
-      readonly expectedStatus: "pending" | "processing";
-      readonly status: "succeeded";
-      readonly result: JsonObject;
-      readonly completedAt: Date;
-    }
-  | {
-      readonly operationId: OperationId;
-      readonly accountId: AccountId;
-      readonly expectedStatus: "pending" | "processing";
-      readonly status: "failed";
-      readonly error: JsonObject;
-      readonly completedAt: Date;
-    };
+export interface ClaimOperation {
+  readonly operationId: OperationId;
+  readonly accountId: AccountId;
+  readonly leaseOwner: string;
+  readonly leaseDurationMs: number;
+}
+
+export interface RetryOperation extends ClaimOperation {
+  readonly input: JsonObject;
+}
+
+export interface ClaimedOperation {
+  readonly operation: StoredOperation;
+  readonly leaseOwner: string;
+  readonly leaseToken: string;
+  readonly attemptCount: number;
+}
+
+interface CompleteOperation {
+  readonly operationId: OperationId;
+  readonly accountId: AccountId;
+  readonly leaseOwner: string;
+  readonly leaseToken: string;
+  readonly attemptCount: number;
+}
+
+export interface CompleteOperationSuccess extends CompleteOperation {
+  readonly result: JsonObject;
+}
+
+export interface CompleteOperationFailure extends CompleteOperation {
+  readonly error: JsonObject;
+  readonly retryable: boolean;
+}

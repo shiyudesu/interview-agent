@@ -48,6 +48,46 @@ export class RepositoryImmutableConflictError extends RepositoryError {
   }
 }
 
+export class RepositoryIdempotencyConflictError extends RepositoryError {
+  constructor(
+    readonly scope: string,
+    readonly idempotencyKey: string,
+  ) {
+    super(
+      "repository_idempotency_conflict",
+      `Idempotency key ${idempotencyKey} conflicts with the existing Operation in scope ${scope}`,
+    );
+    this.name = "RepositoryIdempotencyConflictError";
+  }
+}
+
+export class RepositoryOperationLeaseConflictError extends RepositoryError {
+  constructor(readonly operationId: string) {
+    super(
+      "repository_operation_lease_conflict",
+      `Operation ${operationId} is not claimable by this lease`,
+    );
+    this.name = "RepositoryOperationLeaseConflictError";
+  }
+}
+
+export class RepositoryOperationRetryConflictError extends RepositoryError {
+  constructor(readonly operationId: string) {
+    super(
+      "repository_operation_retry_conflict",
+      `Operation ${operationId} is not eligible for the requested retry`,
+    );
+    this.name = "RepositoryOperationRetryConflictError";
+  }
+}
+
+export class RepositoryUnsafePayloadError extends RepositoryError {
+  constructor(readonly field: string) {
+    super("repository_unsafe_payload", `Operation ${field} must be a safe JSON object`);
+    this.name = "RepositoryUnsafePayloadError";
+  }
+}
+
 export class RepositoryCorruptionError extends RepositoryError {
   constructor(
     readonly resource: string,

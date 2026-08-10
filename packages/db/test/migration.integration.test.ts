@@ -6,6 +6,8 @@ import { Pool, type PoolClient } from "pg";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { validateOperationPayload } from "../src/repositories/operation-payload.js";
+
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const repositoryRoot = resolve(packageRoot, "../..");
 const migrationsRoot = resolve(packageRoot, "drizzle");
@@ -149,6 +151,11 @@ async function applyInitialMigrations(pool: Pool): Promise<void> {
 async function applyThroughMigration0002(pool: Pool): Promise<void> {
   await applyInitialMigrations(pool);
   await applySqlMigration(pool, "0002_interview_constraints.sql");
+}
+
+async function applyThroughMigration0003(pool: Pool): Promise<void> {
+  await applyThroughMigration0002(pool);
+  await applySqlMigration(pool, "0003_repository_invariants.sql");
 }
 
 async function seedLegacyPendingOperationState(
@@ -685,6 +692,63 @@ describe.sequential("database migration CLI", () => {
     }
   }, 120_000);
 
+  it("backfills the runtime canonical fingerprint for nested legacy Operation input", async () => {
+    const databaseName = "upgrade_operation_fingerprint";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+    const input = {
+      z: [{ b: 1e21, a: "换行\n文本" }, true, null],
+      a: {
+        tiny: 1e-7,
+        decimalThreshold: 0.000001,
+        largeInteger: 9007199254740991,
+        integerLike: 1.0,
+      },
+      numericKeys: { "2": "two", "10": "ten" },
+      "\u{10000}": "supplementary key",
+      "\uE000": "bmp key",
+    };
+
+    try {
+      await applyThroughMigration0003(pool);
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('fingerprint-owner', 'Fingerprint Owner', 'fingerprint@example.com')`,
+      );
+      await createInterviewWithBlueprint(pool, "fingerprint-interview", "fingerprint-owner");
+      await pool.query(
+        `insert into operations
+           (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
+            expected_version, input)
+         values ('fingerprint-operation', 'fingerprint-owner', 'fingerprint-interview',
+                 'submit_answer', 'fingerprint-key', 'submit_answer', 1, $1::jsonb)`,
+        [JSON.stringify(input)],
+      );
+
+      await expect(
+        applySqlMigration(pool, "0004_operation_lifecycle.sql"),
+      ).resolves.toBeUndefined();
+      const stored = await pool.query<{ input_hash: string }>(
+        `select input_hash from operations where id = 'fingerprint-operation'`,
+      );
+      expect(stored.rows[0]?.input_hash).toBe(validateOperationPayload(input, "input").hash);
+
+      const helpers = await pool.query<{ count: string }>(
+        `select count(*)::text as count
+           from pg_proc
+          where proname in (
+            'operation_canonical_json',
+            'operation_canonical_json_number',
+            'operation_json_key_sort_key'
+          )`,
+      );
+      expect(helpers.rows[0]?.count).toBe("0");
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
   it("rejects cross-owner and cross-interview aggregate links", async () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
@@ -699,18 +763,18 @@ describe.sequential("database migration CLI", () => {
       await pool.query(
         `insert into operations
            (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-            expected_version, input)
+            expected_version, input_hash, input)
          values ('aggregate-operation-a', 'aggregate-owner-a', 'aggregate-interview-a',
-                 'submit_answer', 'operation-a', 'submit_answer', 1, '{}')`,
+                 'submit_answer', 'operation-a', 'submit_answer', 1, repeat('0', 64), '{}')`,
       );
 
       await expect(
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              expected_version, input)
+              expected_version, input_hash, input)
            values ('cross-owner-operation', 'aggregate-owner-b', 'aggregate-interview-a',
-                   'submit_answer', 'cross-owner', 'submit_answer', 1, '{}')`,
+                   'submit_answer', 'cross-owner', 'submit_answer', 1, repeat('0', 64), '{}')`,
         ),
       ).rejects.toMatchObject({ code: "23503", constraint: "operations_interview_owner_fk" });
 
@@ -1242,9 +1306,10 @@ describe.sequential("database migration CLI", () => {
       await pool.query(
         `insert into operations
            (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-            expected_version, input)
+            expected_version, input_hash, input)
          values ('immutable-operation', 'immutable-owner', 'immutable-interview',
-                 'submit_answer', 'immutable-key', 'submit_answer', 1, '{"answer":"original"}')`,
+                 'submit_answer', 'immutable-key', 'submit_answer', 1, repeat('0', 64),
+                 '{"answer":"original"}')`,
       );
 
       for (const update of [
@@ -1294,7 +1359,9 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `update operations
-              set status = 'failed', error = '{"code":"provider_error"}', completed_at = now()
+              set status = 'failed', error = '{"code":"provider_error"}', completed_at = now(),
+                  completed_lease_owner = 'migration-test',
+                  completed_lease_token_hash = repeat('1', 64)
             where id = 'immutable-operation'`,
         ),
       ).resolves.toMatchObject({ rowCount: 1 });
@@ -1321,9 +1388,10 @@ describe.sequential("database migration CLI", () => {
       await pool.query(
         `insert into operations
            (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-            expected_version, input)
+            expected_version, input_hash, input)
          values ('purge-operation', 'purge-owner', 'purge-interview',
-                 'submit_answer', 'purge-key', 'submit_answer', 1, '{"answer":"original"}')`,
+                 'submit_answer', 'purge-key', 'submit_answer', 1, repeat('0', 64),
+                 '{"answer":"original"}')`,
       );
 
       await expect(
@@ -1369,9 +1437,9 @@ describe.sequential("database migration CLI", () => {
            )
            insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              expected_version, input)
+              expected_version, input_hash, input)
            select id, 'purge-owner', 'purge-interview', 'submit_answer', 'purge-key',
-                  'submit_answer', 1, '{"answer":"original"}'
+                  'submit_answer', 1, repeat('0', 64), '{"answer":"original"}'
              from removed`,
         ),
       ).rejects.toMatchObject({
@@ -1405,7 +1473,7 @@ describe.sequential("database migration CLI", () => {
     }
   });
 
-  it("scopes idempotency keys by authenticated user and command type", async () => {
+  it("scopes idempotency keys by authenticated user and caller-defined scope", async () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
     try {
@@ -1420,17 +1488,17 @@ describe.sequential("database migration CLI", () => {
       await pool.query(
         `insert into operations
            (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-            expected_version, input)
+            expected_version, input_hash, input)
          values ('idempotency-operation-a', 'idempotency-owner-a', 'idempotency-interview-a',
-                 'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+                 'interview-command', 'shared-key', 'submit_answer', 1, repeat('0', 64), '{}')`,
       );
       await expect(
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              expected_version, input)
+              expected_version, input_hash, input)
            values ('idempotency-duplicate', 'idempotency-owner-a', 'idempotency-interview-a',
-                   'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+                   'interview-command', 'shared-key', 'submit_answer', 1, repeat('0', 64), '{}')`,
         ),
       ).rejects.toMatchObject({
         code: "23505",
@@ -1440,32 +1508,29 @@ describe.sequential("database migration CLI", () => {
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              expected_version, input)
+              expected_version, input_hash, input)
            values ('idempotency-other-scope', 'idempotency-owner-a', 'idempotency-interview-a',
-                   'submit_supplement', 'shared-key', 'submit_supplement', 1, '{}'),
+                   'supplement-command', 'shared-key', 'submit_supplement', 1, repeat('0', 64), '{}'),
                   ('idempotency-other-user', 'idempotency-owner-b', 'idempotency-interview-b',
-                   'submit_answer', 'shared-key', 'submit_answer', 1, '{}')`,
+                   'interview-command', 'shared-key', 'submit_answer', 1, repeat('0', 64), '{}')`,
         ),
       ).resolves.toMatchObject({ rowCount: 2 });
       await expect(
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              expected_version, input)
+              expected_version, input_hash, input)
            values ('idempotency-scope-mismatch', 'idempotency-owner-a',
-                   'idempotency-interview-a', 'submit_answer', 'mismatched-scope',
-                   'submit_supplement', 1, '{}')`,
+                   'idempotency-interview-a', 'answer-command', 'mismatched-scope',
+                   'submit_supplement', 1, repeat('0', 64), '{}')`,
         ),
-      ).rejects.toMatchObject({
-        code: "23514",
-        constraint: "operations_idempotency_scope_check",
-      });
+      ).resolves.toMatchObject({ rowCount: 1 });
     } finally {
       await pool.end();
     }
   });
 
-  it("enforces Operation version and processing lease consistency without lease behavior", async () => {
+  it("enforces Operation version, fingerprint, and lease lifecycle consistency", async () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
     try {
@@ -1475,17 +1540,23 @@ describe.sequential("database migration CLI", () => {
           "pending-with-lease",
           ", lease_acquired_at, lease_expires_at",
           ", now(), now() + interval '1 minute'",
-          "operations_status_lease_check",
+          "operations_lifecycle_check",
         ],
-        ["processing-without-lease", ", status", ", 'processing'", "operations_status_lease_check"],
+        [
+          "processing-without-owner",
+          ", status, lease_acquired_at, lease_expires_at",
+          ", 'processing', now(), now() + interval '1 minute'",
+          "operations_lifecycle_check",
+        ],
+        ["processing-without-lease", ", status", ", 'processing'", "operations_lifecycle_check"],
       ] as const) {
         await expect(
           pool.query(
             `insert into operations
                (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-                expected_version, input${columns})
+                expected_version, input_hash, input${columns})
              values ($1, 'aggregate-owner-a', 'aggregate-interview-a', 'submit_answer', $1,
-                     'submit_answer', $2, '{}'${values})`,
+                     'submit_answer', $2, repeat('0', 64), '{}'${values})`,
             [id, id === "negative-version" ? -1 : 1],
           ),
         ).rejects.toMatchObject({ code: "23514", constraint });
@@ -1495,10 +1566,12 @@ describe.sequential("database migration CLI", () => {
         pool.query(
           `insert into operations
              (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type,
-              status, expected_version, input, lease_acquired_at, lease_expires_at)
+              status, expected_version, input_hash, input, lease_acquired_at, lease_expires_at,
+              lease_owner, lease_token_hash)
            values ('valid-processing-lease', 'aggregate-owner-a', 'aggregate-interview-a',
                    'submit_answer', 'valid-processing-lease', 'submit_answer', 'processing', 1,
-                   '{}', now(), now() + interval '1 minute')`,
+                   repeat('0', 64), '{}', now(), now() + interval '1 minute',
+                   'migration-test', repeat('1', 64))`,
         ),
       ).resolves.toMatchObject({ rowCount: 1 });
     } finally {
