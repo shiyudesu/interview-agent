@@ -1,3 +1,4 @@
+import type { Logger } from "drizzle-orm/logger";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool, type PoolConfig } from "pg";
 
@@ -7,6 +8,10 @@ export type Database = NodePgDatabase<typeof schema>;
 
 export interface PostgresPoolOptions extends Omit<PoolConfig, "connectionString"> {
   readonly databaseUrl: string;
+}
+
+export interface DatabaseClientOptions extends PostgresPoolOptions {
+  readonly logger?: Logger;
 }
 
 export interface DatabaseClient {
@@ -42,9 +47,12 @@ export function createPostgresPool({ databaseUrl, ...poolConfig }: PostgresPoolO
   });
 }
 
-export function createDatabaseClient(options: PostgresPoolOptions): DatabaseClient {
+export function createDatabaseClient({
+  logger,
+  ...options
+}: DatabaseClientOptions): DatabaseClient {
   const pool = createPostgresPool(options);
-  const database = drizzle(pool, { schema });
+  const database = drizzle(pool, logger === undefined ? { schema } : { schema, logger });
   let closePromise: Promise<void> | undefined;
 
   return {

@@ -1,7 +1,7 @@
 import type {
   AnswerMaterialKind,
   FollowUpGoalSnapshot,
-  InterviewId,
+  ImmutableReportSnapshot,
   InterviewPhase,
   InterviewQuestionCount,
   InterviewStatus,
@@ -40,12 +40,6 @@ export type JsonValue =
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue };
 export type JsonObject = { readonly [key: string]: JsonValue };
-
-export interface StoredReportSnapshot extends JsonObject {
-  readonly interviewId: InterviewId;
-  readonly kind: ReportKind;
-  readonly generatedAt: string;
-}
 
 export const interviewDirectionEnum = pgEnum("interview_direction", ["go_backend"]);
 export const interviewStatusEnum = pgEnum("interview_status", [
@@ -168,6 +162,7 @@ export const interviewSessions = pgTable(
       .default("awaiting_response"),
     version: integer("version").default(1).notNull(),
     currentQuestionPosition: smallint("current_question_position").default(1).notNull(),
+    pendingOperationId: text("pending_operation_id"),
     pendingOperationKind: pendingInterviewOperationKindEnum("pending_operation_kind"),
     pendingOperationQuestionPosition: smallint("pending_operation_question_position"),
     pendingOperationAcceptedAt: timestamp("pending_operation_accepted_at", {
@@ -199,6 +194,28 @@ export const interviewSessions = pgTable(
     check(
       "interview_sessions_current_position_check",
       sql`${table.currentQuestionPosition} between 1 and ${table.selectedQuestionCount}`,
+    ),
+    check(
+      "interview_sessions_pending_operation_check",
+      sql`
+        (
+          ${table.activePhase} is distinct from 'processing'
+          and ${table.pendingOperationId} is null
+          and ${table.pendingOperationKind} is null
+          and ${table.pendingOperationQuestionPosition} is null
+          and ${table.pendingOperationAcceptedAt} is null
+          and ${table.pendingOperationPreviousPhase} is null
+        )
+        or (
+          ${table.status} = 'active'
+          and ${table.activePhase} = 'processing'
+          and ${table.pendingOperationId} is not null
+          and ${table.pendingOperationKind} is not null
+          and ${table.pendingOperationQuestionPosition} is not null
+          and ${table.pendingOperationAcceptedAt} is not null
+          and ${table.pendingOperationPreviousPhase} in ('awaiting_response', 'awaiting_continue')
+        )
+      `,
     ),
   ],
 );
@@ -382,6 +399,7 @@ export const interviewMessages = pgTable(
   {
     id: text("id").primaryKey(),
     interviewId: text("interview_id").notNull(),
+    sequence: integer("sequence").notNull(),
     questionSnapshotId: text("question_snapshot_id"),
     questionPosition: smallint("question_position"),
     role: messageRoleEnum("role").notNull(),
@@ -393,6 +411,7 @@ export const interviewMessages = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    unique("interview_messages_interview_sequence_unique").on(table.interviewId, table.sequence),
     index("interview_messages_interview_position_idx").on(
       table.interviewId,
       table.questionPosition,
@@ -417,6 +436,7 @@ export const interviewMessages = pgTable(
       "interview_messages_question_position_check",
       sql`${table.questionPosition} is null or ${table.questionPosition} >= 1`,
     ),
+    check("interview_messages_sequence_check", sql`${table.sequence} > 0`),
   ],
 );
 
@@ -440,7 +460,7 @@ export const questionEvaluations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("question_evaluations_snapshot_idx").on(table.questionSnapshotId),
+    unique("question_evaluations_snapshot_unique").on(table.questionSnapshotId),
     check(
       "question_evaluations_outcome_integrity_check",
       sql`
@@ -479,12 +499,12 @@ export const reports = pgTable(
       .references(() => user.id, { onDelete: "restrict" }),
     kind: reportKindEnum("kind").$type<ReportKind>().notNull(),
     schemaVersion: text("schema_version").notNull(),
-    snapshot: jsonb("snapshot").$type<StoredReportSnapshot>().notNull(),
+    snapshot: jsonb("snapshot").$type<ImmutableReportSnapshot>().notNull(),
     modelMetadata: jsonb("model_metadata").$type<ModelCallMetadata>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("reports_interview_idx").on(table.interviewId),
+    unique("reports_interview_unique").on(table.interviewId),
     index("reports_owner_user_idx").on(table.ownerUserId),
     foreignKey({
       name: "reports_interview_owner_fk",

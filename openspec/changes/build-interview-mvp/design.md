@@ -141,6 +141,18 @@ The database enforces one active interview per user with a partial unique constr
 
 JSONB stores versioned Rubrics, follow-up goals, model result payloads, and report snapshots where the schema is validated at the application boundary. Frequently queried lifecycle fields remain relational columns.
 
+Repository persistence is transition-oriented rather than a generic aggregate overwrite. Saves receive the previous and current Interview plus emitted events, advance or verify the optimistic version with `WHERE id = ? AND version = ?`, and persist mutable lifecycle columns, messages, evaluation replacement, and a final report in one transaction. Immutable blueprint and Operation command-input fields are never included in update sets.
+
+Application services use a PostgreSQL repository unit of work that binds Interview, Operation, and report repositories to one Drizzle transaction executor. Transaction-bound methods execute directly on that executor rather than opening nested or independent transactions, so Operation completion and aggregate/report persistence commit or roll back together.
+
+Aggregate reads reconstruct the pure domain Interview from ordered relational children and validate every persisted JSON value and cross-row invariant through domain-safe decoders. Invalid snapshots, evaluations, pending Operation metadata, or reports raise an explicit corruption error rather than being defaulted. Owner-scoped report, history, and transcript reads exclude deletion-marked interviews and accounts; complete history entries expose an overall score, while incomplete and abandoned entries do not.
+
+The accepted processing state stores the pending Operation ID alongside its kind, question position, acceptance time, and previous phase, and requires the referenced Operation to be processing. Successful completion may atomically mark it succeeded while clearing the pending reference; cancellation may atomically mark it failed while restoring the accepted aggregate version and activity. A current evaluation is unique per question snapshot and is deleted before supplement-driven reassessment; a report is unique per interview and is inserted only with the matching final aggregate transition.
+
+Every persisted interview message receives a positive per-interview sequence assigned after optimistic ownership of the aggregate row is established. Reads order by this sequence rather than message identity or timestamp, and the database enforces uniqueness per interview. The task 3.4 migration deterministically backfills existing messages by creation time and stable message ID before making the sequence required.
+
+The same migration locks interview and Operation rows while hydrating legacy pending Operation IDs. It requires exactly one processing Operation matching owner, interview, command type, accepted timestamp, expected version, and question position, and aborts before enabling the pending-state constraint when the match is missing or ambiguous.
+
 ### 7. Maintain and import the question bank as reviewed YAML
 
 The repository stores one or more YAML files per Go backend knowledge domain. A TypeBox schema validates:

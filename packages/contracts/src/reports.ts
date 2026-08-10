@@ -1,7 +1,9 @@
+import { validateImmutableReportSnapshot } from "@interview-agent/domain";
 import { type Static, Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 
 import {
+  AccountIdSchema,
   AnswerMaterialIdSchema,
   InterviewIdSchema,
   IsoTimestampSchema,
@@ -143,11 +145,20 @@ export const InternalReportEvidenceReferenceSchema = Type.Union([
   ),
 ]);
 
+export const InternalReportRubricAwardSchema = Type.Object(
+  {
+    rubricItemId: RubricItemIdSchema,
+    summary: Type.String({ minLength: 1 }),
+    awardedPoints: Type.Integer({ minimum: 1, maximum: 100 }),
+    evidence: Type.Array(InternalReportEvidenceReferenceSchema, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export const InternalReportKnowledgePointSchema = Type.Object(
   {
     rubricItemId: RubricItemIdSchema,
     summary: Type.String({ minLength: 1 }),
-    awardedPoints: Type.Integer({ minimum: 0, maximum: 100 }),
     evidence: Type.Array(InternalReportEvidenceReferenceSchema, { minItems: 1 }),
   },
   { additionalProperties: false },
@@ -161,10 +172,10 @@ const internalQuestionFeedbackProperties = {
   position: Type.Integer({ minimum: 1 }),
   displayedQuestion: Type.String({ minLength: 1 }),
   answerSummary: Type.String({ minLength: 1 }),
-  matchedKnowledgePoints: Type.Array(InternalReportKnowledgePointSchema),
+  matchedKnowledgePoints: Type.Array(InternalReportRubricAwardSchema),
   missingOrIncorrectPoints: Type.Array(InternalReportKnowledgePointSchema),
   scoreRationale: Type.String({ minLength: 1 }),
-  improvementSuggestions: Type.Array(Type.String({ minLength: 1 })),
+  improvementSuggestions: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
   evidence: Type.Array(InternalReportEvidenceReferenceSchema, { minItems: 1 }),
 } as const;
 
@@ -222,7 +233,7 @@ const publicQuestionFeedbackProperties = {
   matchedKnowledgePoints: Type.Array(Type.String({ minLength: 1 })),
   missingOrIncorrectPoints: Type.Array(Type.String({ minLength: 1 })),
   scoreRationale: Type.String({ minLength: 1 }),
-  improvementSuggestions: Type.Array(Type.String({ minLength: 1 })),
+  improvementSuggestions: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
 } as const;
 
 export const PublicReportQuestionFeedbackSchema = Type.Union([
@@ -285,14 +296,15 @@ const reportDisplayProperties = {
   interviewId: InterviewIdSchema,
   generatedAt: IsoTimestampSchema,
   overallExplanation: Type.String({ minLength: 1 }),
-  strengths: Type.Array(Type.String({ minLength: 1 })),
-  weaknesses: Type.Array(Type.String({ minLength: 1 })),
-  priorities: Type.Array(Type.String({ minLength: 1 })),
-  learningSuggestions: Type.Array(Type.String({ minLength: 1 })),
+  strengths: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  weaknesses: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  priorities: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  learningSuggestions: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
 } as const;
 
 const internalReportProperties = {
   ...reportDisplayProperties,
+  accountId: AccountIdSchema,
   schemaVersion: Type.String({ minLength: 1 }),
   modelMetadata: ModelCallMetadataSchema,
   questionVersions: Type.Array(InternalReportQuestionVersionSchema, {
@@ -427,6 +439,7 @@ export const ReportResponseSchema = Type.Union([
 
 export const ReportEvidenceReferenceSchema = InternalReportEvidenceReferenceSchema;
 export const ReportKnowledgePointSchema = InternalReportKnowledgePointSchema;
+export const ReportRubricAwardSchema = InternalReportRubricAwardSchema;
 export const ReportQuestionFeedbackSchema = InternalReportQuestionFeedbackSchema;
 export const ReportQuestionVersionSchema = InternalReportQuestionVersionSchema;
 export const CompleteReportSchema = InternalCompleteReportSnapshotSchema;
@@ -446,7 +459,12 @@ export interface ReportValidationIssue {
     | "missing_question_version"
     | "extra_question_version"
     | "duplicate_question_version"
-    | "mismatched_question_version";
+    | "mismatched_question_version"
+    | "inconsistent_domain_score"
+    | "duplicate_rubric_award"
+    | "inconsistent_question_score"
+    | "inconsistent_overall_score"
+    | "invalid_evidence_reference";
   readonly message: string;
 }
 
@@ -534,111 +552,6 @@ function totalDomainQuestionCountIssues(value: {
   ];
 }
 
-function exactDomainQuestionCountIssues(value: {
-  readonly domains: readonly {
-    readonly status: "assessed" | "unassessed";
-    readonly domain: string;
-    readonly questionCount?: number;
-  }[];
-  readonly questions: readonly { readonly domain: string }[];
-}) {
-  const actualCounts = new Map<string, number>();
-  for (const question of value.questions) {
-    actualCounts.set(question.domain, (actualCounts.get(question.domain) ?? 0) + 1);
-  }
-
-  const issues: ReportValidationIssue[] = [];
-  for (const result of value.domains) {
-    const actualCount = actualCounts.get(result.domain) ?? 0;
-    const declaredCount = result.status === "assessed" ? (result.questionCount ?? 0) : 0;
-    if (declaredCount !== actualCount) {
-      issues.push({
-        path: "/domains",
-        code: "inconsistent_domain_question_count",
-        message: `Domain ${result.domain} declares ${declaredCount} questions, but internal feedback contains ${actualCount}`,
-      });
-    }
-  }
-  return issues;
-}
-
-function questionVersionIssues(value: {
-  readonly questions: readonly {
-    readonly questionId: string;
-    readonly questionVersion: number;
-  }[];
-  readonly questionVersions: readonly {
-    readonly questionId: string;
-    readonly questionVersion: number;
-  }[];
-}) {
-  const issues: ReportValidationIssue[] = [];
-  const questionsById = new Map<string, { readonly questionVersion: number; count: number }>();
-  for (const question of value.questions) {
-    const existing = questionsById.get(question.questionId);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      questionsById.set(question.questionId, {
-        questionVersion: question.questionVersion,
-        count: 1,
-      });
-    }
-  }
-
-  for (const [questionId, question] of questionsById) {
-    if (question.count > 1) {
-      issues.push({
-        path: "/questions",
-        code: "duplicate_question_id",
-        message: `Question feedback ID ${questionId} appears ${question.count} times`,
-      });
-    }
-  }
-
-  const versionsById = new Map<string, number[]>();
-  for (const version of value.questionVersions) {
-    const versions = versionsById.get(version.questionId) ?? [];
-    versions.push(version.questionVersion);
-    versionsById.set(version.questionId, versions);
-  }
-
-  for (const [questionId, question] of questionsById) {
-    const versions = versionsById.get(questionId) ?? [];
-    if (versions.length === 0) {
-      issues.push({
-        path: "/questionVersions",
-        code: "missing_question_version",
-        message: `Missing question-version metadata for ${questionId}`,
-      });
-    } else if (versions.length > 1) {
-      issues.push({
-        path: "/questionVersions",
-        code: "duplicate_question_version",
-        message: `Question-version metadata for ${questionId} appears ${versions.length} times`,
-      });
-    } else if (versions[0] !== question.questionVersion) {
-      issues.push({
-        path: "/questionVersions",
-        code: "mismatched_question_version",
-        message: `Question-version metadata for ${questionId} is ${versions[0]}, expected ${question.questionVersion}`,
-      });
-    }
-  }
-
-  for (const questionId of versionsById.keys()) {
-    if (!questionsById.has(questionId)) {
-      issues.push({
-        path: "/questionVersions",
-        code: "extra_question_version",
-        message: `Question-version metadata contains unknown question ${questionId}`,
-      });
-    }
-  }
-
-  return issues;
-}
-
 export function validateInternalReportSnapshot(value: unknown): readonly ReportValidationIssue[] {
   if (!Check(InternalReportSnapshotSchema, value)) {
     return [...Errors(InternalReportSnapshotSchema, value)].map((error) => ({
@@ -647,12 +560,7 @@ export function validateInternalReportSnapshot(value: unknown): readonly ReportV
       message: error.message,
     }));
   }
-  return [
-    ...domainCoverageIssues(value),
-    ...questionPositionIssues(value),
-    ...exactDomainQuestionCountIssues(value),
-    ...questionVersionIssues(value),
-  ];
+  return validateImmutableReportSnapshot(value);
 }
 
 export function validateReportResponse(value: unknown): readonly ReportValidationIssue[] {
@@ -679,6 +587,7 @@ export type InternalReportEvidenceReferenceDto = Static<
   typeof InternalReportEvidenceReferenceSchema
 >;
 export type InternalReportKnowledgePointDto = Static<typeof InternalReportKnowledgePointSchema>;
+export type InternalReportRubricAwardDto = Static<typeof InternalReportRubricAwardSchema>;
 export type InternalReportQuestionFeedbackDto = Static<typeof InternalReportQuestionFeedbackSchema>;
 export type PublicReportQuestionFeedbackDto = Static<typeof PublicReportQuestionFeedbackSchema>;
 export type InternalReportQuestionVersionDto = Static<typeof InternalReportQuestionVersionSchema>;
@@ -692,6 +601,7 @@ export type IncompleteReportResponseDto = Static<typeof IncompleteReportResponse
 export type ReportResponseDto = Static<typeof ReportResponseSchema>;
 export type ReportEvidenceReferenceDto = InternalReportEvidenceReferenceDto;
 export type ReportKnowledgePointDto = InternalReportKnowledgePointDto;
+export type ReportRubricAwardDto = InternalReportRubricAwardDto;
 export type ReportQuestionFeedbackDto = InternalReportQuestionFeedbackDto;
 export type ReportQuestionVersionDto = InternalReportQuestionVersionDto;
 export type CompleteReportDto = InternalCompleteReportSnapshotDto;

@@ -116,6 +116,7 @@ describe("interview persistence PostgreSQL schema", () => {
       "active_phase",
       "version",
       "current_question_position",
+      "pending_operation_id",
       "pending_operation_kind",
       "pending_operation_question_position",
       "pending_operation_accepted_at",
@@ -199,6 +200,11 @@ describe("interview persistence PostgreSQL schema", () => {
       "operations_id_interview_fk_target_unique",
       "operations_owner_scope_idempotency_unique",
     ]);
+    expect(uniqueConstraintNames(interviewMessages)).toContain(
+      "interview_messages_interview_sequence_unique",
+    );
+    expect(interviewMessages.sequence.notNull).toBe(true);
+    expect(checkNames(interviewMessages)).toContain("interview_messages_sequence_check");
 
     const oneOpenInterviewIndex = getTableConfig(interviewSessions).indexes[0]?.config;
     expect(oneOpenInterviewIndex?.unique).toBe(true);
@@ -210,6 +216,7 @@ describe("interview persistence PostgreSQL schema", () => {
       "interview_sessions_selected_question_count_check",
       "interview_sessions_version_check",
       "interview_sessions_current_position_check",
+      "interview_sessions_pending_operation_check",
     ]);
     expect(checkNames(sessionQuestionSnapshots)).toContain(
       "session_question_snapshots_position_check",
@@ -284,12 +291,14 @@ describe("interview persistence PostgreSQL schema", () => {
 
   it("derives aggregate children without cyclic report or evaluation pointers", () => {
     expect(columnNames(interviewSessions)).not.toContain("report_id");
-    expect(columnNames(interviewSessions)).not.toContain("pending_operation_id");
+    expect(columnNames(interviewSessions)).toContain("pending_operation_id");
     expect(columnNames(sessionQuestionSnapshots)).not.toContain("current_evaluation_id");
     expect(columnNames(questionEvaluations)).not.toContain("interview_id");
     expect(columnNames(questionEvaluations)).not.toContain("operation_id");
-    expect(indexNames(reports)).toContain("reports_interview_idx");
-    expect(indexNames(questionEvaluations)).toContain("question_evaluations_snapshot_idx");
+    expect(uniqueConstraintNames(reports)).toContain("reports_interview_unique");
+    expect(uniqueConstraintNames(questionEvaluations)).toContain(
+      "question_evaluations_snapshot_unique",
+    );
   });
 
   it("uses timestamptz for every business absolute instant", () => {

@@ -4,7 +4,6 @@ import type {
   FollowUpGoalId,
   InterviewId,
   QuestionId,
-  ReportId,
 } from "./identifiers.js";
 import type {
   AnswerMaterial,
@@ -22,10 +21,17 @@ import type {
   UnevaluatedQuestionOutcome,
 } from "./interview.js";
 
-export interface InterviewRepository<Interview> {
-  findById(interviewId: InterviewId): Promise<Interview | null>;
+export interface AggregateChange<Aggregate, Event> {
+  readonly previous: Aggregate;
+  readonly current: Aggregate;
+  readonly events: readonly Event[];
+}
+
+export interface InterviewRepository<Interview, SaveChange> {
+  findById(interviewId: InterviewId, accountId?: AccountId): Promise<Interview | null>;
   findActiveByAccountId(accountId: AccountId): Promise<Interview | null>;
-  save(interview: Interview, expectedVersion: number): Promise<void>;
+  create(interview: Interview): Promise<void>;
+  save(change: SaveChange): Promise<void>;
 }
 
 export interface QuestionBankRepository {
@@ -46,9 +52,9 @@ export interface BlueprintSelector {
   }): InterviewBlueprint;
 }
 
-export interface ReportRepository<Report> {
-  findByInterviewId(interviewId: InterviewId): Promise<Report | null>;
-  insert(reportId: ReportId, interviewId: InterviewId, report: Report): Promise<void>;
+export interface ReportRepository<Report, NewReport> {
+  findByInterviewId(interviewId: InterviewId, accountId: AccountId): Promise<Report | null>;
+  insert(report: NewReport): Promise<void>;
 }
 
 export interface ModelCallMetadata {

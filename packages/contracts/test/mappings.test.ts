@@ -733,39 +733,45 @@ describe("score and report mappings", () => {
         ? { status: "assessed", domain, score: 80, questionCount: 1 }
         : { status: "unassessed", domain },
     );
-    const questions = Array.from({ length: 5 }, (_, index) => ({
-      questionId: `question-${index + 1}`,
-      questionVersion: 7,
-      domain: domains[index]?.domain,
-      position: index + 1,
-      displayedQuestion: `问题 ${index + 1}`,
-      answerSummary: "回答摘要",
-      outcome: "scored",
-      score: 80,
-      matchedKnowledgePoints: [
-        {
-          rubricItemId: `rubric-${index + 1}`,
-          summary: "匹配知识点",
-          awardedPoints: 80,
-          evidence: [{ source: "answer_material", answerMaterialId: `answer-${index + 1}` }],
-        },
-      ],
-      missingOrIncorrectPoints: [
-        {
-          rubricItemId: `rubric-missing-${index + 1}`,
-          summary: "缺失知识点",
-          awardedPoints: 0,
-          evidence: [{ source: "question_snapshot", questionId: `question-${index + 1}` }],
-        },
-      ],
-      scoreRationale: "评分理由",
-      improvementSuggestions: ["改进建议"],
-      evidence: [{ source: "answer_material", answerMaterialId: `answer-${index + 1}` }],
-    }));
+    const questions = Array.from({ length: 5 }, (_, index) => {
+      const questionId = `question-${index + 1}`;
+      return {
+        questionId,
+        questionVersion: 7,
+        domain: domains[index]?.domain,
+        position: index + 1,
+        displayedQuestion: `问题 ${index + 1}`,
+        answerSummary: "回答摘要",
+        outcome: "scored",
+        score: 80,
+        matchedKnowledgePoints: [
+          {
+            rubricItemId: `rubric-${index + 1}`,
+            summary: "匹配知识点",
+            awardedPoints: 80,
+            evidence: [{ source: "answer_material", answerMaterialId: `answer-${index + 1}` }],
+          },
+        ],
+        missingOrIncorrectPoints: [
+          {
+            rubricItemId: `rubric-${index + 1}`,
+            summary: "缺失知识点",
+            evidence: [{ source: "question_snapshot", questionId }],
+          },
+        ],
+        scoreRationale: "评分理由",
+        improvementSuggestions: ["改进建议"],
+        evidence: [
+          { source: "answer_material", answerMaterialId: `answer-${index + 1}` },
+          { source: "question_snapshot", questionId },
+        ],
+      };
+    });
     const internal = {
       kind: "complete",
       reportId: "report-1",
       interviewId: "interview-1",
+      accountId: "account-1",
       generatedAt: occurredAt,
       overallExplanation: "总体说明",
       strengths: ["优势"],

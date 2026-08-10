@@ -1,3 +1,4 @@
+import { validateImmutableReportSnapshot } from "@interview-agent/domain";
 import { Check, Errors } from "typebox/value";
 import { describe, expect, it } from "vitest";
 
@@ -142,7 +143,7 @@ const internalReportQuestion = {
     {
       rubricItemId: "go.context.001.cancel",
       summary: "能够说明取消信号沿调用链传播",
-      awardedPoints: 50,
+      awardedPoints: 80,
       evidence: [
         {
           source: "answer_material",
@@ -153,9 +154,8 @@ const internalReportQuestion = {
   ],
   missingOrIncorrectPoints: [
     {
-      rubricItemId: "go.context.001.deadline",
+      rubricItemId: "go.context.001.cancel",
       summary: "未准确说明 Value 的请求范围限制",
-      awardedPoints: 0,
       evidence: [
         {
           source: "question_snapshot",
@@ -170,6 +170,10 @@ const internalReportQuestion = {
     {
       source: "answer_material",
       answerMaterialId: "answer-1",
+    },
+    {
+      source: "question_snapshot",
+      questionId: "go.context.001",
     },
   ],
 };
@@ -186,12 +190,23 @@ const publicReportQuestion = {
   improvementSuggestions: ["复习 Context Value 只应承载请求范围数据的约束。"],
 };
 
-const internalReportQuestions = Array.from({ length: 5 }, (_, index) => ({
-  ...internalReportQuestion,
-  questionId: `go.question.${index + 1}`,
-  domain: incompleteDomains[index]?.domain,
-  position: index + 1,
-}));
+const internalReportQuestions = Array.from({ length: 5 }, (_, index) => {
+  const questionId = `go.question.${index + 1}`;
+  return {
+    ...internalReportQuestion,
+    questionId,
+    domain: incompleteDomains[index]?.domain,
+    position: index + 1,
+    missingOrIncorrectPoints: internalReportQuestion.missingOrIncorrectPoints.map((point) => ({
+      ...point,
+      evidence: [{ source: "question_snapshot" as const, questionId }],
+    })),
+    evidence: [
+      ...internalReportQuestion.evidence.slice(0, 1),
+      { source: "question_snapshot" as const, questionId },
+    ],
+  };
+});
 
 const publicReportQuestions = Array.from({ length: 5 }, (_, index) => ({
   ...publicReportQuestion,
@@ -212,6 +227,7 @@ const reportDisplay = {
 
 const internalReport = {
   ...reportDisplay,
+  accountId: "account-1",
   schemaVersion: "1.0",
   questions: internalReportQuestions,
   modelMetadata,
@@ -791,6 +807,75 @@ describe("internal and public report schemas", () => {
       ]),
     );
   });
+
+  it("agrees with domain validation on complete-report domain coverage", () => {
+    const questions = internalReportQuestions.map((question, index) =>
+      index === 4 ? { ...question, domain: "go_language" as const } : question,
+    );
+    const invalidDomains = incompleteDomains.map((result, index) =>
+      index === 0
+        ? { status: "assessed" as const, domain: result.domain, score: 80, questionCount: 2 }
+        : index < 4
+          ? { status: "assessed" as const, domain: result.domain, score: 80, questionCount: 1 }
+          : { status: "unassessed" as const, domain: result.domain },
+    );
+    const snapshot = {
+      kind: "complete",
+      ...internalReport,
+      domains: invalidDomains,
+      questions,
+      overallScore: 80,
+    } as const;
+
+    expect(validateImmutableReportSnapshot(snapshot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "inconsistent_domain_question_count" }),
+      ]),
+    );
+    expect(validateInternalReportSnapshot(snapshot)).not.toEqual([]);
+  });
+
+  it.each(["1", "2026-08-01", "2026-08-01T00:00:00+24:00", "2026-08-01T00:00:00+08:60"])(
+    "rejects non-canonical report timestamp %s",
+    (generatedAt) => {
+      const internal = {
+        kind: "complete",
+        ...internalReport,
+        generatedAt,
+        overallScore: 80,
+      };
+      const publicValue = {
+        kind: "complete",
+        ...publicReport,
+        generatedAt,
+        overallScore: 80,
+      };
+      expect(Check(InternalCompleteReportSnapshotSchema, internal)).toBe(false);
+      expect(Check(CompleteReportResponseSchema, publicValue)).toBe(false);
+      expect(validateInternalReportSnapshot(internal)).not.toEqual([]);
+      expect(validateReportResponse(publicValue)).not.toEqual([]);
+    },
+  );
+
+  it.each(["2026-08-01T00:00:00Z", "2026-08-01T08:00:00.123+08:00"])(
+    "accepts canonical report timestamp %s",
+    (generatedAt) => {
+      const internal = {
+        kind: "complete",
+        ...internalReport,
+        generatedAt,
+        overallScore: 80,
+      };
+      const publicValue = {
+        kind: "complete",
+        ...publicReport,
+        generatedAt,
+        overallScore: 80,
+      };
+      expect(validateInternalReportSnapshot(internal)).toEqual([]);
+      expect(validateReportResponse(publicValue)).toEqual([]);
+    },
+  );
 
   it("requires complete and incomplete feedback positions to be unique and contiguous", () => {
     const complete = {

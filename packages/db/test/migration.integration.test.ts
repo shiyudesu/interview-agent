@@ -146,6 +146,56 @@ async function applyInitialMigrations(pool: Pool): Promise<void> {
   }
 }
 
+async function applyThroughMigration0002(pool: Pool): Promise<void> {
+  await applyInitialMigrations(pool);
+  await applySqlMigration(pool, "0002_interview_constraints.sql");
+}
+
+async function seedLegacyPendingOperationState(
+  pool: Pool,
+  interviewId: string,
+  matchingOperationCount: number,
+): Promise<void> {
+  const ownerUserId = `${interviewId}-owner`;
+  const acceptedAt = "2026-08-01T00:00:10.000Z";
+  await pool.query(
+    `insert into "user" (id, name, email)
+     values ($1, $1, $2)`,
+    [ownerUserId, `${ownerUserId}@example.com`],
+  );
+  await createInterviewWithBlueprint(pool, interviewId, ownerUserId);
+  for (let index = 0; index < matchingOperationCount; index += 1) {
+    await pool.query(
+      `insert into operations
+         (id, owner_user_id, interview_id, idempotency_scope, idempotency_key, type, status,
+          expected_version, attempt_count, lease_acquired_at, lease_expires_at, input,
+          created_at, updated_at)
+       values ($1, $2, $3, 'submit_answer', $4, 'submit_answer', 'processing',
+               1, 1, $5::timestamptz, $5::timestamptz + interval '1 minute',
+               jsonb_build_object('questionPosition', 1), $5::timestamptz, $5::timestamptz)`,
+      [
+        `${interviewId}-operation-${index + 1}`,
+        ownerUserId,
+        interviewId,
+        `${interviewId}-key-${index + 1}`,
+        acceptedAt,
+      ],
+    );
+  }
+  await pool.query(
+    `update interview_sessions
+        set active_phase = 'processing',
+            version = 2,
+            pending_operation_kind = 'answer_analysis',
+            pending_operation_question_position = 1,
+            pending_operation_accepted_at = $2::timestamptz,
+            pending_operation_previous_phase = 'awaiting_response',
+            last_effective_activity_at = $2::timestamptz
+      where id = $1`,
+    [interviewId, acceptedAt],
+  );
+}
+
 async function seedUpgradeBlueprint(
   pool: Pool,
   interviewId: string,
@@ -453,6 +503,188 @@ describe.sequential("database migration CLI", () => {
     }
   }, 120_000);
 
+  it("backfills deterministic per-interview message sequences before enforcing uniqueness", async () => {
+    const databaseName = "upgrade_message_sequence";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyInitialMigrations(pool);
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('message-owner', 'Message Owner', 'message-owner@example.com')`,
+      );
+      await createInterviewWithBlueprint(pool, "message-interview", "message-owner");
+      await applySqlMigration(pool, "0002_interview_constraints.sql");
+      await pool.query(
+        `insert into interview_messages
+           (id, interview_id, question_snapshot_id, question_position, role, kind,
+            answer_material_kind, content, created_at)
+         values
+           ('message-b', 'message-interview', 'message-interview-snapshot-1', 1, 'user',
+            'main_answer', 'main_answer', 'B', '2026-08-01T00:00:00Z'),
+           ('message-a', 'message-interview', 'message-interview-snapshot-1', 1, 'user',
+            'supplement', 'supplement', 'A', '2026-08-01T00:00:00Z'),
+           ('message-c', 'message-interview', 'message-interview-snapshot-1', 1, 'user',
+            'follow_up_answer', 'follow_up_answer', 'C', '2026-08-01T00:00:01Z')`,
+      );
+
+      await expect(
+        applySqlMigration(pool, "0003_repository_invariants.sql"),
+      ).resolves.toBeUndefined();
+      const rows = await pool.query<{ id: string; sequence: number }>(
+        `select id, sequence
+           from interview_messages
+          where interview_id = 'message-interview'
+          order by sequence`,
+      );
+      expect(rows.rows).toEqual([
+        { id: "message-a", sequence: 1 },
+        { id: "message-b", sequence: 2 },
+        { id: "message-c", sequence: 3 },
+      ]);
+      await expect(
+        pool.query(
+          `insert into interview_messages
+             (id, interview_id, sequence, question_snapshot_id, question_position, role, kind,
+              answer_material_kind, content)
+           values
+             ('message-duplicate', 'message-interview', 3, 'message-interview-snapshot-1', 1,
+              'user', 'supplement', 'supplement', 'duplicate')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23505",
+        constraint: "interview_messages_interview_sequence_unique",
+      });
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("hydrates a uniquely matchable legacy pending Operation during the 0003 upgrade", async () => {
+    const databaseName = "upgrade_pending_unique";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0002(pool);
+      await seedLegacyPendingOperationState(pool, "pending-unique-interview", 1);
+
+      await expect(
+        applySqlMigration(pool, "0003_repository_invariants.sql"),
+      ).resolves.toBeUndefined();
+      const result = await pool.query<{ pending_operation_id: string }>(
+        `select pending_operation_id
+           from interview_sessions
+          where id = 'pending-unique-interview'`,
+      );
+      expect(result.rows).toEqual([
+        { pending_operation_id: "pending-unique-interview-operation-1" },
+      ]);
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("fails the 0003 upgrade when legacy pending metadata has no matching Operation", async () => {
+    const databaseName = "upgrade_pending_missing";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0002(pool);
+      await seedLegacyPendingOperationState(pool, "pending-missing-interview", 0);
+
+      await expect(applySqlMigration(pool, "0003_repository_invariants.sql")).rejects.toThrow(
+        "cannot backfill pending_operation_id for interview pending-missing-interview: expected exactly one matching processing Operation, found 0",
+      );
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("fails the 0003 upgrade when a processing interview lacks complete pending metadata", async () => {
+    const databaseName = "upgrade_pending_incomplete";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0002(pool);
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('pending-incomplete-owner', 'Pending Incomplete',
+                 'pending-incomplete@example.com')`,
+      );
+      await createInterviewWithBlueprint(
+        pool,
+        "pending-incomplete-interview",
+        "pending-incomplete-owner",
+      );
+      await pool.query(
+        `update interview_sessions
+            set active_phase = 'processing',
+                version = 2
+          where id = 'pending-incomplete-interview'`,
+      );
+
+      await expect(applySqlMigration(pool, "0003_repository_invariants.sql")).rejects.toThrow(
+        "cannot backfill pending_operation_id for interview pending-incomplete-interview: processing state lacks complete pending metadata",
+      );
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("fails the 0003 upgrade rather than guessing among matching Operations", async () => {
+    const databaseName = "upgrade_pending_ambiguous";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0002(pool);
+      await seedLegacyPendingOperationState(pool, "pending-ambiguous-interview", 2);
+
+      await expect(applySqlMigration(pool, "0003_repository_invariants.sql")).rejects.toThrow(
+        "cannot backfill pending_operation_id for interview pending-ambiguous-interview: expected exactly one matching processing Operation, found 2",
+      );
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("upgrades clean post-0002 interview state through 0003", async () => {
+    const databaseName = "upgrade_pending_clean";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, databaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0002(pool);
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('pending-clean-owner', 'Pending Clean', 'pending-clean@example.com')`,
+      );
+      await createInterviewWithBlueprint(pool, "pending-clean-interview", "pending-clean-owner");
+
+      await expect(
+        applySqlMigration(pool, "0003_repository_invariants.sql"),
+      ).resolves.toBeUndefined();
+      const result = await pool.query<{ pending_operation_id: string | null }>(
+        `select pending_operation_id
+           from interview_sessions
+          where id = 'pending-clean-interview'`,
+      );
+      expect(result.rows).toEqual([{ pending_operation_id: null }]);
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
   it("rejects cross-owner and cross-interview aggregate links", async () => {
     const pool = new Pool({ connectionString: databaseUrl });
 
@@ -530,8 +762,8 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `insert into interview_messages
-             (id, interview_id, question_snapshot_id, role, kind, content)
-           values ('cross-interview-snapshot-message', 'aggregate-interview-b',
+             (id, interview_id, sequence, question_snapshot_id, role, kind, content)
+           values ('cross-interview-snapshot-message', 'aggregate-interview-b', 1,
                    'aggregate-interview-a-snapshot-1', 'assistant', 'main_question', 'Question')`,
         ),
       ).rejects.toMatchObject({
@@ -542,13 +774,94 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `insert into interview_messages
-             (id, interview_id, role, kind, content, operation_id)
-           values ('cross-interview-operation-message', 'aggregate-interview-b',
+             (id, interview_id, sequence, role, kind, content, operation_id)
+           values ('cross-interview-operation-message', 'aggregate-interview-b', 2,
                    'assistant', 'transition', 'Transition', 'aggregate-operation-a')`,
         ),
       ).rejects.toMatchObject({
         code: "23503",
         constraint: "interview_messages_operation_aggregate_fk",
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("couples processing phase to complete pending metadata on inserts and updates", async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+
+    try {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('processing-check-owner', 'Processing Check',
+                 'processing-check@example.com')`,
+      );
+
+      await expect(
+        pool.query(
+          `insert into interview_sessions
+             (id, owner_user_id, selected_question_count, selection_seed, active_phase)
+           values ('processing-insert-missing', 'processing-check-owner', 5, 'missing-seed',
+                   'processing')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "interview_sessions_pending_operation_check",
+      });
+
+      await expect(
+        pool.query(
+          `insert into interview_sessions
+             (id, owner_user_id, selected_question_count, selection_seed,
+              pending_operation_id, pending_operation_kind,
+              pending_operation_question_position, pending_operation_accepted_at,
+              pending_operation_previous_phase)
+           values ('pending-insert-nonprocessing', 'processing-check-owner', 5,
+                   'nonprocessing-seed', 'operation-id', 'answer_analysis', 1, now(),
+                   'awaiting_response')`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "interview_sessions_pending_operation_check",
+      });
+
+      await createInterviewWithBlueprint(
+        pool,
+        "processing-check-interview",
+        "processing-check-owner",
+      );
+      await expect(
+        pool.query(
+          `update interview_sessions
+              set active_phase = 'processing',
+                  pending_operation_id = 'processing-check-operation',
+                  pending_operation_kind = 'answer_analysis',
+                  pending_operation_question_position = 1,
+                  pending_operation_accepted_at = now(),
+                  pending_operation_previous_phase = 'awaiting_response'
+            where id = 'processing-check-interview'`,
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      await expect(
+        pool.query(
+          `update interview_sessions
+              set status = 'report_pending'
+            where id = 'processing-check-interview'`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "interview_sessions_pending_operation_check",
+      });
+      await expect(
+        pool.query(
+          `update interview_sessions
+              set active_phase = 'awaiting_response'
+            where id = 'processing-check-interview'`,
+        ),
+      ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "interview_sessions_pending_operation_check",
       });
     } finally {
       await pool.end();
@@ -565,13 +878,23 @@ describe.sequential("database migration CLI", () => {
         ["valid-irrelevant-evaluation", "irrelevant", "irrelevant", 0, "irrelevant"],
       ] as const;
 
-      for (const [id, classification, outcome, score, reason] of validEvaluations) {
+      for (const [
+        index,
+        [id, classification, outcome, score, reason],
+      ] of validEvaluations.entries()) {
         await pool.query(
           `insert into question_evaluations
              (id, question_snapshot_id, classification, rubric_results, outcome_kind, score,
               zero_score_reason, model_metadata)
-             values ($1, 'aggregate-interview-a-snapshot-1', $2, '[]', $3, $4, $5, '{}')`,
-          [id, classification, outcome, score, reason],
+             values ($1, $2, $3, '[]', $4, $5, $6, '{}')`,
+          [
+            id,
+            `aggregate-interview-a-snapshot-${index + 1}`,
+            classification,
+            outcome,
+            score,
+            reason,
+          ],
         );
       }
 
@@ -603,7 +926,7 @@ describe.sequential("database migration CLI", () => {
             `insert into question_evaluations
                (id, question_snapshot_id, classification, rubric_results, outcome_kind, score,
                 zero_score_reason, model_metadata)
-               values ($1, 'aggregate-interview-a-snapshot-1', $2, '[]', $3, $4, $5, '{}')`,
+               values ($1, 'aggregate-interview-a-snapshot-4', $2, '[]', $3, $4, $5, '{}')`,
             [id, classification, outcome, score, reason],
           ),
         ).rejects.toMatchObject({
@@ -858,25 +1181,22 @@ describe.sequential("database migration CLI", () => {
       await expect(
         pool.query(
           `update interview_sessions
-              set status = 'report_pending', active_phase = 'processing', version = version + 1,
+              set status = 'report_pending', active_phase = null, version = version + 1,
                   current_question_position = 5, last_effective_activity_at = now(),
-                  pending_operation_kind = 'answer_analysis',
-                  pending_operation_question_position = 5,
-                  pending_operation_accepted_at = now(),
-                  pending_operation_previous_phase = 'awaiting_response',
                   pending_report_kind = 'complete', report_requested_at = now()
             where id = 'frozen-blueprint-interview'`,
         ),
       ).resolves.toMatchObject({ rowCount: 1 });
 
       const mutableState = await pool.query<{
-        active_phase: string;
+        active_phase: string | null;
         current_question_position: number;
         last_effective_activity_at: Date;
-        pending_operation_accepted_at: Date;
-        pending_operation_kind: string;
-        pending_operation_previous_phase: string;
-        pending_operation_question_position: number;
+        pending_operation_accepted_at: Date | null;
+        pending_operation_id: string | null;
+        pending_operation_kind: string | null;
+        pending_operation_previous_phase: string | null;
+        pending_operation_question_position: number | null;
         pending_report_kind: string;
         report_requested_at: Date;
         status: string;
@@ -884,7 +1204,7 @@ describe.sequential("database migration CLI", () => {
       }>(
         `select status, active_phase, version, current_question_position,
                 last_effective_activity_at,
-                pending_operation_kind, pending_operation_question_position,
+                pending_operation_id, pending_operation_kind, pending_operation_question_position,
                 pending_operation_accepted_at, pending_operation_previous_phase,
                 pending_report_kind, report_requested_at
            from interview_sessions
@@ -892,16 +1212,17 @@ describe.sequential("database migration CLI", () => {
       );
       expect(mutableState.rows[0]).toMatchObject({
         status: "report_pending",
-        active_phase: "processing",
+        active_phase: null,
         version: 2,
         current_question_position: 5,
-        pending_operation_kind: "answer_analysis",
-        pending_operation_question_position: 5,
-        pending_operation_previous_phase: "awaiting_response",
+        pending_operation_kind: null,
+        pending_operation_id: null,
+        pending_operation_question_position: null,
+        pending_operation_previous_phase: null,
         pending_report_kind: "complete",
       });
       expect(mutableState.rows[0]?.last_effective_activity_at).toBeInstanceOf(Date);
-      expect(mutableState.rows[0]?.pending_operation_accepted_at).toBeInstanceOf(Date);
+      expect(mutableState.rows[0]?.pending_operation_accepted_at).toBeNull();
       expect(mutableState.rows[0]?.report_requested_at).toBeInstanceOf(Date);
     } finally {
       client.release();
