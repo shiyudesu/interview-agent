@@ -5,21 +5,29 @@
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "drizzle"
   ],
+  "bin": {
+    "interview-agent-db-migrate": "./dist/cli/migrate.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./migrate": {
+      "types": "./dist/migrate.d.ts",
+      "default": "./dist/migrate.js"
     }
   },
   "scripts": {
     "build": "tsc -b",
     "clean": "tsc -b --clean",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "tsx src/cli/migrate.ts",
+    "test": "pnpm run build && vitest run",
+    "test:coverage": "pnpm run build && vitest run --coverage",
     "typecheck": "tsc -b --pretty false",
     "typecheck:toolchain": "tsc -p tsconfig.type-tests.json --pretty false"
   },
@@ -32,6 +40,7 @@
     "@types/pg": "catalog:",
     "drizzle-kit": "catalog:",
     "testcontainers": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

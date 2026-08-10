@@ -11,10 +11,12 @@
     },
     "db:generate": {
       "cache": false,
+      "passThroughEnv": ["DATABASE_URL"],
       "outputs": ["drizzle/**"]
     },
     "db:migrate": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "dev": {
       "cache": false,
