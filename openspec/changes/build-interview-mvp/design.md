@@ -178,7 +178,14 @@ The repository stores one or more YAML files per Go backend knowledge domain. A 
 
 CI validates the complete bank and requires at least 15 active questions in each of the six domains.
 
-Blueprint creation selects eligible questions using a persisted selection seed derived from the interview ID. The algorithm applies the 5/10/15 coverage matrix, excludes questions from the user's three most recent interviews where possible, and then uses stable seeded ordering. If avoidance leaves too few questions, it allows repeats before violating domain coverage.
+Blueprint creation reads only current active, source-active, reviewed medium questions and uses a
+versioned selection seed derived from the interview ID. For five questions, it omits the feasible
+domain that minimizes unavoidable recent-question reuse, using the seed as the deterministic
+tie-breaker. For ten questions, it first reserves two Go, two concurrency/runtime/performance, and
+one from every other domain; for fifteen, it first reserves two from every domain. Remaining flexible
+slots are filled from a global stable seeded ordering of unseen candidates before any recent
+candidate is considered. A shortage is returned before a partial blueprint when mandatory domain
+coverage or total eligible capacity cannot be satisfied.
 
 The complete selected question, Rubric, follow-up goals, and version are copied into session snapshots. Historical interviews never read live question-bank rows.
 

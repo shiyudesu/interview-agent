@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 
-import { normalizeQuestionBankSourcePath, type QuestionDefinition } from "@interview-agent/domain";
+import {
+  type AccountId,
+  normalizeQuestionBankSourcePath,
+  parseQuestionId,
+  type QuestionBankRepository,
+  type QuestionDefinition,
+  type QuestionId,
+  type QuestionSnapshot,
+} from "@interview-agent/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Database } from "../client.js";
@@ -12,6 +20,7 @@ import {
   RepositoryImmutableConflictError,
 } from "./errors.js";
 import { RepositoryExecution } from "./transaction.js";
+import { decodeFollowUpGoalsAt, decodeRubricAt } from "./validation.js";
 
 type QuestionBankVersionRow = typeof questionBankVersions.$inferSelect;
 
@@ -191,7 +200,7 @@ function validateRequest(request: QuestionBankImportRequest): void {
   }
 }
 
-export class PgQuestionBankRepository {
+export class PgQuestionBankRepository implements QuestionBankRepository {
   private readonly execution: RepositoryExecution;
 
   constructor(
@@ -199,6 +208,109 @@ export class PgQuestionBankRepository {
     execution: RepositoryExecution = new RepositoryExecution(database),
   ) {
     this.execution = execution;
+  }
+
+  listEligibleQuestions(): Promise<readonly QuestionSnapshot[]> {
+    return this.execution.inTransaction(
+      async (executor) => {
+        const rows = await executor
+          .select()
+          .from(questionBankVersions)
+          .where(
+            and(
+              eq(questionBankVersions.active, true),
+              eq(questionBankVersions.sourceActive, true),
+              eq(questionBankVersions.reviewed, true),
+              eq(questionBankVersions.difficulty, "medium"),
+            ),
+          )
+          .orderBy(asc(questionBankVersions.questionId), asc(questionBankVersions.contentVersion));
+        return rows.map(questionSnapshotFromRow);
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+  }
+
+  findQuestion(questionId: QuestionId, questionVersion: number): Promise<QuestionSnapshot | null> {
+    if (!Number.isInteger(questionVersion) || questionVersion < 1) {
+      throw new RangeError("Question version must be a positive integer");
+    }
+    return this.execution.inTransaction(
+      async (executor) => {
+        const rows = await executor
+          .select()
+          .from(questionBankVersions)
+          .where(
+            and(
+              eq(questionBankVersions.questionId, questionId),
+              eq(questionBankVersions.contentVersion, questionVersion),
+            ),
+          )
+          .limit(1);
+        return rows[0] === undefined ? null : questionSnapshotFromRow(rows[0]);
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+  }
+
+  findRecentQuestionIds(
+    accountId: AccountId,
+    recentInterviewLimit: number,
+  ): Promise<ReadonlySet<QuestionId>> {
+    if (
+      !Number.isInteger(recentInterviewLimit) ||
+      recentInterviewLimit < 1 ||
+      recentInterviewLimit > 100
+    ) {
+      throw new RangeError("Recent interview limit must be an integer from 1 through 100");
+    }
+    return this.execution.inTransaction(
+      async (executor) => {
+        const result = await executor.execute(sql<{ questionId: string }>`
+          with recent_interviews as (
+            select interview_sessions.id
+              from interview_sessions
+              inner join "user"
+                on "user".id = interview_sessions.owner_user_id
+             where interview_sessions.owner_user_id = ${accountId}
+               and interview_sessions.status in ('completed', 'early_ended', 'abandoned')
+               and interview_sessions.ended_at is not null
+               and interview_sessions.deletion_requested_at is null
+               and "user".deletion_requested_at is null
+               and not exists (
+                 select 1
+                   from deletion_requests
+                  where deletion_requests.interview_id = interview_sessions.id
+                     or (
+                       deletion_requests.scope = 'account'
+                       and deletion_requests.owner_user_id = interview_sessions.owner_user_id
+                     )
+               )
+             order by interview_sessions.ended_at desc, interview_sessions.id desc
+             limit ${recentInterviewLimit}
+          )
+          select distinct session_question_snapshots.source_question_id as "questionId"
+            from recent_interviews
+            inner join session_question_snapshots
+              on session_question_snapshots.interview_id = recent_interviews.id
+           order by "questionId"
+        `);
+        return new Set(
+          result.rows.map((row) => {
+            const questionId = row["questionId"];
+            if (typeof questionId !== "string") {
+              throw new RepositoryCorruptionError(
+                "recent interview question",
+                "unknown",
+                "source question ID is not a string",
+              );
+            }
+            return decodeQuestionId(questionId, questionId);
+          }),
+        );
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
   }
 
   synchronize(request: QuestionBankImportRequest): Promise<QuestionBankImportResult> {
@@ -344,4 +456,68 @@ export class PgQuestionBankRepository {
       };
     });
   }
+}
+
+function questionSnapshotFromRow(row: QuestionBankVersionRow): QuestionSnapshot {
+  const identity = `${row.questionId}@${row.contentVersion}`;
+  const canonicalHash = createHash("sha256")
+    .update(serializeCanonical(canonicalPersisted(row)))
+    .digest("hex");
+  if (row.sourceHash !== canonicalHash) {
+    throw new RepositoryCorruptionError(
+      "question-bank version",
+      identity,
+      "stored source hash does not match immutable content",
+    );
+  }
+  if (!Number.isInteger(row.contentVersion) || row.contentVersion < 1) {
+    throw new RepositoryCorruptionError(
+      "question-bank version",
+      identity,
+      "content version is invalid",
+    );
+  }
+  const sourceWording = requireQuestionText(row.sourceWording, identity, "source wording");
+  return {
+    questionId: decodeQuestionId(row.questionId, identity),
+    questionVersion: row.contentVersion,
+    domain: row.domain,
+    sourceWording,
+    displayedWording: sourceWording,
+    rubric: decodeRubricAt(row.rubric, {
+      resource: "question-bank version",
+      identifier: identity,
+      field: "rubric",
+    }),
+    followUpGoals: decodeFollowUpGoalsAt(row.followUpGoals, {
+      resource: "question-bank version",
+      identifier: identity,
+      field: "follow-up goals",
+    }),
+    knowledgeExplanation: requireQuestionText(
+      row.knowledgeExplanation,
+      identity,
+      "knowledge explanation",
+    ),
+  };
+}
+
+function decodeQuestionId(value: string, identity: string): QuestionId {
+  try {
+    return parseQuestionId(value);
+  } catch (error) {
+    throw new RepositoryCorruptionError(
+      "question-bank version",
+      identity,
+      "question ID is invalid",
+      { cause: error },
+    );
+  }
+}
+
+function requireQuestionText(value: string, identity: string, field: string): string {
+  if (value.trim().length === 0) {
+    throw new RepositoryCorruptionError("question-bank version", identity, `${field} is blank`);
+  }
+  return value;
 }

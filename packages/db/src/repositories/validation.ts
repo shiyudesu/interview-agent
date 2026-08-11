@@ -131,31 +131,55 @@ export function decodeRubric(
   interviewId: string,
   position: number,
 ): readonly RubricItemSnapshot[] {
+  return decodeRubricAt(value, {
+    resource: "interview",
+    identifier: interviewId,
+    field: `question ${position} rubric`,
+  });
+}
+
+export interface QuestionStructureDecodeContext {
+  readonly resource: string;
+  readonly identifier: string;
+  readonly field: string;
+}
+
+export function decodeRubricAt(
+  value: unknown,
+  context: QuestionStructureDecodeContext,
+): readonly RubricItemSnapshot[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw corruption(
-      "interview",
-      interviewId,
-      `question ${position} rubric must be a non-empty array`,
+      context.resource,
+      context.identifier,
+      `${context.field} must be a non-empty array`,
     );
   }
   const rubric = value.map((item, index) => {
     if (!isRecord(item)) {
-      throw corruption("interview", interviewId, `question ${position} rubric[${index}] invalid`);
+      throw corruption(context.resource, context.identifier, `${context.field}[${index}] invalid`);
     }
     try {
       return {
-        id: parseRubricItemId(requiredString(item["id"], "id", "interview", interviewId)),
-        description: requiredString(item["description"], "description", "interview", interviewId),
-        weight: requiredInteger(item["weight"], "weight", "interview", interviewId, 1),
+        id: parseRubricItemId(
+          requiredString(item["id"], "id", context.resource, context.identifier),
+        ),
+        description: requiredString(
+          item["description"],
+          "description",
+          context.resource,
+          context.identifier,
+        ),
+        weight: requiredInteger(item["weight"], "weight", context.resource, context.identifier, 1),
       };
     } catch (error) {
       if (error instanceof RepositoryCorruptionError) {
         throw error;
       }
       throw corruption(
-        "interview",
-        interviewId,
-        `question ${position} rubric[${index}] invalid`,
+        context.resource,
+        context.identifier,
+        `${context.field}[${index}] invalid`,
         error,
       );
     }
@@ -164,9 +188,9 @@ export function decodeRubric(
     validateRubric(rubric);
   } catch (error) {
     throw corruption(
-      "interview",
-      interviewId,
-      `question ${position} rubric violates domain rules`,
+      context.resource,
+      context.identifier,
+      `${context.field} violates domain rules`,
       error,
     );
   }
@@ -178,43 +202,48 @@ export function decodeFollowUpGoals(
   interviewId: string,
   position: number,
 ): readonly FollowUpGoalSnapshot[] {
+  return decodeFollowUpGoalsAt(value, {
+    resource: "interview",
+    identifier: interviewId,
+    field: `question ${position} follow-up goals`,
+  });
+}
+
+export function decodeFollowUpGoalsAt(
+  value: unknown,
+  context: QuestionStructureDecodeContext,
+): readonly FollowUpGoalSnapshot[] {
   if (!Array.isArray(value)) {
-    throw corruption(
-      "interview",
-      interviewId,
-      `question ${position} follow-up goals must be an array`,
-    );
+    throw corruption(context.resource, context.identifier, `${context.field} must be an array`);
   }
   const goals = value.map((item, index): FollowUpGoalSnapshot => {
     if (!isRecord(item)) {
-      throw corruption(
-        "interview",
-        interviewId,
-        `question ${position} followUpGoals[${index}] invalid`,
-      );
+      throw corruption(context.resource, context.identifier, `${context.field}[${index}] invalid`);
     }
     const kind = item["kind"];
     if (kind !== "clarification" && kind !== "depth") {
       throw corruption(
-        "interview",
-        interviewId,
-        `question ${position} followUpGoals[${index}].kind invalid`,
+        context.resource,
+        context.identifier,
+        `${context.field}[${index}].kind invalid`,
       );
     }
     try {
       return {
-        id: parseFollowUpGoalId(requiredString(item["id"], "id", "interview", interviewId)),
+        id: parseFollowUpGoalId(
+          requiredString(item["id"], "id", context.resource, context.identifier),
+        ),
         kind,
-        goal: requiredString(item["goal"], "goal", "interview", interviewId),
+        goal: requiredString(item["goal"], "goal", context.resource, context.identifier),
       };
     } catch (error) {
       if (error instanceof RepositoryCorruptionError) {
         throw error;
       }
       throw corruption(
-        "interview",
-        interviewId,
-        `question ${position} followUpGoals[${index}] invalid`,
+        context.resource,
+        context.identifier,
+        `${context.field}[${index}] invalid`,
         error,
       );
     }
@@ -224,9 +253,9 @@ export function decodeFollowUpGoals(
   for (const goal of goals) {
     if (goalIds.has(goal.id)) {
       throw corruption(
-        "interview",
-        interviewId,
-        `question ${position} has duplicate follow-up goal ${goal.id}`,
+        context.resource,
+        context.identifier,
+        `${context.field} has duplicate goal ${goal.id}`,
       );
     }
     goalIds.add(goal.id);
@@ -234,9 +263,9 @@ export function decodeFollowUpGoals(
   }
   if (!hasClarification) {
     throw corruption(
-      "interview",
-      interviewId,
-      `question ${position} has no clarification follow-up goal`,
+      context.resource,
+      context.identifier,
+      `${context.field} has no clarification goal`,
     );
   }
   return goals;

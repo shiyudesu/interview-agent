@@ -35,21 +35,23 @@ export interface InterviewRepository<Interview, SaveChange> {
 }
 
 export interface QuestionBankRepository {
-  listActiveQuestions(): Promise<readonly QuestionSnapshot[]>;
+  listEligibleQuestions(): Promise<readonly QuestionSnapshot[]>;
   findQuestion(questionId: QuestionId, questionVersion: number): Promise<QuestionSnapshot | null>;
   findRecentQuestionIds(
     accountId: AccountId,
-    completedInterviewLimit: number,
+    recentInterviewLimit: number,
   ): Promise<ReadonlySet<QuestionId>>;
 }
 
+export interface BlueprintSelectionInput {
+  readonly questionCount: InterviewQuestionCount;
+  readonly selectionSeed: string;
+  readonly eligibleQuestions: readonly QuestionSnapshot[];
+  readonly recentQuestionIds: ReadonlySet<QuestionId>;
+}
+
 export interface BlueprintSelector {
-  select(input: {
-    readonly questionCount: InterviewQuestionCount;
-    readonly selectionSeed: string;
-    readonly eligibleQuestions: readonly QuestionSnapshot[];
-    readonly recentQuestionIds: ReadonlySet<QuestionId>;
-  }): InterviewBlueprint;
+  select(input: BlueprintSelectionInput): InterviewBlueprint;
 }
 
 export interface ReportRepository<Report, NewReport> {
