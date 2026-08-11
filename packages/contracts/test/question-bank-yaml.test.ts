@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  loadQuestionBankDirectory,
   parseQuestionBankYaml,
   runQuestionBankCli,
   validateQuestionBankDirectory,
@@ -10,8 +11,37 @@ import {
 import { validateQuestionBankSource } from "../src/question-bank.js";
 
 const fixtureRoot = fileURLToPath(new URL("./fixtures/question-bank", import.meta.url));
+const repositoryQuestionBankRoot = fileURLToPath(
+  new URL("../../../question-bank", import.meta.url),
+);
 
 describe("repository question-bank YAML", () => {
+  it("provides three reviewed development questions in every domain", async () => {
+    const result = await loadQuestionBankDirectory(repositoryQuestionBankRoot);
+    const counts = new Map<string, number>();
+    for (const file of result.files) {
+      for (const question of file.questions) {
+        counts.set(question.domain, (counts.get(question.domain) ?? 0) + 1);
+      }
+    }
+
+    expect(result).toMatchObject({
+      valid: true,
+      fileCount: 6,
+      questionCount: 18,
+      activeReviewedCount: 18,
+      issues: [],
+    });
+    expect(Object.fromEntries(counts)).toEqual({
+      go_language: 3,
+      concurrency_runtime_performance: 3,
+      http_rpc_api: 3,
+      database_storage: 3,
+      cache_messaging_distributed: 3,
+      testing_observability_engineering: 3,
+    });
+  });
+
   it("accepts a representative reviewed conceptual question", async () => {
     const result = await validateQuestionBankDirectory(`${fixtureRoot}/valid`);
 

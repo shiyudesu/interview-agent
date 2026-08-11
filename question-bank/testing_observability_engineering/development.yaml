@@ -1,0 +1,98 @@
+schemaVersion: "1.0"
+domain: testing_observability_engineering
+questions:
+  - id: testing.table-driven.boundaries
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明表驱动测试如何帮助覆盖边界条件，同时避免测试之间相互污染。"
+    rubric:
+      - id: test-cases
+        description: "说明用独立案例描述输入、期望结果和边界条件"
+        weight: 40
+      - id: test-isolation
+        description: "说明每个案例需要独立状态、清理和可重复执行"
+        weight: 35
+      - id: test-diagnostics
+        description: "说明案例名称和失败信息应便于定位具体条件"
+        weight: 25
+    followUpGoals:
+      - id: testing-clarification
+        kind: clarification
+        goal: "澄清需要覆盖的输入边界和共享状态"
+      - id: testing-depth
+        kind: depth
+        goal: "说明并行执行对测试隔离的额外要求"
+    knowledgeExplanation: "表驱动测试统一表达多组输入，但仍需保证案例数据、外部资源和清理过程相互独立，并提供清晰诊断。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: observability.trace-correlation
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请说明日志、指标和 trace 在排查跨服务延迟时应如何相互关联。"
+    rubric:
+      - id: telemetry-roles
+        description: "说明指标发现趋势，trace 定位调用路径，日志提供具体上下文"
+        weight: 40
+      - id: correlation-identity
+        description: "说明使用 trace ID、请求 ID 或业务标识关联不同信号"
+        weight: 35
+      - id: telemetry-cost
+        description: "说明采样、字段基数和敏感信息会影响可观测性成本与安全"
+        weight: 25
+    followUpGoals:
+      - id: observability-clarification
+        kind: clarification
+        goal: "澄清延迟问题涉及的服务边界"
+      - id: observability-depth
+        kind: depth
+        goal: "说明高基数字段和采样策略的取舍"
+    knowledgeExplanation: "三类遥测信号解决不同问题，需要通过稳定关联标识和统一时间范围组合分析，同时控制采样、基数和敏感数据。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: engineering.incident.degradation
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "当关键下游服务故障时，请说明系统降级策略需要考虑哪些业务和工程边界。"
+    rubric:
+      - id: degradation-criticality
+        description: "说明区分核心路径、可选能力和不可接受的数据错误"
+        weight: 35
+      - id: degradation-controls
+        description: "说明超时、熔断、限流和受控回退的作用边界"
+        weight: 35
+      - id: degradation-recovery
+        description: "说明降级状态需要可观测、可恢复并避免长期隐藏故障"
+        weight: 30
+    followUpGoals:
+      - id: degradation-clarification
+        kind: clarification
+        goal: "澄清哪些功能允许暂时不可用或返回旧数据"
+      - id: degradation-depth
+        kind: depth
+        goal: "说明恢复探测和降级开关的治理方式"
+    knowledgeExplanation: "降级不是统一返回成功，而是在明确业务语义、容量和数据正确性边界后限制故障扩散，并保留恢复与告警能力。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

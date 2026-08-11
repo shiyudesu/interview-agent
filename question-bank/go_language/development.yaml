@@ -1,0 +1,92 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.context.cancellation
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 context.Context 如何在调用链中传播取消信号。"
+    rubric:
+      - id: cancellation-propagation
+        description: "说明取消信号沿派生 Context 传播"
+        weight: 60
+      - id: cancellation-cleanup
+        description: "说明接收方观察 Done 并及时释放资源"
+        weight: 40
+    followUpGoals:
+      - id: context-clarification
+        kind: clarification
+        goal: "澄清取消信号影响的调用链范围"
+      - id: context-depth
+        kind: depth
+        goal: "说明 goroutine 如何响应取消并退出"
+    knowledgeExplanation: "Context 通过 Done 通道传播取消，调用方和被调用方共同负责停止工作并释放资源。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.interface.nil-semantics
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请说明 Go 接口值在什么情况下与 nil 比较会得到意外结果。"
+    rubric:
+      - id: interface-pair
+        description: "说明接口值由动态类型和动态值共同组成"
+        weight: 50
+      - id: typed-nil
+        description: "说明包含类型信息的 nil 指针会使接口值本身不为 nil"
+        weight: 50
+    followUpGoals:
+      - id: interface-clarification
+        kind: clarification
+        goal: "澄清接口值和底层指针的区别"
+      - id: interface-depth
+        kind: depth
+        goal: "说明该语义对错误返回和依赖注入的影响"
+    knowledgeExplanation: "接口值只有在动态类型和动态值都为空时才等于 nil，带有动态类型的 nil 指针仍会形成非 nil 接口值。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.slice.append-capacity
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 slice 的长度、容量和 append 触发底层数组变化之间的关系。"
+    rubric:
+      - id: slice-length-capacity
+        description: "说明长度表示可访问元素范围，容量表示可扩展上限"
+        weight: 40
+      - id: slice-reallocation
+        description: "说明容量不足时 append 会分配新的底层数组"
+        weight: 35
+      - id: slice-sharing
+        description: "说明重新分配前后的 slice 可能具有不同的数据共享关系"
+        weight: 25
+    followUpGoals:
+      - id: slice-clarification
+        kind: clarification
+        goal: "澄清长度和容量分别约束什么"
+      - id: slice-depth
+        kind: depth
+        goal: "说明底层数组共享对数据修改和内存保留的影响"
+    knowledgeExplanation: "slice 是对底层数组区间的描述，append 在容量足够时复用数组，容量不足时会迁移到新的数组。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

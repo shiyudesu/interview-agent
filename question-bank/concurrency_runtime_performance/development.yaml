@@ -1,0 +1,98 @@
+schemaVersion: "1.0"
+domain: concurrency_runtime_performance
+questions:
+  - id: concurrency.channel.close-ownership
+    contentVersion: 1
+    domain: concurrency_runtime_performance
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明并发流程中由谁关闭 channel，以及错误的关闭责任会带来什么风险。"
+    rubric:
+      - id: channel-owner
+        description: "说明通常由明确知道不再发送数据的一方负责关闭"
+        weight: 45
+      - id: channel-risks
+        description: "说明重复关闭或向已关闭 channel 发送数据会触发运行时错误"
+        weight: 35
+      - id: channel-receive
+        description: "说明接收方可通过关闭状态判断数据流结束"
+        weight: 20
+    followUpGoals:
+      - id: channel-clarification
+        kind: clarification
+        goal: "澄清发送方和接收方各自掌握的信息"
+      - id: channel-depth
+        kind: depth
+        goal: "说明多个发送方场景中的协调方式"
+    knowledgeExplanation: "channel 的关闭应由拥有发送生命周期的一方协调，关闭只表示后续不再发送数据，不用于广播任意状态。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: concurrency.mutex.atomic-tradeoff
+    contentVersion: 1
+    domain: concurrency_runtime_performance
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较 mutex 与 atomic 在并发状态保护中的适用场景和主要取舍。"
+    rubric:
+      - id: atomic-scope
+        description: "说明 atomic 适合简单且边界清晰的单值状态变更"
+        weight: 35
+      - id: mutex-invariant
+        description: "说明 mutex 更适合保护多个字段组成的不变量"
+        weight: 40
+      - id: maintainability
+        description: "说明性能之外还要考虑可读性、正确性和竞争程度"
+        weight: 25
+    followUpGoals:
+      - id: synchronization-clarification
+        kind: clarification
+        goal: "澄清需要保护的是单个值还是复合状态"
+      - id: synchronization-depth
+        kind: depth
+        goal: "说明如何通过竞争分析验证同步策略"
+    knowledgeExplanation: "atomic 提供低层级原子操作，mutex 能表达更大的临界区；选择应优先保证不变量和可维护性。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: runtime.goroutine.leak-diagnosis
+    contentVersion: 1
+    domain: concurrency_runtime_performance
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请分析 Go 服务中 goroutine 数量持续增长的常见原因和排查思路。"
+    rubric:
+      - id: leak-causes
+        description: "说明阻塞的 channel、网络调用或缺失取消信号等常见原因"
+        weight: 45
+      - id: leak-observation
+        description: "说明结合 goroutine profile、指标和调用栈定位阻塞位置"
+        weight: 35
+      - id: leak-lifecycle
+        description: "说明为后台任务定义退出条件和生命周期所有者"
+        weight: 20
+    followUpGoals:
+      - id: leak-clarification
+        kind: clarification
+        goal: "澄清增长发生的时间范围和关联请求"
+      - id: leak-depth
+        kind: depth
+        goal: "说明如何区分正常并发波动和持续泄漏"
+    knowledgeExplanation: "goroutine 泄漏通常来自无法结束的阻塞或失去所有者的后台任务，需要结合运行时剖析和生命周期设计定位。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

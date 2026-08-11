@@ -16,6 +16,9 @@ import {
 import { runQuestionBankImportCli } from "../scripts/import-question-bank.js";
 
 const questionBankRoot = fileURLToPath(new URL("../question-bank", import.meta.url));
+const emptyQuestionBankRoot = fileURLToPath(
+  new URL("./fixtures/empty-question-bank", import.meta.url),
+);
 
 describe.sequential("question-bank import CLI", () => {
   let harness: PostgresTestHarness;
@@ -33,7 +36,7 @@ describe.sequential("question-bank import CLI", () => {
   it("imports an empty development bank as a no-op", async () => {
     const stdout: string[] = [];
     const stderr: string[] = [];
-    const code = await runQuestionBankImportCli(["--root", resolve(questionBankRoot)], {
+    const code = await runQuestionBankImportCli(["--root", resolve(emptyQuestionBankRoot)], {
       environment: { DATABASE_URL: testDatabase.databaseUrl },
       io: {
         stdout: (message) => stdout.push(message),

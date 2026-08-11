@@ -1,0 +1,98 @@
+schemaVersion: "1.0"
+domain: cache_messaging_distributed
+questions:
+  - id: cache.consistency.invalidation
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明缓存与数据库并存时常见的一致性风险和失效策略取舍。"
+    rubric:
+      - id: cache-stale-window
+        description: "说明并发读写和更新顺序会产生短暂旧数据窗口"
+        weight: 40
+      - id: cache-invalidation
+        description: "说明删除缓存、更新缓存和过期时间各自的适用条件"
+        weight: 35
+      - id: cache-failure
+        description: "说明缓存失败时的数据源回退和容量保护"
+        weight: 25
+    followUpGoals:
+      - id: cache-clarification
+        kind: clarification
+        goal: "澄清业务可以接受的一致性窗口"
+      - id: cache-depth
+        kind: depth
+        goal: "说明热点键和缓存击穿对策略选择的影响"
+    knowledgeExplanation: "缓存一致性通常依赖明确的数据源、更新顺序、失效机制和可接受的旧数据窗口，而不是追求无条件强一致。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: messaging.delivery.idempotency
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "当消息系统采用至少一次投递时，请说明消费者为什么需要幂等处理。"
+    rubric:
+      - id: delivery-duplicate
+        description: "说明确认丢失、重试或故障恢复可能造成重复投递"
+        weight: 40
+      - id: consumer-identity
+        description: "说明消费者需要用稳定业务标识识别已经处理的消息"
+        weight: 35
+      - id: transaction-boundary
+        description: "说明幂等记录与业务副作用之间需要一致的事务边界"
+        weight: 25
+    followUpGoals:
+      - id: messaging-clarification
+        kind: clarification
+        goal: "澄清重复发生在生产、传输还是消费阶段"
+      - id: messaging-depth
+        kind: depth
+        goal: "说明消息顺序和幂等状态保留时间的影响"
+    knowledgeExplanation: "至少一次投递保证消息不会轻易丢失，但允许重复；消费者必须让同一业务消息的重复处理不产生额外副作用。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: distributed.lock.lease-safety
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释分布式锁使用租约时，过期、续约和持有者身份分别解决什么问题。"
+    rubric:
+      - id: lease-expiry
+        description: "说明租约过期用于回收崩溃持有者留下的锁"
+        weight: 30
+      - id: lease-owner-token
+        description: "说明随机持有者标识用于条件续约和安全释放，但不能单独阻止旧持有者写入"
+        weight: 30
+      - id: fencing-token
+        description: "说明下游资源需要执行 fencing token 或等价原子校验以拒绝过期持有者"
+        weight: 40
+    followUpGoals:
+      - id: lock-clarification
+        kind: clarification
+        goal: "澄清锁保护的资源和最长操作时间"
+      - id: lock-depth
+        kind: depth
+        goal: "说明时钟、网络分区和旧持有者恢复带来的风险"
+    knowledgeExplanation: "租约限制锁的有效时间，持有者标识保护续约和释放操作；要阻止旧进程继续写入，还需要下游执行 fencing token 或等价原子校验。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

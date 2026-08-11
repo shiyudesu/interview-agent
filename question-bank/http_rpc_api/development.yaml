@@ -1,0 +1,98 @@
+schemaVersion: "1.0"
+domain: http_rpc_api
+questions:
+  - id: http.timeout.layering
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明 HTTP 服务中连接、请求和下游调用超时应如何分层设置。"
+    rubric:
+      - id: timeout-boundaries
+        description: "说明不同超时分别保护连接建立、请求处理和下游等待阶段"
+        weight: 45
+      - id: timeout-budget
+        description: "说明下游超时预算应小于上游请求的剩余期限"
+        weight: 35
+      - id: timeout-cleanup
+        description: "说明超时后应传播取消并及时释放相关资源"
+        weight: 20
+    followUpGoals:
+      - id: timeout-clarification
+        kind: clarification
+        goal: "澄清需要保护的请求阶段"
+      - id: timeout-depth
+        kind: depth
+        goal: "说明多级调用链中的超时预算传递"
+    knowledgeExplanation: "分层超时用于限制不同阶段的资源占用，调用链应传播 deadline，避免下游工作超过上游请求生命周期。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.idempotency.retry
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释写操作 API 为什么需要幂等设计，以及重试时应保存哪些状态。"
+    rubric:
+      - id: idempotency-risk
+        description: "说明网络超时会使客户端无法判断服务端是否已经完成处理"
+        weight: 35
+      - id: idempotency-key
+        description: "说明幂等键需要绑定调用方、操作范围和不可变请求内容"
+        weight: 40
+      - id: idempotency-result
+        description: "说明重复请求应返回原有结果而不是再次产生副作用"
+        weight: 25
+    followUpGoals:
+      - id: idempotency-clarification
+        kind: clarification
+        goal: "澄清客户端重试发生在什么失败阶段"
+      - id: idempotency-depth
+        kind: depth
+        goal: "说明请求内容冲突和幂等记录过期的处理方式"
+    knowledgeExplanation: "幂等设计通过稳定键和请求指纹记录首次执行状态，使不确定网络结果下的重试不会重复产生业务副作用。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: rpc.deadline.backpressure
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "当 RPC 下游持续变慢时，请说明 deadline、并发限制和背压分别解决什么问题。"
+    rubric:
+      - id: deadline-bound
+        description: "说明 deadline 限制单次调用等待时间并传播取消"
+        weight: 35
+      - id: concurrency-bound
+        description: "说明并发限制防止慢请求无限占用连接和执行资源"
+        weight: 35
+      - id: backpressure-signal
+        description: "说明背压让上游降低进入速率或快速失败"
+        weight: 30
+    followUpGoals:
+      - id: rpc-clarification
+        kind: clarification
+        goal: "澄清瓶颈发生在连接、队列还是下游处理阶段"
+      - id: rpc-depth
+        kind: depth
+        goal: "说明重试策略与背压之间的相互影响"
+    knowledgeExplanation: "deadline 控制单次等待，并发限制保护本地容量，背压把容量不足反馈给上游，三者共同阻止级联拥塞。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

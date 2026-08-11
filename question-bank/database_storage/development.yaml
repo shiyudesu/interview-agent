@@ -1,0 +1,98 @@
+schemaVersion: "1.0"
+domain: database_storage
+questions:
+  - id: database.transaction.isolation
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较常见事务隔离级别能够避免的并发现象和相应代价。"
+    rubric:
+      - id: isolation-anomalies
+        description: "说明脏读、不可重复读和幻读等并发现象"
+        weight: 45
+      - id: isolation-strength
+        description: "说明更强隔离通常增加冲突、等待或回滚成本"
+        weight: 35
+      - id: isolation-choice
+        description: "说明隔离级别应结合业务不变量和访问模式选择"
+        weight: 20
+    followUpGoals:
+      - id: isolation-clarification
+        kind: clarification
+        goal: "澄清需要保护的业务不变量"
+      - id: isolation-depth
+        kind: depth
+        goal: "说明 PostgreSQL MVCC 对读取和冲突处理的影响"
+    knowledgeExplanation: "事务隔离在一致性与并发能力之间取舍，选择时需要明确不可接受的异常和数据库实际实现。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.index.selectivity-order
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明复合索引的列顺序、选择性和查询条件之间的关系。"
+    rubric:
+      - id: index-prefix
+        description: "说明复合索引通常依赖可利用的前导列范围"
+        weight: 40
+      - id: index-selectivity
+        description: "说明选择性影响索引过滤能力和扫描成本"
+        weight: 35
+      - id: index-workload
+        description: "说明索引设计应依据真实查询、排序和更新负担"
+        weight: 25
+    followUpGoals:
+      - id: index-clarification
+        kind: clarification
+        goal: "澄清查询中的等值、范围和排序条件"
+      - id: index-depth
+        kind: depth
+        goal: "说明统计信息和执行计划如何帮助验证索引效果"
+    knowledgeExplanation: "复合索引的有效性取决于列顺序和查询形态，选择性、排序需求与维护成本需要一起评估。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.connection-pool.capacity
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明数据库连接池过大或过小分别会造成什么问题，以及容量应如何评估。"
+    rubric:
+      - id: pool-too-small
+        description: "说明连接过少会增加排队等待并限制吞吐量"
+        weight: 30
+      - id: pool-too-large
+        description: "说明连接过多会增加数据库调度、内存和锁竞争压力"
+        weight: 35
+      - id: pool-budget
+        description: "说明结合实例上限、服务副本数、事务时长和负载测量分配容量"
+        weight: 35
+    followUpGoals:
+      - id: pool-clarification
+        kind: clarification
+        goal: "澄清服务副本数和数据库连接上限"
+      - id: pool-depth
+        kind: depth
+        goal: "说明连接等待指标如何指导容量调整"
+    knowledgeExplanation: "连接池是应用并发与数据库容量之间的限流边界，应按整体连接预算和实际等待时间进行测量调整。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

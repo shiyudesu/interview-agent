@@ -10,7 +10,9 @@ under the matching domain directory:
 - `cache_messaging_distributed/`
 - `testing_observability_engineering/`
 
-Development validation permits an empty bank and does not enforce release counts:
+The checked-in development bank contains three reviewed questions in each domain, which is enough
+to exercise 5, 10, and 15-question selection locally. Development validation does not enforce the
+release counts:
 
 ```sh
 pnpm question-bank:validate
@@ -22,8 +24,8 @@ After applying database migrations, synchronize validated repository content wit
 DATABASE_URL=postgresql://... pnpm question-bank:import
 ```
 
-The import command also permits an empty development bank and succeeds as a no-op. Release
-cardinality remains a separate task 4.12 gate.
+The import command still permits an empty custom development bank and succeeds as a no-op. The
+checked-in fixtures are not the release bank; release cardinality remains a separate task 4.12 gate.
 
 The 90-question, 15-per-domain release gate belongs to OpenSpec task 4.12 and will use a
 separate release command.

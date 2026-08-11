@@ -31,7 +31,7 @@
 - [x] 4.2 Implement question-bank import and version synchronization into PostgreSQL without mutating historical interview snapshots.
 - [x] 4.3 Implement deterministic seeded blueprint selection for 5, 10, and 15 questions with domain coverage and recent-three-interview avoidance.
 - [x] 4.4 Complete interview-creation orchestration using the existing per-session snapshot persistence and extend the existing cross-version immutability test through that orchestration path.
-- [ ] 4.5 Add representative development fixtures for all six domains so end-to-end development can proceed before the release bank is complete.
+- [x] 4.5 Add representative development fixtures for all six domains so end-to-end development can proceed before the release bank is complete.
 - [ ] 4.6 Author and review at least 15 Go language and standard-library questions.
 - [ ] 4.7 Author and review at least 15 concurrency, runtime, and performance questions.
 - [ ] 4.8 Author and review at least 15 HTTP, RPC, and API questions.
