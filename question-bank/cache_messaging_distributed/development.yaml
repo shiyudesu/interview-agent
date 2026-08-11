@@ -96,3 +96,387 @@ questions:
       reviewedAt: "2026-08-10T00:00:00Z"
       simplifiedChineseVerified: true
       technicalTermsVerified: true
+
+  - id: cache.cache-aside.concurrent-race
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "一个采用 cache-aside 的读多写少服务在并发读写后偶尔返回旧值，请分析旧值如何产生，并说明更新与回填流程应如何降低风险。"
+    rubric:
+      - id: cache-aside-authority
+        description: "说明数据库是权威数据源，读未命中时查询并回填，写入成功后通常使缓存失效"
+        weight: 35
+      - id: cache-aside-race
+        description: "说明读未命中与并发写交错时，较晚完成的旧值回填可能覆盖失效结果并延长旧数据窗口"
+        weight: 35
+      - id: cache-aside-mitigation
+        description: "说明可结合版本校验、按键合并回填、可靠失效通知或有界 TTL 限制旧值，并监测一致性窗口"
+        weight: 30
+    followUpGoals:
+      - id: cache-aside-clarification
+        kind: clarification
+        goal: "澄清旧值出现时读请求、数据库写入和缓存失效的先后关系"
+      - id: cache-aside-depth
+        kind: depth
+        goal: "说明失效消息丢失或旧值晚回填时如何限制不一致持续时间"
+    knowledgeExplanation: "cache-aside 以数据库为权威数据源，缓存只保存可重建副本。常见写路径是先提交数据库再使缓存失效，但并发读的旧值可能在失效后晚回填，因此还需要版本约束、请求合并、可靠失效或有界 TTL 等机制控制旧数据窗口。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: cache.ttl-jitter.hot-key
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "某批缓存键总在整点集中失效，其中一个热点键会把后端流量瞬间放大。请说明 TTL、随机抖动和热点键保护应如何配合。"
+    rubric:
+      - id: ttl-freshness-capacity
+        description: "说明 TTL 同时限制旧数据存活时间和缓存占用，但过短会增加回源，过长会扩大陈旧窗口"
+        weight: 30
+      - id: ttl-jitter-distribution
+        description: "说明在基础 TTL 上加入合理随机抖动可以分散批量失效时间，但不能解决单个热点键的集中访问"
+        weight: 30
+      - id: hot-key-protection
+        description: "说明可通过请求合并、提前刷新、热点副本或本地近端缓存、短时返回旧值及后端限流保护热点键"
+        weight: 40
+    followUpGoals:
+      - id: ttl-hot-key-clarification
+        kind: clarification
+        goal: "澄清流量尖峰来自大量键同时失效还是单个热点键失效"
+      - id: ttl-hot-key-depth
+        kind: depth
+        goal: "说明允许短时旧值时如何设计提前刷新和回源保护"
+    knowledgeExplanation: "TTL 用于控制新鲜度和空间，随机抖动用于避免大量键在同一时刻过期。热点键还需要单独限制并发回源，可采用请求合并、提前刷新、分层副本或受控返回旧值，并为后端保留限流和降级边界。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: cache.failure.penetration-breakdown-avalanche
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "线上缓存命中率骤降且数据库负载激增，请区分缓存穿透、击穿和雪崩的典型成因，并说明有针对性的保护措施。"
+    rubric:
+      - id: penetration-protection
+        description: "说明穿透通常是大量查询不存在的数据，可用输入约束、空值短缓存或 Bloom Filter 减少无效回源"
+        weight: 30
+      - id: breakdown-protection
+        description: "说明击穿通常是热点键失效后并发回源，可用请求合并、互斥重建、提前刷新或受控返回旧值保护后端"
+        weight: 35
+      - id: avalanche-protection
+        description: "说明雪崩通常是大量键集中失效或缓存整体故障，需要过期抖动、分层容灾、容量预留、限流和降级"
+        weight: 35
+    followUpGoals:
+      - id: cache-failure-clarification
+        kind: clarification
+        goal: "澄清异常请求集中在不存在的键、单个热点键还是大量不同键"
+      - id: cache-failure-depth
+        kind: depth
+        goal: "说明缓存整体不可用时如何避免回源流量压垮数据库"
+    knowledgeExplanation: "缓存穿透针对不存在的数据反复回源，缓存击穿针对热点键失效后的并发重建，缓存雪崩针对大量键同时失效或缓存服务整体不可用。三者症状可能相似，但识别键分布和失败范围后才能选择正确保护手段。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: cache.local-distributed.layering
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个多副本服务需要选择进程内本地缓存、集中式分布式缓存或两级缓存，请比较它们的性能、一致性和故障取舍。"
+    rubric:
+      - id: local-cache-tradeoff
+        description: "说明本地缓存延迟低且不依赖网络，但各副本状态独立、容量重复，并会产生失效传播和命中不均问题"
+        weight: 35
+      - id: distributed-cache-tradeoff
+        description: "说明分布式缓存便于共享数据和统一容量，但增加网络延迟，并可能成为容量瓶颈或独立故障依赖"
+        weight: 35
+      - id: layered-cache-coherence
+        description: "说明两级缓存需要定义失效通知、短 TTL、版本校验或允许的旧值窗口，并设计任一层故障时的回退保护"
+        weight: 30
+    followUpGoals:
+      - id: cache-layering-clarification
+        kind: clarification
+        goal: "澄清数据更新频率、服务副本数量和可接受的旧值窗口"
+      - id: cache-layering-depth
+        kind: depth
+        goal: "说明本地缓存失效通知延迟或丢失时如何收敛到新值"
+    knowledgeExplanation: "本地缓存以更低延迟换取副本间一致性复杂度，分布式缓存以网络依赖换取共享视图和集中容量。两级缓存可以提高命中率，但必须明确权威数据源、失效传播、版本或 TTL 收敛方式以及故障时的回源边界。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: messaging.ordering.partition-key
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "订单状态事件需要按同一订单保持顺序，同时系统还要水平扩展消费能力，请说明分区键、生产重试和并发消费会怎样影响顺序。"
+    rubric:
+      - id: ordering-scope
+        description: "说明消息系统通常只在单个分区内提供顺序，全局顺序会显著限制并行能力"
+        weight: 30
+      - id: stable-partition-key
+        description: "说明同一订单需要使用稳定分区键进入同一分区，而分区数量决定消费并行度上限和热点风险"
+        weight: 35
+      - id: retry-consumer-order
+        description: "说明生产重试、多生产者并发、消费端并行处理和失败重试都可能改变业务完成顺序，需要序号校验或按键串行化"
+        weight: 35
+    followUpGoals:
+      - id: ordering-clarification
+        kind: clarification
+        goal: "澄清要求的是全局顺序还是同一业务实体内的顺序"
+      - id: ordering-depth
+        kind: depth
+        goal: "说明某条消息处理失败时如何避免后续同键消息越过它造成状态倒退"
+    knowledgeExplanation: "可扩展消息系统通常以分区为顺序边界。稳定分区键能让同一业务实体进入同一分区，但生产重试和消费端并发仍可能改变处理完成顺序，因此常需结合业务序号、按键串行处理和幂等状态转换。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: messaging.consumer-group.rebalance
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "消费者组扩缩容时频繁发生 rebalance，出现暂停、重复处理和消费延迟，请解释原因并说明如何降低影响。"
+    rubric:
+      - id: consumer-group-assignment
+        description: "说明同一消费者组会在成员之间分配分区，单个分区同一时刻通常只由组内一个成员负责，因此并行度受分区数限制"
+        weight: 30
+      - id: rebalance-state-transfer
+        description: "说明成员加入、离开或超时会触发分区撤销与重新分配，期间可能暂停消费并转移处理位置"
+        weight: 35
+      - id: rebalance-offset-safety
+        description: "说明应协调处理完成与 offset 提交，采用幂等消费、优雅退出、合理心跳和处理时限，并减少不必要的成员波动"
+        weight: 35
+    followUpGoals:
+      - id: rebalance-clarification
+        kind: clarification
+        goal: "澄清 rebalance 由部署扩缩容、消费者超时还是处理时间过长触发"
+      - id: rebalance-depth
+        kind: depth
+        goal: "说明分区被撤销时正在处理的消息和 offset 应如何安全收尾"
+    knowledgeExplanation: "消费者组通过分区分配实现并行消费。成员变化或存活判断失败会触发 rebalance，分区交接期间可能暂停；如果业务处理与 offset 提交边界不清，还会产生重复或丢失风险。稳定成员、合理超时、优雅撤销和幂等处理可以降低影响。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: messaging.retry.dead-letter
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "消费者同时会遇到临时下游故障和永久格式错误，请说明重试、退避和死信处理应如何设计，避免故障消息拖垮正常流量。"
+    rubric:
+      - id: retry-error-classification
+        description: "说明需要区分可恢复的临时错误、限流错误和永久无效消息，避免对确定失败进行无意义重试"
+        weight: 35
+      - id: retry-bounded-backoff
+        description: "说明重试应有次数和时间上限，并采用带抖动的退避或独立重试通道，避免忙等、同步重试风暴或长期阻塞分区"
+        weight: 35
+      - id: dead-letter-operations
+        description: "说明死信需要保留失败原因和必要上下文，建立告警、修复、受控重放及幂等保护，不能把死信队列当作最终成功"
+        weight: 30
+    followUpGoals:
+      - id: retry-dead-letter-clarification
+        kind: clarification
+        goal: "澄清失败是否具有可重试性，以及当前重试是否阻塞原分区"
+      - id: retry-dead-letter-depth
+        kind: depth
+        goal: "说明死信修复后批量重放如何避免重复副作用和再次冲击下游"
+    knowledgeExplanation: "可靠重试需要先分类错误，再使用有界次数、退避和抖动控制负载。永久失败或超过预算的消息进入死信通道后仍需监控、修复和受控重放；消费端幂等性贯穿首次处理、自动重试和人工重放全过程。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: messaging.outbox-inbox.atomicity
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个下单事务既要保存订单又要发布事件，并且消费方不能重复扣减库存，请说明 outbox 与 inbox 模式如何缩小双写不一致窗口。"
+    rubric:
+      - id: outbox-local-transaction
+        description: "说明订单状态与 outbox 事件应在同一本地数据库事务中提交，再由独立发布流程把待发事件送往消息系统"
+        weight: 40
+      - id: relay-at-least-once
+        description: "说明发布流程在崩溃或确认不确定时可能重复发送，需要稳定事件标识、重试和发布状态管理"
+        weight: 25
+      - id: inbox-consumer-transaction
+        description: "说明消费方可在同一本地事务中记录 inbox 去重标识并执行库存变更，从而让重复事件不重复产生副作用"
+        weight: 35
+    followUpGoals:
+      - id: outbox-inbox-clarification
+        kind: clarification
+        goal: "澄清生产方和消费方分别需要原子保护哪些本地业务状态"
+      - id: outbox-inbox-depth
+        kind: depth
+        goal: "说明发布确认丢失或消费提交后确认失败时为何仍可能出现重复"
+    knowledgeExplanation: "outbox 把业务写入和待发布事件放入同一本地事务，避免数据库成功而事件完全未记录。发布器通常按至少一次方式工作，因此消费方还需用 inbox 或等价去重记录，把消息身份与业务副作用放入同一本地事务。该组合提供可恢复的最终一致性，而不是端到端绝对一次执行。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: distributed.leader-election.term-safety
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 leader election 中任期、多数派和旧 leader 隔离分别解决什么问题，以及网络分区时为何不能只追求可用性。"
+    rubric:
+      - id: leader-role-term
+        description: "说明 leader 用于集中协调写入或调度，递增任期用于区分新旧领导权并拒绝过时消息"
+        weight: 30
+      - id: leader-majority-election
+        description: "说明在协议假设成立时，多数派投票和任期规则使相交的多数派不会同时认可两个同任期 leader"
+        weight: 35
+      - id: leader-stale-fencing
+        description: "说明旧 leader 可能在停顿或分区后继续动作，需要下游校验任期或 fencing token，而少数派通常必须停止领导写入以避免脑裂"
+        weight: 35
+    followUpGoals:
+      - id: leader-election-clarification
+        kind: clarification
+        goal: "澄清 leader 负责的是元数据协调、任务调度还是数据写入"
+      - id: leader-election-depth
+        kind: depth
+        goal: "说明旧 leader 恢复后下游资源如何识别并拒绝其过期操作"
+    knowledgeExplanation: "leader election 不只是选出一个节点，还要证明领导权属于某个任期并由足够节点认可。多数派相交有助于避免相互独立的领导历史，任期或 fencing token 用于拒绝旧 leader；网络分区中的少数派通常牺牲写可用性来避免脑裂。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: distributed.quorum.consistency-tradeoff
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个复制系统有 N 个副本，可配置写入确认数 W 和读取数 R，请说明 quorum 参数如何影响一致性、延迟和分区可用性。"
+    rubric:
+      - id: quorum-overlap
+        description: "说明 W 与 R 的集合在 R 加 W 大于 N 时必然相交，但还需要版本、冲突解决和故障假设才能从相交节点识别正确值"
+        weight: 35
+      - id: quorum-latency-availability
+        description: "说明提高 W 或 R 会等待更多副本，通常增加延迟并降低在节点故障或网络分区下完成操作的概率"
+        weight: 30
+      - id: quorum-consistency-limit
+        description: "说明 quorum 公式本身不等于线性一致性，强一致还依赖读写协议、领导权、并发顺序和失败处理"
+        weight: 35
+    followUpGoals:
+      - id: quorum-clarification
+        kind: clarification
+        goal: "澄清系统更重视最新读取、写入可用性还是较低尾延迟"
+      - id: quorum-depth
+        kind: depth
+        goal: "说明网络分区时选择较小 W 或 R 会带来哪些冲突和陈旧读取风险"
+    knowledgeExplanation: "quorum 通过读写副本集合相交提高读到已确认写入的机会，但正确性仍取决于版本选择、并发控制和故障模型。更大的 R 或 W 通常用延迟和分区可用性换取更强确认范围，不能仅凭 R 加 W 大于 N 宣称系统具有线性一致性。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: resilience.circuit-breaker.failure-containment
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "下游服务持续超时，上游重试使线程、连接和队列逐渐耗尽，请说明 circuit breaker 的状态转换及其与超时、限流和重试的配合。"
+    rubric:
+      - id: circuit-breaker-states
+        description: "说明 closed 状态统计失败，达到阈值后进入 open 快速失败，等待后以有限探测进入 half-open 决定恢复或再次断开"
+        weight: 40
+      - id: circuit-breaker-signals
+        description: "说明阈值应基于滚动窗口中的失败率、慢调用和最小样本等信号，避免单次失败或低流量误触发"
+        weight: 25
+      - id: resilience-coordination
+        description: "说明超时限制单次占用，限流或并发隔离保护容量，重试必须有预算和退避，熔断后的降级也要保持有界"
+        weight: 35
+    followUpGoals:
+      - id: circuit-breaker-clarification
+        kind: clarification
+        goal: "澄清主要故障信号是连接失败、超时还是下游主动限流"
+      - id: circuit-breaker-depth
+        kind: depth
+        goal: "说明 half-open 探测和上游重试如何避免在恢复瞬间再次压垮下游"
+    knowledgeExplanation: "circuit breaker 在下游明显不可用时快速失败，阻止调用继续占用资源，并通过 half-open 的有限探测判断恢复。它不能替代超时、限流、并发隔离或有界重试；这些机制需要共享失败预算，避免熔断前后的重试风暴和级联拥塞。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: distributed.time-identity.ordering
+    contentVersion: 1
+    domain: cache_messaging_distributed
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "跨节点系统既要判断事件先后，又要生成全局唯一标识，请说明墙上时钟、单调时钟、逻辑时钟以及 UUID 或 Snowflake 类标识的边界。"
+    rubric:
+      - id: physical-monotonic-time
+        description: "说明墙上时钟可能因同步、漂移和回拨而跳变，不能单独证明跨节点因果顺序；单调时钟适合本进程内测量时长"
+        weight: 35
+      - id: logical-time-order
+        description: "说明 Lamport 或混合逻辑时钟可表达因果或近似时间顺序，但不等同于完全准确的全球物理时间"
+        weight: 30
+      - id: distributed-id-tradeoff
+        description: "说明 UUID 侧重低协调唯一性，Snowflake 类标识提供大致时间有序性但依赖节点标识分配和时钟回拨处理"
+        weight: 35
+    followUpGoals:
+      - id: time-identity-clarification
+        kind: clarification
+        goal: "澄清业务需要的是测量超时、判断因果关系还是生成可排序唯一标识"
+      - id: time-identity-depth
+        kind: depth
+        goal: "说明节点时钟回拨或节点标识重复时如何影响 Snowflake 类标识"
+    knowledgeExplanation: "物理墙上时钟便于展示时间，但会漂移、校准和回拨；单调时钟只适合本地测量持续时间。逻辑时钟用于表达事件关系，分布式标识方案则在协调成本、唯一性、可排序性和时钟依赖之间取舍，不能由单一时间戳同时解决所有问题。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: cache-messaging-distributed-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

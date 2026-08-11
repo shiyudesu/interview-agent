@@ -36,7 +36,7 @@
 - [x] 4.7 Author and review at least 15 concurrency, runtime, and performance questions.
 - [x] 4.8 Author and review at least 15 HTTP, RPC, and API questions.
 - [x] 4.9 Author and review at least 15 database and storage questions.
-- [ ] 4.10 Author and review at least 15 cache, messaging, and distributed-system fundamentals questions.
+- [x] 4.10 Author and review at least 15 cache, messaging, and distributed-system fundamentals questions.
 - [ ] 4.11 Author and review at least 15 testing, observability, and engineering-practice questions.
 - [ ] 4.12 Add a release validation gate requiring 90 valid active questions, at least 15 per domain, unique IDs/versions, and valid 100-point Rubrics.
 
