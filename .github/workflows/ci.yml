@@ -45,7 +45,7 @@ jobs:
         run: pnpm workspace:check
 
       - name: Validate question bank
-        run: pnpm question-bank:validate
+        run: pnpm question-bank:validate:release
 
       - name: Check formatting
         run: pnpm format:check

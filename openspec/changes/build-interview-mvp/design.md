@@ -176,7 +176,9 @@ The repository stores one or more YAML files per Go backend knowledge domain. A 
 - Simplified Chinese knowledge explanation;
 - prohibition of candidate-facing code-reading, code-writing, pseudocode, executable-deliverable, and automated-judging tasks.
 
-CI validates the complete bank and requires at least 15 active questions in each of the six domains.
+CI runs the release validator, which evaluates the highest content version for each stable ID and
+requires at least 90 current active reviewed questions, at least 15 in each domain, unique ID/version
+pairs, no superseded active version, and valid 100-point Rubrics.
 Until the release bank is complete, the repository keeps three reviewed development questions per
 domain so all supported blueprint sizes can be exercised without weakening the release gate.
 

@@ -116,7 +116,10 @@ export interface QuestionBankValidationIssue {
     | "source_wording_language"
     | "prohibited_coding_task"
     | "domain_mismatch"
-    | "duplicate_question_version";
+    | "duplicate_question_version"
+    | "duplicate_active_question_id"
+    | "stale_active_question_version"
+    | "release_cardinality";
   readonly message: string;
 }
 

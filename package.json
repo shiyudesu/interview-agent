@@ -33,6 +33,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "question-bank:validate": "tsx scripts/validate-question-bank.ts --mode development",
+    "question-bank:validate:release": "tsx scripts/validate-question-bank.ts --mode release",
     "question-bank:import": "tsx scripts/import-question-bank.ts",
     "services:down": "docker compose down",
     "services:logs": "docker compose logs --follow",

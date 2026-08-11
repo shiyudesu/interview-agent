@@ -279,14 +279,65 @@ describe("question-bank CLI", () => {
     );
   });
 
-  it("rejects release mode until the separate 4.12 gate exists", async () => {
+  it("accepts the complete repository bank in release mode", async () => {
+    const stdout: string[] = [];
     const stderr: string[] = [];
-    const code = await runQuestionBankCli(["--mode", "release"], {
+    const code = await runQuestionBankCli(
+      ["--root", repositoryQuestionBankRoot, "--mode", "release"],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stdout.join("\n")).toContain("valid in release mode");
+    expect(stderr).toEqual([]);
+  });
+
+  it("rejects release banks below cardinality requirements", async () => {
+    const stderr: string[] = [];
+    const code = await runQuestionBankCli(["--root", `${fixtureRoot}/valid`, "--mode", "release"], {
       stdout: () => undefined,
       stderr: (message) => stderr.push(message),
     });
 
-    expect(code).toBe(2);
-    expect(stderr.join("\n")).toContain("release gate is task 4.12");
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("requires at least 90 current active reviewed questions");
+    expect(stderr.join("\n")).toContain("requires at least 15 active reviewed questions");
+  });
+
+  it("rejects multiple active versions of one stable question ID", async () => {
+    const stderr: string[] = [];
+    const code = await runQuestionBankCli(
+      ["--root", `${fixtureRoot}/release-duplicate-active`, "--mode", "release"],
+      {
+        stdout: () => undefined,
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("duplicate_active_question_id");
+  });
+
+  it("does not count an older active version superseded by a tombstone", async () => {
+    const stderr: string[] = [];
+    const code = await runQuestionBankCli(
+      ["--root", `${fixtureRoot}/release-tombstone`, "--mode", "release"],
+      {
+        stdout: () => undefined,
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain("stale_active_question_version");
+    expect(stderr.join("\n")).toContain(
+      "Release question bank requires at least 90 current active reviewed questions; found 0",
+    );
+    expect(stderr.join("\n")).toContain(
+      "Release domain go_language requires at least 15 active reviewed questions; found 0",
+    );
   });
 });

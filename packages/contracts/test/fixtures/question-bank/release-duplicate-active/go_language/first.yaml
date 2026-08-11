@@ -1,0 +1,25 @@
+schemaVersion: "1.0"
+domain: go_language
+questions:
+  - id: go.release.duplicate
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 Go 接口值的动态类型和动态值分别表示什么。"
+    rubric:
+      - id: interface-pair
+        description: "说明接口值由动态类型和动态值共同组成"
+        weight: 100
+    followUpGoals:
+      - id: interface-clarification
+        kind: clarification
+        goal: "澄清类型信息和值信息的区别"
+    knowledgeExplanation: "接口值同时保存动态类型和动态值，两者共同决定比较和方法调用行为。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: reviewer-id
+      reviewedAt: "2026-08-10T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

@@ -24,11 +24,16 @@ After applying database migrations, synchronize validated repository content wit
 DATABASE_URL=postgresql://... pnpm question-bank:import
 ```
 
-The import command still permits an empty custom development bank and succeeds as a no-op. The
-checked-in fixtures are not the release bank; release cardinality remains a separate task 4.12 gate.
+Release validation evaluates only the highest content version for each stable ID and enforces at
+least 90 current active reviewed questions, at least 15 per domain, valid Rubrics, unique question
+ID/version pairs, and no superseded version still marked active:
 
-The 90-question, 15-per-domain release gate belongs to OpenSpec task 4.12 and will use a
-separate release command.
+```sh
+pnpm question-bank:validate:release
+```
+
+The import command still permits an empty custom development bank and succeeds as a no-op. The
+checked-in bank must pass the release gate in CI.
 
 ## PostgreSQL synchronization policy
 

@@ -66,6 +66,7 @@ interface CliIo {
 interface CliOptions {
   readonly root: string;
   readonly help: boolean;
+  readonly mode: "development" | "release";
 }
 
 interface UnknownRecord {
@@ -599,6 +600,7 @@ export async function validateQuestionBankDirectory(
 function parseCliOptions(args: readonly string[]): CliOptions {
   let root = resolve("question-bank");
   let help = false;
+  let mode: CliOptions["mode"] = "development";
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--help" || argument === "-h") {
@@ -612,21 +614,109 @@ function parseCliOptions(args: readonly string[]): CliOptions {
       index += 1;
     } else if (argument === "--mode") {
       const value = args[index + 1];
-      if (value !== "development") {
-        throw new Error("Only --mode development is available; the release gate is task 4.12");
+      if (value !== "development" && value !== "release") {
+        throw new Error("--mode must be development or release");
       }
+      mode = value;
       index += 1;
     } else {
       throw new Error(`Unknown argument: ${argument}`);
     }
   }
-  return { root, help };
+  return { root, help, mode };
 }
 
-const usage = `Usage: pnpm question-bank:validate [--root <directory>]
+const usage = `Usage: pnpm question-bank:validate [--root <directory>] [--mode development|release]
 
-Validates repository YAML format and semantics in development mode.
-Release cardinality (90 active questions, 15 per domain) is intentionally deferred to task 4.12.`;
+Development mode validates YAML format and semantics without cardinality requirements.
+Release mode additionally requires 90 active reviewed questions, at least 15 per domain, and one active version per stable question ID.`;
+
+function releaseValidationIssues(result: QuestionBankLoadResult): QuestionBankFileIssue[] {
+  const issues: QuestionBankFileIssue[] = [];
+  const domainCounts = new Map<string, number>();
+  const questionsById = new Map<
+    string,
+    Array<{
+      readonly file: string;
+      readonly index: number;
+      readonly question: QuestionBankSourceDto["questions"][number];
+    }>
+  >();
+
+  for (const file of result.files) {
+    file.questions.forEach((question, index) => {
+      const versions = questionsById.get(question.id) ?? [];
+      versions.push({ file: file.file, index, question });
+      questionsById.set(question.id, versions);
+    });
+  }
+
+  let currentActiveReviewedCount = 0;
+  for (const [questionId, versions] of questionsById) {
+    versions.sort((left, right) => left.question.contentVersion - right.question.contentVersion);
+    const current = versions.at(-1);
+    if (current === undefined) {
+      continue;
+    }
+    const activeVersions = versions.filter((version) => version.question.active);
+    for (const duplicate of activeVersions.slice(1)) {
+      const previous = activeVersions[0];
+      if (previous !== undefined) {
+        issues.push({
+          file: duplicate.file,
+          questionId,
+          path: `/questions/${duplicate.index}/id`,
+          code: "duplicate_active_question_id",
+          message: `Active question ID ${questionId} duplicates ${previous.file} /questions/${previous.index}`,
+        });
+      }
+    }
+    for (const stale of activeVersions.filter((version) => version !== current)) {
+      issues.push({
+        file: stale.file,
+        questionId,
+        path: `/questions/${stale.index}/active`,
+        code: "stale_active_question_version",
+        message: `Active question ${questionId}@${stale.question.contentVersion} is superseded by version ${current.question.contentVersion}`,
+      });
+    }
+    if (current.question.active && current.question.reviewed) {
+      currentActiveReviewedCount += 1;
+      domainCounts.set(
+        current.question.domain,
+        (domainCounts.get(current.question.domain) ?? 0) + 1,
+      );
+    }
+  }
+
+  if (currentActiveReviewedCount < 90) {
+    issues.push({
+      file: ".",
+      path: "/questions",
+      code: "release_cardinality",
+      message: `Release question bank requires at least 90 current active reviewed questions; found ${currentActiveReviewedCount}`,
+    });
+  }
+  for (const domain of [
+    "go_language",
+    "concurrency_runtime_performance",
+    "http_rpc_api",
+    "database_storage",
+    "cache_messaging_distributed",
+    "testing_observability_engineering",
+  ]) {
+    const count = domainCounts.get(domain) ?? 0;
+    if (count < 15) {
+      issues.push({
+        file: domain,
+        path: "/questions",
+        code: "release_cardinality",
+        message: `Release domain ${domain} requires at least 15 active reviewed questions; found ${count}`,
+      });
+    }
+  }
+  return issues;
+}
 
 export async function runQuestionBankCli(
   args: readonly string[],
@@ -648,20 +738,24 @@ export async function runQuestionBankCli(
     return 0;
   }
 
-  const result = await validateQuestionBankDirectory(options.root);
-  if (!result.valid) {
-    for (const issue of result.issues) {
+  const loaded = await loadQuestionBankDirectory(options.root);
+  const issues =
+    loaded.valid && options.mode === "release"
+      ? [...loaded.issues, ...releaseValidationIssues(loaded)]
+      : loaded.issues;
+  if (issues.length > 0) {
+    for (const issue of issues) {
       const question = issue.questionId === undefined ? "" : ` [question ${issue.questionId}]`;
       io.stderr(`${issue.file}${question} ${issue.path} (${issue.code}): ${issue.message}`);
     }
     io.stderr(
-      `Question-bank validation failed with ${result.issues.length} error(s) across ${result.fileCount} YAML file(s).`,
+      `Question-bank validation failed with ${issues.length} error(s) across ${loaded.fileCount} YAML file(s).`,
     );
     return 1;
   }
 
   io.stdout(
-    `Question bank is valid in development mode: ${result.fileCount} file(s), ${result.questionCount} question(s), ${result.activeReviewedCount} active reviewed.`,
+    `Question bank is valid in ${options.mode} mode: ${loaded.fileCount} file(s), ${loaded.questionCount} question(s), ${loaded.activeReviewedCount} active reviewed.`,
   );
   return 0;
 }

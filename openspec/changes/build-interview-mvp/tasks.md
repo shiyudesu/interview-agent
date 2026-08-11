@@ -38,7 +38,7 @@
 - [x] 4.9 Author and review at least 15 database and storage questions.
 - [x] 4.10 Author and review at least 15 cache, messaging, and distributed-system fundamentals questions.
 - [x] 4.11 Author and review at least 15 testing, observability, and engineering-practice questions.
-- [ ] 4.12 Add a release validation gate requiring 90 valid active questions, at least 15 per domain, unique IDs/versions, and valid 100-point Rubrics.
+- [x] 4.12 Add a release validation gate requiring 90 valid active questions, at least 15 per domain, unique IDs/versions, and valid 100-point Rubrics.
 
 ## 5. Authentication and Account Access
 
