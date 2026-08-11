@@ -252,6 +252,15 @@ Node loads environment files natively and the server validates configuration thr
 
 Production uses same-origin secure cookies, Origin/CSRF validation, security headers, and endpoint-specific rate limits. The application does not expose permissive CORS. OpenAPI and Swagger UI are enabled only for local and test environments.
 
+Fastify mounts Better Auth under `/api/auth/*`, preserves JSON and URL-encoded request bodies, and
+forwards every response and session-refresh `Set-Cookie` header. Protected `/api/v1` routes receive
+a normalized account/session context from PostgreSQL-backed Better Auth sessions. The bridge
+overwrites a private client-IP header from Fastify's socket-derived `request.ip`; Better Auth uses
+only that header for authentication rate limits, so client-supplied forwarding headers cannot
+choose rate-limit keys. CSRF and trusted-origin checks remain explicitly enabled in every
+environment, including tests. Runtime shutdown handles SIGINT/SIGTERM through `app.close()` so
+in-flight authentication work and the database pool close through Fastify lifecycle hooks.
+
 ### 12. Establish tests and CI with the scaffold
 
 The first implementation slice creates:

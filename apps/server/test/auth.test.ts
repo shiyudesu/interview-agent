@@ -2,6 +2,9 @@ import { createDatabaseClient } from "@interview-agent/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AUTH_RATE_LIMIT_MAX_REQUESTS,
+  AUTH_RATE_LIMIT_WINDOW_SECONDS,
+  AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS,
   AUTH_SESSION_EXPIRES_IN_SECONDS,
   AUTH_SESSION_UPDATE_AGE_SECONDS,
   AuthenticationEmailDeliveryError,
@@ -83,7 +86,33 @@ describe("createAuthentication", () => {
       updateAge: AUTH_SESSION_UPDATE_AGE_SECONDS,
       cookieCache: { enabled: false },
     });
-    expect(auth.options.advanced).toMatchObject({ useSecureCookies: true });
+    expect(auth.options.rateLimit).toMatchObject({
+      enabled: true,
+      storage: "memory",
+      window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      max: AUTH_RATE_LIMIT_MAX_REQUESTS,
+      customRules: {
+        "/email-otp/send-verification-otp": {
+          window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+          max: AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS,
+        },
+      },
+    });
+    expect(auth.options.advanced).toMatchObject({
+      ipAddress: {
+        ipAddressHeaders: ["x-interview-client-ip"],
+      },
+      useSecureCookies: true,
+      disableCSRFCheck: false,
+      disableOriginCheck: false,
+      crossSubDomainCookies: { enabled: false },
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: true,
+        path: "/",
+      },
+    });
     expect(auth.options.telemetry).toEqual({ enabled: false });
     expect(auth.options.plugins?.map((plugin) => plugin.id)).toContain("email-otp");
   });
@@ -102,7 +131,10 @@ describe("createAuthentication", () => {
 
     expect(auth.options.socialProviders).toEqual({});
     expect(auth.options.account?.accountLinking?.trustedProviders).toEqual([]);
-    expect(auth.options.advanced).toMatchObject({ useSecureCookies: false });
+    expect(auth.options.advanced).toMatchObject({
+      useSecureCookies: false,
+      defaultCookieAttributes: { secure: false },
+    });
   });
 
   it("uses bounded hashed rotating email OTP settings and delegates delivery", async () => {

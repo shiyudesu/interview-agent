@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { account, type Database, session, user, verification } from "@interview-agent/db";
+import { type AccountId, parseAccountId } from "@interview-agent/domain";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins";
 
@@ -13,6 +14,9 @@ export const EMAIL_OTP_EXPIRES_IN_SECONDS = 5 * 60;
 export const EMAIL_OTP_ALLOWED_ATTEMPTS = 3;
 export const AUTH_SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 export const AUTH_SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
+export const AUTH_RATE_LIMIT_WINDOW_SECONDS = 60;
+export const AUTH_RATE_LIMIT_MAX_REQUESTS = 60;
+export const AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS = 3;
 
 export interface CreateAuthenticationInput {
   readonly database: Database;
@@ -23,6 +27,19 @@ export interface CreateAuthenticationInput {
 export interface Authentication {
   readonly handler: (request: Request) => Promise<Response>;
   readonly options: BetterAuthOptions;
+  getSession(headers: Headers): Promise<AuthenticationSessionResult>;
+}
+
+export interface AuthenticatedRequestContext {
+  readonly accountId: AccountId;
+  readonly sessionId: string;
+  readonly email: string;
+  readonly name: string;
+}
+
+export interface AuthenticationSessionResult {
+  readonly context: AuthenticatedRequestContext | null;
+  readonly headers: Headers;
 }
 
 export class AuthenticationEmailDeliveryError extends Error {
@@ -62,7 +79,7 @@ export function createAuthentication(input: CreateAuthenticationInput): Authenti
   const github = input.config.auth.github;
   const origin = new URL(input.config.auth.baseUrl).origin;
 
-  return betterAuth({
+  const auth = betterAuth({
     appName: "Interview Agent",
     baseURL: input.config.auth.baseUrl,
     secret: input.config.auth.secret,
@@ -101,10 +118,61 @@ export function createAuthentication(input: CreateAuthenticationInput): Authenti
       updateAge: AUTH_SESSION_UPDATE_AGE_SECONDS,
       cookieCache: { enabled: false },
     },
+    rateLimit: {
+      enabled: true,
+      storage: "memory",
+      window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+      max: AUTH_RATE_LIMIT_MAX_REQUESTS,
+      customRules: {
+        "/email-otp/send-verification-otp": {
+          window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+          max: AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS,
+        },
+        "/sign-in/email-otp": {
+          window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+          max: AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS,
+        },
+        "/sign-in/social": {
+          window: AUTH_RATE_LIMIT_WINDOW_SECONDS,
+          max: AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS,
+        },
+      },
+    },
     advanced: {
+      ipAddress: {
+        ipAddressHeaders: ["x-interview-client-ip"],
+      },
       useSecureCookies: input.config.environment === "production",
+      disableCSRFCheck: false,
+      disableOriginCheck: false,
+      crossSubDomainCookies: { enabled: false },
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: input.config.environment === "production",
+        path: "/",
+      },
     },
     telemetry: { enabled: false },
     plugins: [emailOTP(createEmailOtpOptions(input.emailSender, input.config.auth.secret))],
   });
+  return {
+    handler: auth.handler,
+    options: auth.options,
+    async getSession(headers) {
+      const current = await auth.api.getSession({ headers, returnHeaders: true });
+      return {
+        headers: current.headers,
+        context:
+          current.response === null
+            ? null
+            : {
+                accountId: parseAccountId(current.response.user.id),
+                sessionId: current.response.session.id,
+                email: current.response.user.email,
+                name: current.response.user.name,
+              },
+      };
+    },
+  };
 }
