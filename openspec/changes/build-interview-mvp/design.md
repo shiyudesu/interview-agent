@@ -170,11 +170,11 @@ The repository stores one or more YAML files per Go backend knowledge domain. A 
 
 - stable question ID and monotonically increasing content version;
 - domain and medium difficulty;
-- audited source wording;
-- Rubric items whose integer weights total 100;
-- follow-up goals and their type;
-- knowledge explanation;
-- prohibition of code-reading, code-writing, and executable tasks.
+- audited Simplified Chinese source wording, with English limited to technical terms and identifiers;
+- Simplified Chinese Rubric items whose integer weights total 100;
+- Simplified Chinese follow-up goals and their type;
+- Simplified Chinese knowledge explanation;
+- prohibition of candidate-facing code-reading, code-writing, pseudocode, executable-deliverable, and automated-judging tasks.
 
 CI validates the complete bank and requires at least 15 active questions in each of the six domains.
 

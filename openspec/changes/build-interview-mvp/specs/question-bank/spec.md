@@ -9,7 +9,7 @@ The system SHALL provide a medium-difficulty, Simplified Chinese Go backend ques
 - **AND** each of the six domains contains at least 15 active questions
 
 ### Requirement: Every question is reviewed structured content
-Every active main question MUST have a stable ID, content version, domain, medium difficulty, reviewed source wording, weighted Rubric, predefined follow-up goals, and knowledge explanation.
+Every active main question MUST have a stable ID, content version, domain, medium difficulty, reviewed source wording, weighted Rubric, predefined follow-up goals, and knowledge explanation. All human-readable question-bank fields MUST use meaningful Simplified Chinese while preserving necessary English technical terms and identifiers.
 
 #### Scenario: Valid question is imported
 - **WHEN** a question contains every required field and its Rubric weights total 100
@@ -19,8 +19,13 @@ Every active main question MUST have a stable ID, content version, domain, mediu
 - **WHEN** a question is missing a required field, uses an unknown domain, has invalid weights, or duplicates an active ID and version
 - **THEN** validation fails and the bank is not imported
 
+#### Scenario: Question-bank text is not Simplified Chinese
+- **WHEN** source wording, a Rubric description, a follow-up goal, or a knowledge explanation uses Traditional Chinese, another writing system, or ordinary English prose instead of Simplified Chinese
+- **THEN** validation fails before the question can become active
+- **AND** English technical terms and identifiers remain allowed
+
 ### Requirement: Questions exclude coding tasks
-The MVP question bank MUST NOT contain code-reading, code-writing, pseudocode-writing, executable programming, or automated-judging tasks.
+Candidate-facing source wording and follow-up goals in the MVP question bank MUST NOT contain code-reading, code-writing, pseudocode-writing, executable programming or artifact-delivery, or automated-judging tasks.
 
 #### Scenario: Coding task is present
 - **WHEN** question-bank validation detects a prohibited coding task
@@ -97,4 +102,3 @@ The system MUST NOT expose internal question-bank files, source references, Rubr
 #### Scenario: User views an interview or report
 - **WHEN** the system renders user-visible content
 - **THEN** only the allowed question wording, feedback, and selected knowledge points are exposed
-

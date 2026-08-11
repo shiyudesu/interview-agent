@@ -644,6 +644,33 @@ describe("question-bank schemas", () => {
     "请修改以下 SQL 查询以正确统计用户数量。",
     "请阅读这个函数并指出其中的错误。",
     "请阅读以下 SQL，说明该查询为什么会返回重复行。",
+    "请搭建一个 REST API 服务并交付。",
+    "请展示一段完整的 Go 源代码。",
+    "请优化以下 SQL 查询以减少全表扫描。",
+    "请实现一个数据库连接池并说明设计思路。",
+    "请提供完整源代码并解释设计思路。",
+    "请说明以下函数 `func f() int { return 1 }` 的输出结果。",
+    "函数 `func f() int { return 1 }` 的输出是什么？",
+    "请说明以下方法 `f()` 的输出结果。",
+    "以下 SQL 查询应该如何优化？",
+    "请优化该查询以减少全表扫描。",
+    "请交付一个可运行的 Docker 镜像。",
+    "请写一段 Bash 命令删除临时文件。",
+    "请解释下面的函数为什么会发生死锁。",
+    "请使用伪代码描述 LRU 缓存的淘汰流程。",
+    "请交付一个可运行的 Go 服务。",
+    "请提交答案，系统会自动评测。",
+    "请审查下面的函数并找出竞态条件。",
+    "请生成一段 Go 代码演示缓存淘汰。",
+    "请以伪代码形式回答缓存淘汰流程。",
+    "请输出一个可运行的 Go 服务。",
+    "你的答案会被自动评测。",
+    "请解释下面的函数为什么死锁。另请说明 errors.Is 的用途。",
+    "请完成一个 Go 函数并解释设计思路。",
+    "你的任务是实现一个并发安全的缓存。",
+    "这是一道在线编程题：给定一个整数 n，输出 n 的平方。",
+    "请阅读 `x := 1; fmt.Println(x)` 并说明输出结果。",
+    "请开发一个缓存并谈谈设计思路。",
     "请解释缓存一致性并实现一个数据库连接池。",
     "请说明连接复用的优点，并编写数据库连接池。",
     "请分析请求延迟，然后创建负载生成器。",
@@ -706,6 +733,21 @@ describe("question-bank schemas", () => {
     "请分析 Go 写屏障如何影响函数调用开销。",
     "请解释构建器模式在程序设计中的取舍。",
     "能否解释为什么系统需要写代码而不是使用配置？",
+    "请提供一种排查数据库慢查询的思路。",
+    "请写出数据库索引失效的常见原因。",
+    "请提供一种实现分布式锁的思路。",
+    "请给出函数调用开销过高的常见原因。",
+    "请概述实现缓存一致性的步骤。",
+    "请阐述实现分布式锁的过程。",
+    "请说明该函数 `errors.Is` 的用途。",
+    "请说明 os.Create 的错误处理方式。",
+    "构建并运行 Go 服务时需要考虑哪些安全问题？",
+    "请列举实现分布式锁时的常见风险。",
+    "实现缓存一致性有何风险？",
+    "请说明函数错误处理与 errors.Is 的关系。",
+    "请说明 HTTP 处理函数返回值的设计取舍。",
+    "请讨论函数输出缓冲对日志性能的影响。",
+    "请给出 SQL 查询优化的常见策略。",
   ])("allows conceptual discussion of coding infrastructure: %s", (sourceWording) => {
     expect(
       validateQuestionBankQuestion({
@@ -737,6 +779,12 @@ describe("question-bank schemas", () => {
       "请解释 HTTP keep-alive 对连接复用的影响。",
       "请解释 Go scheduler 如何调度 goroutine 并减少线程切换。",
       "请说明 Go 是著名的并发编程语言之一。",
+      "请说明 copy-on-write 的适用场景。",
+      "请比较 read/write lock 与 mutex 的取舍。",
+      "请说明 SQL EXPLAIN 的主要用途。",
+      "请详细比较 optimistic concurrency control 与 two-phase locking 在高并发事务冲突处理、回滚成本和吞吐量方面的核心取舍。",
+      "请说明 happens-before 关系如何约束内存可见性。",
+      "请说明 happens before 关系如何约束内存可见性。",
     ]) {
       expect(
         validateQuestionBankQuestion({
@@ -744,6 +792,86 @@ describe("question-bank schemas", () => {
           sourceWording,
         }),
       ).toEqual([]);
+    }
+  });
+
+  it("requires Simplified Chinese across Rubrics, follow-up goals, and knowledge explanations", () => {
+    const issues = validateQuestionBankQuestion({
+      ...questionBankQuestion,
+      rubric: questionBankQuestion.rubric.map((item, index) =>
+        index === 0 ? { ...item, description: "說明取消訊號如何傳播" } : item,
+      ),
+      followUpGoals: questionBankQuestion.followUpGoals.map((goal, index) =>
+        index === 0 ? { ...goal, goal: "請補充取消訊號的傳播範圍" } : goal,
+      ),
+      knowledgeExplanation: "這段說明使用繁體中文描述技術概念。",
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "/rubric/0/description", code: "source_wording_language" }),
+        expect.objectContaining({ path: "/followUpGoals/0/goal", code: "source_wording_language" }),
+        expect.objectContaining({ path: "/knowledgeExplanation", code: "source_wording_language" }),
+      ]),
+    );
+  });
+
+  it("rejects ordinary English prose while allowing English technical terms", () => {
+    for (const [path, value] of [
+      ["/sourceWording", { sourceWording: "请 explain Go GC 的作用和主要阶段。" }],
+      [
+        "/sourceWording",
+        {
+          sourceWording:
+            "请判断下面的说法是否正确：Go GC reclaims unreachable objects automatically.",
+        },
+      ],
+      [
+        "/sourceWording",
+        {
+          sourceWording:
+            "请详细说明垃圾回收的核心原理、触发条件、扫描流程以及暂停影响，Go GC reclaims unreachable objects automatically.",
+        },
+      ],
+      [
+        "/sourceWording",
+        {
+          sourceWording:
+            "请判断 `This function returns true when the input is valid` 这句话是否正确。",
+        },
+      ],
+      [
+        "/sourceWording",
+        {
+          sourceWording: "请判断 `Garbage collector sweeps objects` 这句话是否正确。",
+        },
+      ],
+      [
+        "/rubric/0/description",
+        {
+          rubric: questionBankQuestion.rubric.map((item, index) =>
+            index === 0 ? { ...item, description: "请 explain GC 的核心机制" } : item,
+          ),
+        },
+      ],
+      [
+        "/followUpGoals/0/goal",
+        {
+          followUpGoals: questionBankQuestion.followUpGoals.map((goal, index) =>
+            index === 0 ? { ...goal, goal: "请 describe goroutine 的退出条件" } : goal,
+          ),
+        },
+      ],
+      [
+        "/knowledgeExplanation",
+        { knowledgeExplanation: "请 explain compare-and-swap 与 mutex 的主要区别。" },
+      ],
+    ] as const) {
+      expect(validateQuestionBankQuestion({ ...questionBankQuestion, ...value })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path, code: "source_wording_language" }),
+        ]),
+      );
     }
   });
 
