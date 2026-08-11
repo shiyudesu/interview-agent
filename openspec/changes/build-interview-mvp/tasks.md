@@ -47,7 +47,7 @@
 - [x] 5.3 Mount Better Auth in Fastify and add authenticated request context, same-origin cookie settings, Origin/CSRF protection, and authentication-specific rate limits.
 - [x] 5.4 Implement account profile, linked-identity listing/linking, session handling, and ownership checks for interviews and reports.
 - [x] 5.5 Implement reverse-chronological interview history projections for completed, early-ended, and abandoned interviews.
-- [ ] 5.6 Complete authenticated request-layer interview/account deletion orchestration using the existing immediate-inaccessibility, session-revocation, delayed-purge, audit, and lifecycle-test foundation.
+- [x] 5.6 Complete authenticated request-layer interview/account deletion orchestration using the existing immediate-inaccessibility, session-revocation, delayed-purge, audit, and lifecycle-test foundation.
 
 ## 6. Model and Interviewer Adapters
 

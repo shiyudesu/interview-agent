@@ -1,10 +1,11 @@
-import { parseAccountId } from "@interview-agent/domain";
+import { parseAccountId, parseInterviewId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
+import { DeletionOrchestrationService } from "../src/deletion.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
 const config = {
@@ -30,6 +31,13 @@ function app() {
   return instance;
 }
 
+function deletion() {
+  return new DeletionOrchestrationService({
+    markInterviewDeleting: async () => null,
+    markAccountDeleting: async () => null,
+  });
+}
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((instance) => instance.close()));
 });
@@ -48,6 +56,7 @@ describe("registerApplication", () => {
     await registerApplication(instance, {
       authentication: authentication({ handler }),
       config,
+      deletion: deletion(),
     });
 
     const response = await instance.inject({
@@ -91,6 +100,7 @@ describe("registerApplication", () => {
         },
       }),
       config,
+      deletion: deletion(),
     });
 
     const response = await instance.inject({
@@ -123,6 +133,7 @@ describe("registerApplication", () => {
     await registerApplication(instance, {
       authentication: authentication({ getSession }),
       config,
+      deletion: deletion(),
     });
     instance.get("/api/v1/context", async (request) => request.authContext);
     instance.get("/health", async (request) => request.authContext);
@@ -157,6 +168,7 @@ describe("registerApplication", () => {
         },
       }),
       config,
+      deletion: deletion(),
     });
 
     const response = await instance.inject({
@@ -174,5 +186,120 @@ describe("registerApplication", () => {
     });
     expect(response.body).not.toContain("candidate@example.test");
     expect(response.body).not.toContain("123456");
+  });
+
+  it("requires confirmation and owner context for deletion routes", async () => {
+    const context: AuthenticatedRequestContext = {
+      accountId: parseAccountId("account-1"),
+      sessionId: "session-1",
+      email: "candidate@example.test",
+      name: "Candidate",
+    };
+    const requestedAt = new Date("2026-08-11T00:00:00.000Z");
+    const purgeDeadlineAt = new Date("2026-08-18T00:00:00.000Z");
+    const markInterviewDeleting = vi.fn(async (interviewId, accountId) => ({
+      requestId: "request-1",
+      scope: "interview" as const,
+      ownerUserId: accountId,
+      interviewId,
+      requestedAt,
+      purgeDueAt: new Date("2026-08-17T00:00:00.000Z"),
+      purgeDeadlineAt,
+      created: true,
+      affectedInterviewCount: 1,
+      cancelledOperationCount: 0,
+    }));
+    const markAccountDeleting = vi.fn(async (accountId) => ({
+      requestId: "request-2",
+      scope: "account" as const,
+      ownerUserId: accountId,
+      interviewId: null,
+      requestedAt,
+      purgeDueAt: new Date("2026-08-17T00:00:00.000Z"),
+      purgeDeadlineAt,
+      created: true,
+      affectedInterviewCount: 1,
+      cancelledOperationCount: 0,
+    }));
+    const instance = app();
+    await registerApplication(instance, {
+      authentication: authentication({
+        getSession: async () => ({ context, headers: new Headers() }),
+      }),
+      config,
+      deletion: new DeletionOrchestrationService({
+        markInterviewDeleting,
+        markAccountDeleting,
+      }),
+    });
+
+    const missingConfirmation = await instance.inject({
+      method: "DELETE",
+      url: "/api/v1/interviews/interview-1",
+      payload: {},
+    });
+    const interviewResponse = await instance.inject({
+      method: "DELETE",
+      url: "/api/v1/interviews/interview-1",
+      payload: { confirmed: true },
+    });
+    const accountResponse = await instance.inject({
+      method: "DELETE",
+      url: "/api/v1/account",
+      payload: { confirmed: true },
+    });
+
+    expect(missingConfirmation.statusCode).toBe(400);
+    expect(interviewResponse.statusCode).toBe(202);
+    expect(interviewResponse.json()).toEqual({
+      status: "deleting",
+      requestedAt: requestedAt.toISOString(),
+      purgeDeadlineAt: purgeDeadlineAt.toISOString(),
+    });
+    expect(accountResponse.statusCode).toBe(202);
+    expect(markInterviewDeleting).toHaveBeenCalledWith(
+      parseInterviewId("interview-1"),
+      context.accountId,
+    );
+    expect(markAccountDeleting).toHaveBeenCalledWith(context.accountId);
+  });
+
+  it("sanitizes unexpected deletion failures", async () => {
+    const context: AuthenticatedRequestContext = {
+      accountId: parseAccountId("account-1"),
+      sessionId: "session-1",
+      email: "candidate@example.test",
+      name: "Candidate",
+    };
+    const instance = app();
+    await registerApplication(instance, {
+      authentication: authentication({
+        getSession: async () => ({ context, headers: new Headers() }),
+      }),
+      config,
+      deletion: new DeletionOrchestrationService({
+        markInterviewDeleting: async () => {
+          throw new Error("sensitive database detail");
+        },
+        markAccountDeleting: async () => {
+          throw new Error("sensitive database detail");
+        },
+      }),
+    });
+
+    const response = await instance.inject({
+      method: "DELETE",
+      url: "/api/v1/account",
+      payload: { confirmed: true },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error: {
+        code: "deletion_failure",
+        message: "Deletion request failed",
+      },
+    });
+    expect(response.body).not.toContain("sensitive database detail");
   });
 });

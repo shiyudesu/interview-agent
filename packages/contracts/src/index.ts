@@ -2,6 +2,7 @@ export * from "./command-mappings.js";
 export * from "./commands.js";
 export * from "./common.js";
 export * from "./config.js";
+export * from "./deletion.js";
 export * from "./error-mappings.js";
 export * from "./errors.js";
 export * from "./evaluation.js";

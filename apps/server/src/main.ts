@@ -1,9 +1,10 @@
-import { createDatabaseClient } from "@interview-agent/db";
+import { createDatabaseClient, PgLifecycleRepository } from "@interview-agent/db";
 import Fastify from "fastify";
 
 import { registerApplication } from "./app.js";
 import { createAuthentication } from "./auth.js";
 import { loadServerConfig } from "./config.js";
+import { DeletionOrchestrationService } from "./deletion.js";
 import { createNodemailerEmailSender } from "./email-sender.js";
 import { installGracefulShutdown } from "./shutdown.js";
 
@@ -16,8 +17,11 @@ const authentication = createAuthentication({
   config,
   emailSender,
 });
+const deletion = new DeletionOrchestrationService(
+  new PgLifecycleRepository(databaseClient.database),
+);
 
-await registerApplication(app, { authentication, config });
+await registerApplication(app, { authentication, config, deletion });
 app.addHook("onClose", async () => databaseClient.close());
 installGracefulShutdown(app);
 try {

@@ -245,6 +245,13 @@ OTP-created display names are represented as absent rather than corruption. Inte
 access always calls owner-scoped repositories and maps both missing and non-owned resources to the
 same not-found result.
 
+Authenticated deletion endpoints require an explicit `confirmed: true` body and delegate to the
+existing lifecycle repository. Interview deletion is owner-scoped and uses the same not-found
+response for missing and non-owned IDs. Account deletion revokes every database session in the same
+transaction that makes all account content inaccessible. Both endpoints return only the deletion
+state and purge deadline; unexpected repository failures are logged without exception details and
+mapped to a fixed schema-defined error.
+
 Email delivery is behind an `EmailSender` port. The local adapter uses Nodemailer and Mailpit; a production adapter is deferred.
 The adapter sends text-only OTP messages through validated SMTP host, port, and sender settings.
 Delivery logs contain only fixed event and purpose fields; recipient addresses, OTP values, and raw
