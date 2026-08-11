@@ -28,15 +28,15 @@ describe("repository question-bank YAML", () => {
     expect(result).toMatchObject({
       valid: true,
       fileCount: 6,
-      questionCount: 54,
-      activeReviewedCount: 54,
+      questionCount: 66,
+      activeReviewedCount: 66,
       issues: [],
     });
     expect(Object.fromEntries(counts)).toEqual({
       go_language: 15,
       concurrency_runtime_performance: 15,
       http_rpc_api: 15,
-      database_storage: 3,
+      database_storage: 15,
       cache_messaging_distributed: 3,
       testing_observability_engineering: 3,
     });

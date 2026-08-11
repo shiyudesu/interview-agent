@@ -96,3 +96,396 @@ questions:
       reviewedAt: "2026-08-10T00:00:00Z"
       simplifiedChineseVerified: true
       technicalTermsVerified: true
+
+  - id: database.postgresql.mvcc-vacuum
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "PostgreSQL 中一张频繁更新的表持续膨胀，并且存在长时间运行的事务，请解释 MVCC 与 VACUUM 如何影响这个现象，以及应从哪些方向排查。"
+    rubric:
+      - id: mvcc-row-versions
+        description: "说明 MVCC 通过行版本和事务快照提供并发可见性，更新或删除会留下旧版本"
+        weight: 35
+      - id: vacuum-visibility-horizon
+        description: "说明 VACUUM 只能回收对所有相关快照都不再可见的旧版本，并承担冻结旧事务标识等维护职责"
+        weight: 40
+      - id: vacuum-troubleshooting
+        description: "说明应检查长事务、失效行比例、自动清理进度与频率，并结合写入模式调整维护策略"
+        weight: 25
+    followUpGoals:
+      - id: mvcc-vacuum-clarification
+        kind: clarification
+        goal: "澄清表膨胀是否伴随长事务、批量更新或自动清理滞后"
+      - id: mvcc-vacuum-depth
+        kind: depth
+        goal: "说明旧快照如何推进或阻塞可回收版本的可见性边界"
+    knowledgeExplanation: "PostgreSQL 的 MVCC 让读写通过不同的行版本并发进行。旧版本需要在不再可能被任何相关快照看到后才能由 VACUUM 回收；长事务会延迟这个边界，造成失效行积累、表膨胀和维护压力。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.locks.deadlock
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "两个事务更新相同的一组业务记录时偶尔发生死锁，请说明普通锁等待与死锁的区别，并给出定位和降低死锁概率的思路。"
+    rubric:
+      - id: deadlock-cycle
+        description: "说明普通锁等待仍可能继续，而死锁形成循环等待，数据库通常需要中止其中一个事务"
+        weight: 35
+      - id: deadlock-prevention
+        description: "说明通过一致的资源访问顺序、缩短事务和减少不必要的锁定范围降低死锁概率"
+        weight: 35
+      - id: deadlock-diagnosis-retry
+        description: "说明利用阻塞链、死锁日志和事务上下文定位冲突，并对被中止事务进行有界安全重试"
+        weight: 30
+    followUpGoals:
+      - id: deadlock-clarification
+        kind: clarification
+        goal: "澄清两个事务获取资源的顺序和各自持锁时长"
+      - id: deadlock-depth
+        kind: depth
+        goal: "说明索引访问范围和事务重试策略如何影响死锁处理"
+    knowledgeExplanation: "锁等待是并发控制的正常结果，死锁则是事务之间形成无法自行解除的循环依赖。数据库会检测并打破循环，应用仍需通过稳定的访问顺序、短事务、准确索引和安全重试减少影响。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.transaction.boundary
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个业务操作既要修改多张数据库表，又要调用外部服务，请说明事务边界应如何划分，才能兼顾本地一致性、资源占用和失败恢复。"
+    rubric:
+      - id: transaction-local-invariant
+        description: "说明需要把维护同一本地业务不变量的数据库修改放在一个原子事务中"
+        weight: 35
+      - id: transaction-short-boundary
+        description: "说明事务应尽量短，避免在持有连接和锁时等待不可控的外部调用"
+        weight: 30
+      - id: transaction-external-consistency
+        description: "说明跨系统一致性需要结合可靠事件、幂等消费、状态机或补偿机制处理，不能依赖单一本地事务"
+        weight: 35
+    followUpGoals:
+      - id: transaction-boundary-clarification
+        kind: clarification
+        goal: "澄清哪些状态必须同时成功，以及外部调用是否支持幂等"
+      - id: transaction-boundary-depth
+        kind: depth
+        goal: "说明数据库提交成功但外部动作失败时如何恢复到可继续处理的状态"
+    knowledgeExplanation: "数据库事务适合保护单个数据库内的原子不变量，但不应覆盖耗时且不可控的远程调用。跨系统流程通常需要持久化中间状态或可靠事件，并通过幂等、重试和补偿达到可恢复的一致性。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.plan.statistics-covering
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "某查询在数据分布变化后明显变慢，虽然相关列已有索引，请说明如何结合执行计划、统计信息和让索引包含返回列的取舍分析原因。"
+    rubric:
+      - id: plan-estimate-actual
+        description: "说明应比较执行计划中的估算行数、实际行数、扫描方式和主要耗时节点，定位估算偏差或成本热点"
+        weight: 35
+      - id: statistics-distribution
+        description: "说明统计信息过期、数据倾斜或列间相关性可能使优化器错误估算选择性并选择不合适的计划"
+        weight: 35
+      - id: covering-index-tradeoff
+        description: "说明让索引包含查询所需列可能减少回表读取，但会增加索引体积和写入维护成本，且 PostgreSQL 的仅索引扫描还受可见性信息影响"
+        weight: 30
+    followUpGoals:
+      - id: plan-statistics-clarification
+        kind: clarification
+        goal: "澄清性能变化发生在数据量、数据分布还是查询返回列变化之后"
+      - id: plan-statistics-depth
+        kind: depth
+        goal: "说明估算与实际行数差异如何指导统计信息或索引设计调整"
+    knowledgeExplanation: "存在索引不代表优化器一定会使用它。执行计划展示实际访问路径，统计信息支撑成本估算；让索引包含查询所需列可以减少数据页访问，但需要用额外存储、缓存和写放大换取读取收益。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.pagination.keyset
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个按时间倒序展示的大型列表需要稳定翻页，请比较 offset 分页与基于游标的 keyset 分页，并说明并发新增或删除数据时的取舍。"
+    rubric:
+      - id: pagination-offset-cost
+        description: "说明 offset 深分页通常需要跳过越来越多的记录，并可能因并发变化产生重复或遗漏"
+        weight: 30
+      - id: pagination-keyset-order
+        description: "说明 keyset 分页需要稳定且唯一的排序边界，通常由排序字段和唯一标识共同确定"
+        weight: 40
+      - id: pagination-consistency
+        description: "说明需要根据业务选择实时视图或固定快照语义，并明确游标方向、边界和失效行为"
+        weight: 30
+    followUpGoals:
+      - id: pagination-keyset-clarification
+        kind: clarification
+        goal: "澄清产品是否需要随机跳页，还是只需要连续向前或向后浏览"
+      - id: pagination-keyset-depth
+        kind: depth
+        goal: "说明排序值相同以及翻页期间数据变化时如何保持确定性边界"
+    knowledgeExplanation: "offset 分页实现直观并支持跳页，但深分页成本和并发稳定性较差。keyset 分页从上次的唯一排序边界继续扫描，更适合大列表连续浏览，但需要明确一致性语义且不擅长任意跳页。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.replication.read-consistency
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "系统把读取流量分配到异步只读副本后，用户偶尔在写入成功后立即读不到新数据，请解释原因并比较可采用的一致性策略。"
+    rubric:
+      - id: replica-lag-causality
+        description: "说明异步复制存在应用和重放延迟，写入成功不代表副本已经达到相同日志位置"
+        weight: 35
+      - id: read-consistency-strategies
+        description: "说明可根据需求选择写后读主库、会话粘滞、等待副本追上或接受有界陈旧读取"
+        weight: 40
+      - id: replica-routing-observability
+        description: "说明应监测复制延迟和副本健康，并在延迟超出契约时停止路由或降级"
+        weight: 25
+    followUpGoals:
+      - id: replica-consistency-clarification
+        kind: clarification
+        goal: "澄清哪些读取必须看到当前用户刚完成的写入"
+      - id: replica-consistency-depth
+        kind: depth
+        goal: "说明故障切换和副本延迟变化时如何维护读一致性契约"
+    knowledgeExplanation: "异步副本提升读取容量，但天然可能返回旧数据。系统应把一致性作为明确契约：强写后读可以回到主库或等待指定日志位置，允许陈旧的读取则需要限制延迟并监控路由安全。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.wal.durability
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释 PostgreSQL 的 WAL 如何支持崩溃恢复，以及提交确认时机、磁盘刷新和性能之间有什么耐久性取舍。"
+    rubric:
+      - id: wal-write-ahead
+        description: "说明数据页落盘前需要先持久化描述变更的 WAL，恢复会重放已持久化日志，而未提交事务仍由事务状态和 MVCC 保持不可见"
+        weight: 40
+      - id: wal-commit-ack
+        description: "说明提交何时向客户端确认取决于所需的日志持久化级别，过早确认可能扩大故障时的数据丢失窗口"
+        weight: 35
+      - id: wal-storage-boundary
+        description: "说明数据库刷新语义仍依赖操作系统、存储设备和复制配置提供真实持久化保证"
+        weight: 25
+    followUpGoals:
+      - id: wal-durability-clarification
+        kind: clarification
+        goal: "澄清目标是防进程崩溃、主机断电还是整个存储节点故障"
+      - id: wal-durability-depth
+        kind: depth
+        goal: "说明降低提交等待时间会如何改变故障后的数据丢失风险"
+    knowledgeExplanation: "WAL 通过先记录变更日志、后刷新数据页，使数据库能在崩溃后重放已持久化日志。提交延迟与耐久性取决于确认前等待到哪一层，数据库配置必须与操作系统、磁盘缓存和复制保障一起评估。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.migration.expand-contract
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "线上大表需要新增一个最终必须非空的字段，并且新旧应用版本会短时间并存，请说明如何设计低风险的模式迁移过程。"
+    rubric:
+      - id: migration-compatible-expand
+        description: "说明先进行向前和向后兼容的扩展，让新旧应用在过渡期都能正常读写"
+        weight: 30
+      - id: migration-backfill-validation
+        description: "说明以可观测、可暂停的小批次回填历史数据，并在施加强约束前验证完整性"
+        weight: 25
+      - id: migration-writer-transition
+        description: "说明通过兼容默认值、受控双写或停用旧写入方，防止回填后继续产生新的空值，并执行最终补偿"
+        weight: 25
+      - id: migration-contract-locks
+        description: "说明最后再收紧约束和清理旧结构，同时评估锁影响、发布顺序、回退路径和磁盘余量"
+        weight: 20
+    followUpGoals:
+      - id: migration-safety-clarification
+        kind: clarification
+        goal: "澄清表规模、允许的锁等待以及新旧版本并存时间"
+      - id: migration-safety-depth
+        kind: depth
+        goal: "说明迁移中途暂停或应用回退时如何保持数据仍可被两代版本解释"
+    knowledgeExplanation: "安全模式迁移通常采用扩展、迁移、收缩的顺序。先建立兼容结构和新写入策略，再分批回填；旧写入方退出后执行最终补偿与验证，最后才启用强约束和移除旧结构。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.unique.idempotency
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "客户端因网络超时重复提交同一业务操作，系统偶尔生成重复记录，请说明唯一约束与幂等记录应如何协作避免重复副作用。"
+    rubric:
+      - id: unique-constraint-race
+        description: "说明应用层先查询再写入存在并发竞争，数据库唯一约束才是最终原子不变量"
+        weight: 30
+      - id: idempotency-scope-result
+        description: "说明幂等键需要绑定调用方、操作范围和不可变请求内容，并保存首次处理状态或结果"
+        weight: 25
+      - id: idempotency-atomicity
+        description: "说明幂等键占用、业务数据库变更和结果持久化应尽可能在同一事务中原子完成，外部副作用还需下游幂等或恢复协调"
+        weight: 35
+      - id: idempotency-conflict-lifecycle
+        description: "说明重复键但请求内容不同应明确冲突，并根据业务重试窗口管理幂等记录生命周期"
+        weight: 10
+    followUpGoals:
+      - id: unique-idempotency-clarification
+        kind: clarification
+        goal: "澄清业务唯一性与一次客户端请求的幂等范围是否相同"
+      - id: unique-idempotency-depth
+        kind: depth
+        goal: "说明两个并发请求同时首次到达时如何返回一致且可重试的结果"
+    knowledgeExplanation: "唯一约束保护最终业务不变量，幂等记录解决客户端无法判断首次结果的问题。幂等占用、业务变更和结果应原子协调；无法纳入同一事务的外部副作用还需要下游幂等或恢复机制。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.partitioning.tradeoff
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: design
+    sourceWording: "一张按时间持续增长的大表准备引入分区，请说明分区可能带来的收益、分区键选择原则，以及它不能自动解决哪些性能问题。"
+    rubric:
+      - id: partition-pruning-lifecycle
+        description: "说明与查询条件匹配的分区键可支持分区裁剪，并简化按时间归档或删除数据"
+        weight: 35
+      - id: partition-key-sizing
+        description: "说明分区键和粒度应结合访问模式、数据分布、保留周期与单分区规模选择"
+        weight: 35
+      - id: partition-operational-cost
+        description: "说明分区不能替代分区内索引和查询优化，还会增加跨分区约束、计划和运维复杂度"
+        weight: 30
+    followUpGoals:
+      - id: partitioning-clarification
+        kind: clarification
+        goal: "澄清主要查询过滤条件、数据保留周期和增长速度"
+      - id: partitioning-depth
+        kind: depth
+        goal: "说明分区数量过多、数据倾斜或查询未包含分区键时的影响"
+    knowledgeExplanation: "分区把逻辑表划分为可独立管理的数据集合。只有查询能够按分区键裁剪、或生命周期操作能够整分区执行时收益才明显；分区本身不会修复低选择性查询，也会引入额外的约束和运维成本。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.jsonb.relational-modeling
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: design
+    sourceWording: "业务对象既有稳定的核心字段，也有随类型变化的扩展属性，请比较 PostgreSQL JSONB 与关系化建模，并说明何时适合采用混合方案。"
+    rubric:
+      - id: relational-model-strength
+        description: "说明稳定且常用于过滤、关联和约束的字段适合关系列，以获得明确类型和完整性保证"
+        weight: 35
+      - id: jsonb-flexibility-cost
+        description: "说明 JSONB 适合结构多样或演进较快的属性，但会把部分校验、关联和统计复杂度转移到应用与索引设计"
+        weight: 35
+      - id: hybrid-modeling-access
+        description: "说明可将核心查询字段关系化、扩展属性放入 JSONB，并依据真实访问路径选择表达式或 GIN 索引"
+        weight: 30
+    followUpGoals:
+      - id: jsonb-modeling-clarification
+        kind: clarification
+        goal: "澄清哪些属性需要强约束、频繁筛选、排序或关联"
+      - id: jsonb-modeling-depth
+        kind: depth
+        goal: "说明扩展属性逐渐稳定或成为高频查询条件时如何演进模型"
+    knowledgeExplanation: "关系列提供清晰类型、约束、关联和可预测统计，JSONB 提供更灵活的结构演进。常见方案是保留关系化核心，把低频且多变的属性放入 JSONB，并在访问模式稳定后将关键属性提升为关系字段。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: database.backup.restore-failure
+    contentVersion: 1
+    domain: database_storage
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "生产数据库所在存储发生损坏，请说明如何用 RPO、RTO 设计备份与恢复方案，并在故障发生后判断是故障切换还是从备份恢复。"
+    rubric:
+      - id: recovery-objectives
+        description: "说明 RPO 表示可接受的数据丢失窗口，RTO 表示可接受的服务恢复时间，两者决定成本和恢复机制"
+        weight: 25
+      - id: backup-recovery-chain
+        description: "说明完整备份、增量能力或连续 WAL 归档需要形成可验证的恢复链，并保留独立故障域中的副本"
+        weight: 25
+      - id: restore-verification
+        description: "说明必须定期执行恢复演练，验证备份可读、恢复时长、时间点恢复结果和应用一致性"
+        weight: 25
+      - id: storage-failure-response
+        description: "说明先隔离故障与停止扩大损坏，再根据副本健康、数据一致性和恢复目标选择切换、回滚或恢复"
+        weight: 25
+    followUpGoals:
+      - id: backup-failure-clarification
+        kind: clarification
+        goal: "澄清故障影响单个磁盘、整个节点还是多个副本所在的共同存储"
+      - id: backup-failure-depth
+        kind: depth
+        goal: "说明副本已经复制逻辑损坏时，如何选择可信恢复点并验证业务一致性"
+    knowledgeExplanation: "备份策略必须从业务可接受的 RPO 和 RTO 反推，而不是只确认存在备份文件。副本适合快速接管部分故障，但可能同步错误或损坏；独立备份、连续日志、恢复演练和故障隔离共同决定系统能否可靠恢复。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: database-storage-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
