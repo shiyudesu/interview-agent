@@ -239,6 +239,12 @@ delete-user endpoints remain disabled because those workflows are project-owned.
 
 The application owns interview-history access and deletion orchestration. Account deletion immediately revokes sessions and marks all related content inaccessible and non-restorable. A sweeper physically deletes authentication and business rows within seven days. Better Auth's immediate delete endpoint is not exposed directly.
 
+Account access projects the primary email identity, configured GitHub links, and only unexpired
+database sessions; internal Better Auth credential rows and all token fields remain private. Blank
+OTP-created display names are represented as absent rather than corruption. Interview and report
+access always calls owner-scoped repositories and maps both missing and non-owned resources to the
+same not-found result.
+
 Email delivery is behind an `EmailSender` port. The local adapter uses Nodemailer and Mailpit; a production adapter is deferred.
 The adapter sends text-only OTP messages through validated SMTP host, port, and sender settings.
 Delivery logs contain only fixed event and purpose fields; recipient addresses, OTP values, and raw

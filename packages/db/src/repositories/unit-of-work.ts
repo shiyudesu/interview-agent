@@ -1,4 +1,5 @@
 import type { Database } from "../client.js";
+import { PgAccountAccessRepository } from "./account-access-repository.js";
 import { RepositoryInterviewExpirySignal } from "./interview-expiry.js";
 import { persistInterviewExpiryAndThrow } from "./interview-expiry-handling.js";
 import { PgInterviewRepository } from "./interview-repository.js";
@@ -9,6 +10,7 @@ import { PgReportRepository } from "./report-repository.js";
 import { RepositoryExecution, type TransactionOptions, withTransaction } from "./transaction.js";
 
 export interface PgRepositories {
+  readonly accounts: PgAccountAccessRepository;
   readonly interviews: PgInterviewRepository;
   readonly lifecycle: PgLifecycleRepository;
   readonly operations: PgOperationRepository;
@@ -40,6 +42,7 @@ export class PgRepositoryUnitOfWork {
         async (transaction) => {
           const execution = this.execution.bind(transaction);
           return callback({
+            accounts: new PgAccountAccessRepository(this.database, execution),
             interviews: new PgInterviewRepository(this.database, execution),
             lifecycle: new PgLifecycleRepository(this.database, execution),
             operations: new PgOperationRepository(this.database, execution),

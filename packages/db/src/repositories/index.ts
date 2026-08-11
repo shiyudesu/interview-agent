@@ -1,3 +1,4 @@
+export * from "./account-access-repository.js";
 export * from "./errors.js";
 export * from "./interview-repository.js";
 export * from "./lifecycle-repository.js";
