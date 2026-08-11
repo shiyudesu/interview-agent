@@ -55,7 +55,7 @@
 - [x] 6.2 Create versioned prompt and Schema registries for question rephrasing, clarification, follow-up wording, answer evaluation, and report analysis.
 - [x] 6.3 Implement the no-tool Pi Agent interviewer adapter with bounded context, SSE text events, output checks, and reviewed-source fallback when question rephrasing fails.
 - [x] 6.4 Implement the schema-constrained answer evaluation adapter with delimited untrusted input, one directed structure repair, two transient retries, and full model-version metadata.
-- [ ] 6.5 Implement the schema-constrained report analysis adapter using structured evaluations rather than the unrestricted transcript.
+- [x] 6.5 Implement the schema-constrained report analysis adapter using structured evaluations rather than the unrestricted transcript.
 - [ ] 6.6 Build evaluation fixtures covering correct, partially correct, incorrect, unknown, skipped, irrelevant, ambiguous, and prompt-injection-style answers.
 - [ ] 6.7 Add Faux Provider tests for output validation, retry exhaustion, fallback wording, evidence references, and state-preserving failure behavior.
 

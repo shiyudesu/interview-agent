@@ -69,9 +69,13 @@ export class FixedModelClient<TApi extends Api> {
     return this.#models.complete(this.#model, context);
   }
 
-  completeStructured(context: Context): Promise<AssistantMessage> {
+  completeStructured(
+    context: Context,
+    requestOptions: { readonly maxTokens?: number } = {},
+  ): Promise<AssistantMessage> {
     const options: ModelsSimpleStreamOptions = {
       maxRetries: 0,
+      ...(requestOptions.maxTokens === undefined ? {} : { maxTokens: requestOptions.maxTokens }),
     };
     return this.#models.completeSimple(this.#model, context, options);
   }

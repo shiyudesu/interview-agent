@@ -260,6 +260,15 @@ The domain layer computes integer question, domain, and overall scores. Model ou
 
 The report generator reads structured evaluations rather than the unrestricted transcript. Reports become immutable once stored. The system does not regenerate, rescore, append chat, export, or share them in the MVP.
 
+The report-analysis adapter reconstructs deterministic scores and domain coverage from validated
+question outcomes, then sends only server-owned IDs/scores/outcomes/versions plus Base64URL-framed
+model-authored evaluation text and bounded answer evidence. It canonicalizes missing-point text by
+Rubric ID/order, requires exact question/evidence coverage, rejects internal-source leakage,
+model-authored report-kind/score claims, wrong zero-reason or scored-outcome prose, and non-Chinese
+analysis. Initial and repair calls reserve conservative UTF-8 input, tool framing, and dynamically
+available output capacity; one repair and two transient retries share the same bounds and attach
+attempted-call metadata on failure.
+
 ### 10. Use Better Auth behind project-owned account workflows
 
 Better Auth provides GitHub OAuth, email OTP, PostgreSQL sessions, and explicit linking. Configuration disables implicit linking and permits an authenticated user to link a GitHub identity with a different email without changing the primary email.
