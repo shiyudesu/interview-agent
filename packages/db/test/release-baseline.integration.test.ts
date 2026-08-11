@@ -366,6 +366,7 @@ describe.sequential("clean PostgreSQL release integration baseline", () => {
 function blueprint(): InterviewBlueprint {
   return {
     selectionSeed: "release-baseline-seed",
+    unassessedDomain: "testing_observability_engineering",
     questions: DOMAINS.map((domain, index) => {
       const position = index + 1;
       return {

@@ -16,6 +16,11 @@ import type {
   ReportKind,
   ResponseClassification,
 } from "@interview-agent/domain";
+import {
+  deriveUnassessedDomain,
+  InvalidBlueprintCoverageError,
+  validateInterviewBlueprintCoverage,
+} from "@interview-agent/domain";
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import type { Database } from "../client.js";
@@ -1002,6 +1007,20 @@ function reconstructInterview(
       },
     };
   });
+  let unassessedDomain: KnowledgeDomain | null;
+  try {
+    unassessedDomain = deriveUnassessedDomain(blueprintQuestions, questionCount);
+    validateInterviewBlueprintCoverage({
+      questionCount,
+      questions: blueprintQuestions,
+      unassessedDomain,
+    });
+  } catch (error) {
+    if (error instanceof InvalidBlueprintCoverageError) {
+      throw new RepositoryCorruptionError("interview", session.id, error.message, { cause: error });
+    }
+    throw error;
+  }
 
   const questions = snapshots.map((snapshot) =>
     reconstructQuestion(
@@ -1024,6 +1043,7 @@ function reconstructInterview(
     questionCount,
     blueprint: {
       selectionSeed: requireNonEmpty(session.selectionSeed, session.id, "selection seed"),
+      unassessedDomain,
       questions: blueprintQuestions,
     },
     currentQuestionPosition: requirePosition(

@@ -103,7 +103,12 @@ Every mutating interview command MUST carry an Idempotency Key and expected inte
 - **AND** the other receives a version conflict with the current canonical state
 
 ### Requirement: Model failures do not corrupt interview state
-The system SHALL persist the command Operation before model work and SHALL advance interview state only after required model output has completed and passed validation.
+The system SHALL persist the command Operation before model work. Accepting a valid user command MAY
+advance the optimistic version, refresh effective activity, and record technical processing metadata,
+but MUST NOT persist any new answer material, interviewer text, evaluation facts, question outcomes,
+or question progress produced by that accepted command until required model output has completed and
+passed validation. Business facts accepted before the command, including the provisional assessment
+that precedes a supplement, remain unchanged while processing.
 
 #### Scenario: Model operation succeeds
 - **WHEN** the model response completes and passes Schema and Interview Engine validation
@@ -112,7 +117,8 @@ The system SHALL persist the command Operation before model work and SHALL advan
 #### Scenario: Model operation fails
 - **WHEN** model retries and any allowed structure repair are exhausted
 - **THEN** the Operation is marked failed
-- **AND** the interview remains at the previous canonical state
+- **AND** the interview returns to the previous business phase with no new answer material, messages, evaluation facts, outcomes, or question progress
+- **AND** the accepted command's optimistic version and effective activity remain recorded
 - **AND** the user can explicitly retry the failed Operation
 
 ### Requirement: Streaming is presentation-only
@@ -180,4 +186,3 @@ Completed, early-ended, and abandoned interviews MUST NOT accept answer, supplem
 #### Scenario: Mutate terminal interview
 - **WHEN** a user submits an interview-progress command to a terminal interview
 - **THEN** the system rejects the command without changing stored history
-

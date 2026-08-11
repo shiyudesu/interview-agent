@@ -128,6 +128,7 @@ export interface InterviewBlueprintItem {
 
 export interface InterviewBlueprint {
   readonly selectionSeed: string;
+  readonly unassessedDomain: KnowledgeDomain | null;
   readonly questions: readonly InterviewBlueprintItem[];
 }
 

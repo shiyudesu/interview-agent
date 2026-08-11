@@ -185,6 +185,7 @@ async function createOperationForTest(
 function blueprint(prefix: string, questionCount: InterviewQuestionCount = 5): InterviewBlueprint {
   return {
     selectionSeed: `${prefix}-seed`,
+    unassessedDomain: questionCount === 5 ? "testing_observability_engineering" : null,
     questions: Array.from({ length: questionCount }, (_, index) => {
       const position = index + 1;
       return {

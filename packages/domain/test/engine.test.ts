@@ -17,6 +17,7 @@ import {
   InvalidInterviewBlueprintError,
   InvalidInterviewCommandError,
   isInterviewExpired,
+  KNOWLEDGE_DOMAINS,
   parseAccountId,
   parseAnswerMaterialId,
   parseEvaluationId,
@@ -50,14 +51,19 @@ function required<T>(value: T | undefined): T {
 function blueprint(questionCount: InterviewQuestionCount = 5): InterviewBlueprint {
   return {
     selectionSeed: "fixed-seed",
+    unassessedDomain: questionCount === 5 ? "testing_observability_engineering" : null,
     questions: Array.from({ length: questionCount }, (_, index) => {
       const number = index + 1;
+      const domain = KNOWLEDGE_DOMAINS[index % KNOWLEDGE_DOMAINS.length];
+      if (domain === undefined) {
+        throw new Error("Expected a knowledge-domain fixture");
+      }
       return {
         position: number,
         question: {
           questionId: parseQuestionId(`question-${number}`),
           questionVersion: 1,
-          domain: "go_language",
+          domain,
           sourceWording: `Source question ${number}`,
           displayedWording: `Displayed question ${number}`,
           rubric: [
@@ -363,6 +369,26 @@ describe("interview creation", () => {
           ),
         };
       },
+    },
+    {
+      name: "invalid domain coverage",
+      makeInvalid: () => {
+        const value = blueprint();
+        return {
+          ...value,
+          questions: value.questions.map((item) => ({
+            ...item,
+            question: { ...item.question, domain: "go_language" as const },
+          })),
+        };
+      },
+    },
+    {
+      name: "mismatched unassessed domain",
+      makeInvalid: () => ({
+        ...blueprint(),
+        unassessedDomain: "cache_messaging_distributed" as const,
+      }),
     },
     {
       name: "missing clarification goal",

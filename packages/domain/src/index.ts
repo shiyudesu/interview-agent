@@ -1,3 +1,4 @@
+export * from "./blueprint-coverage.js";
 export * from "./commands.js";
 export * from "./engine.js";
 export * from "./events.js";

@@ -1,3 +1,7 @@
+import {
+  InvalidBlueprintCoverageError,
+  validateInterviewBlueprintCoverage,
+} from "./blueprint-coverage.js";
 import type {
   AbandonInterviewCommand,
   ContinueInterviewCommand,
@@ -890,8 +894,22 @@ function validateAndFreezeBlueprint(
     return Object.freeze({ position: item.position, question });
   });
 
+  try {
+    validateInterviewBlueprintCoverage({
+      questionCount,
+      questions: frozenQuestions,
+      unassessedDomain: blueprint.unassessedDomain,
+    });
+  } catch (error) {
+    if (error instanceof InvalidBlueprintCoverageError) {
+      throw new InvalidInterviewBlueprintError(error.reason);
+    }
+    throw error;
+  }
+
   return Object.freeze({
     selectionSeed: blueprint.selectionSeed,
+    unassessedDomain: blueprint.unassessedDomain,
     questions: Object.freeze(frozenQuestions),
   });
 }

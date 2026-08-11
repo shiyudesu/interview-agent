@@ -130,14 +130,25 @@ function makeDefinition(index = 1): QuestionDefinition {
 
 function makeInterview(changes: Partial<Interview> = {}): Interview {
   const definitions = Array.from({ length: 5 }, (_, index) => makeDefinition(index + 1));
+  const domains = [
+    "go_language",
+    "concurrency_runtime_performance",
+    "http_rpc_api",
+    "database_storage",
+    "cache_messaging_distributed",
+  ] as const;
   const blueprint = {
     selectionSeed: "seed-1",
+    unassessedDomain: "testing_observability_engineering" as const,
     questions: definitions.map((definition, index) => ({
       position: index + 1,
-      question: mapQuestionDefinitionToSnapshot(
-        definition,
-        `第 ${index + 1} 题：${definition.sourceWording}`,
-      ),
+      question: {
+        ...mapQuestionDefinitionToSnapshot(
+          definition,
+          `第 ${index + 1} 题：${definition.sourceWording}`,
+        ),
+        domain: domains[index] ?? "go_language",
+      },
     })),
   };
   const createdAt = new Date(occurredAt);

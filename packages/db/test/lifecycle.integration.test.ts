@@ -41,6 +41,13 @@ const NOW = new Date("2026-08-10T00:00:00.000Z");
 const CREATED_AT = new Date("2026-08-01T00:00:00.000Z");
 const numericOverflowJson = "1e1000000";
 const unsupportedUnicodeEscapeJson = String.raw`{"link":{"userId":"\u0000"}}`;
+const LIFECYCLE_DOMAINS = [
+  "go_language",
+  "concurrency_runtime_performance",
+  "http_rpc_api",
+  "database_storage",
+  "cache_messaging_distributed",
+] as const;
 let harness: PostgresTestHarness;
 let testDatabase: PostgresTestDatabase;
 let client: DatabaseClient;
@@ -59,6 +66,14 @@ function interviewId(value: string) {
   return parseInterviewId(value);
 }
 
+function lifecycleDomain(index: number): (typeof LIFECYCLE_DOMAINS)[number] {
+  const domain = LIFECYCLE_DOMAINS[index];
+  if (domain === undefined) {
+    throw new Error(`Missing lifecycle domain fixture at index ${index}`);
+  }
+  return domain;
+}
+
 async function seedOwner(value: string): Promise<void> {
   await client.database.insert(user).values({
     id: value,
@@ -72,7 +87,7 @@ async function seedQuestionBank(): Promise<void> {
     Array.from({ length: 5 }, (_, index) => ({
       questionId: `lifecycle-question-${index + 1}`,
       contentVersion: 1,
-      domain: "go_language" as const,
+      domain: lifecycleDomain(index),
       sourceWording: `Question ${index + 1}`,
       rubric: [
         {
@@ -130,7 +145,7 @@ async function seedInterview(input: {
         position: index + 1,
         sourceQuestionId: `lifecycle-question-${index + 1}`,
         sourceQuestionVersion: 1,
-        domain: "go_language" as const,
+        domain: lifecycleDomain(index),
         sourceWording: `Question ${index + 1}`,
         displayWording: `Question ${index + 1}`,
         rubric: [

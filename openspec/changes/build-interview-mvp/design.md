@@ -113,7 +113,18 @@ Each mutating request includes an Idempotency Key and expected interview version
 3. records the immutable command input;
 4. marks the Operation as processing.
 
-The OperationRunner performs model work outside the transaction. A second transaction stores validated output, appends messages/evaluations, advances the aggregate version, and completes the Operation. Duplicate keys return the existing Operation and result. Competing commands fail with a version conflict instead of both advancing the interview.
+For a model-assisted user command, the same acceptance transaction advances the optimistic version,
+refreshes effective activity, and records only technical processing metadata on the aggregate. It
+does not expose or persist new answer material, interviewer text, evaluation facts, outcomes, or
+question progress from that accepted command. Existing facts from earlier successful commands remain
+unchanged, including the provisional assessment retained while a supplement is processing.
+
+The OperationRunner performs model work outside the transaction. A second transaction stores
+validated output, appends messages/evaluations, advances the business phase, clears processing
+metadata, and completes the Operation. If model work fails, a transaction marks the Operation failed
+and restores the previous business phase while retaining the accepted version and activity time.
+Duplicate keys return the existing Operation and result. Competing commands fail with a version
+conflict instead of both advancing the interview.
 
 Operations are executed inline for the MVP, but handlers accept persisted Operation IDs and do not depend on an HTTP request. A future PostgreSQL-backed worker can call the same OperationRunner.
 
