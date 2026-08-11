@@ -28,8 +28,8 @@ describe("repository question-bank YAML", () => {
     expect(result).toMatchObject({
       valid: true,
       fileCount: 6,
-      questionCount: 78,
-      activeReviewedCount: 78,
+      questionCount: 90,
+      activeReviewedCount: 90,
       issues: [],
     });
     expect(Object.fromEntries(counts)).toEqual({
@@ -38,7 +38,7 @@ describe("repository question-bank YAML", () => {
       http_rpc_api: 15,
       database_storage: 15,
       cache_messaging_distributed: 15,
-      testing_observability_engineering: 3,
+      testing_observability_engineering: 15,
     });
   });
 

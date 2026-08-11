@@ -96,3 +96,387 @@ questions:
       reviewedAt: "2026-08-10T00:00:00Z"
       simplifiedChineseVerified: true
       technicalTermsVerified: true
+
+  - id: testing.boundaries.layering
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个服务同时包含业务规则、数据库访问和对外 API，请说明单元测试、集成测试与契约测试各自应覆盖什么边界，以及如何避免重复验证。"
+    rubric:
+      - id: testing-boundaries-unit
+        description: "说明单元测试应快速隔离地验证业务分支、边界条件和错误处理，不依赖真实外部基础设施"
+        weight: 35
+      - id: testing-boundaries-integration
+        description: "说明集成测试应验证数据库、网络适配器或框架组合后的真实交互与配置"
+        weight: 35
+      - id: testing-boundaries-contract
+        description: "说明契约测试应验证服务边界的请求响应兼容性，并按不同失败风险分层而非重复所有案例"
+        weight: 30
+    followUpGoals:
+      - id: testing-boundaries-clarification
+        kind: clarification
+        goal: "澄清业务规则、持久化和外部接口之间的责任边界"
+      - id: testing-boundaries-depth
+        kind: depth
+        goal: "说明消费者驱动契约与端到端测试分别能发现和不能发现哪些问题"
+    knowledgeExplanation: "测试分层应按失败风险选择最小有效边界：单元测试反馈快且定位清晰，集成测试验证真实组件协作，契约测试约束跨服务接口兼容性。端到端测试只保留关键路径，避免把所有验证都放到高成本层。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: testing.determinism.flaky-control
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "某组测试在本地稳定通过，却在 CI 中偶发失败，请分析时间、随机性、执行顺序和外部资源如何造成 flaky test，并说明治理顺序。"
+    rubric:
+      - id: flaky-nondeterministic-inputs
+        description: "说明真实时钟、未固定随机种子、并发调度和依赖执行顺序会使相同测试输入产生不同结果"
+        weight: 35
+      - id: flaky-shared-resources
+        description: "说明共享数据库、端口、文件、全局状态和未完成清理会造成测试间竞争或污染"
+        weight: 35
+      - id: flaky-governance
+        description: "说明应先保留失败证据并消除不确定来源，隔离只能短期止损，重复重跑不能替代修复"
+        weight: 30
+    followUpGoals:
+      - id: flaky-clarification
+        kind: clarification
+        goal: "澄清失败是否与并行执行、运行环境或固定时间窗口相关"
+      - id: flaky-depth
+        kind: depth
+        goal: "说明如何注入时钟和随机源，并让资源清理在失败路径上仍然可靠"
+    knowledgeExplanation: "确定性测试需要显式控制时间、随机性、调度条件和资源生命周期。治理 flaky test 应先收集可复现证据，再消除共享状态和隐式环境依赖；盲目重跑会掩盖真实回归并降低测试信任度。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: testing.doubles.fidelity
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较 Stub、Mock、Fake 等测试替身的用途，并说明替身与真实依赖行为不一致时会带来什么风险。"
+    rubric:
+      - id: doubles-purpose
+        description: "说明 Stub 提供预设响应，Mock 验证关键交互，Fake 以简化但可工作的行为支持测试"
+        weight: 35
+      - id: doubles-coupling
+        description: "说明过度验证调用次数或内部顺序会让测试耦合实现细节并妨碍重构"
+        weight: 30
+      - id: doubles-fidelity
+        description: "说明替身可能遗漏真实协议、事务、延迟和失败语义，需要契约或集成测试校验一致性"
+        weight: 35
+    followUpGoals:
+      - id: doubles-clarification
+        kind: clarification
+        goal: "澄清测试需要控制返回结果还是验证外部可见交互"
+      - id: doubles-depth
+        kind: depth
+        goal: "说明内存 Fake 与真实数据库在事务和并发语义上可能有哪些差异"
+    knowledgeExplanation: "测试替身用于控制依赖和聚焦被测行为，但不同替身承担不同责任。替身越偏离真实依赖，测试通过却在生产失败的风险越高，因此应减少对内部交互的脆弱断言，并用契约或真实集成验证关键语义。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: testing.property-fuzz.invariants
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明 property-based testing 与 fuzz 测试如何通过不变量和自动生成输入补充示例测试，以及发现失败后为什么需要最小化输入。"
+    rubric:
+      - id: property-invariants
+        description: "说明属性测试验证对大量输入都应成立的不变量、往返关系或单调性，而不是只列举固定答案"
+        weight: 35
+      - id: fuzz-input-space
+        description: "说明 fuzz 测试通过变异或生成异常输入探索解析、边界、崩溃和资源消耗问题"
+        weight: 35
+      - id: property-reproducibility
+        description: "说明失败输入应被缩减、保存并转为稳定回归案例，同时控制种子、资源和执行时限"
+        weight: 30
+    followUpGoals:
+      - id: property-fuzz-clarification
+        kind: clarification
+        goal: "澄清被测行为可以表达哪些始终成立的不变量"
+      - id: property-fuzz-depth
+        kind: depth
+        goal: "说明生成器偏差、无效输入比例和失败输入缩减如何影响缺陷发现效率"
+    knowledgeExplanation: "示例测试验证已知情形，属性测试用不变量覆盖更广输入空间，fuzz 测试擅长发现意外边界和健壮性问题。失败必须能够按固定种子或保存语料重现，并缩减到便于理解的最小案例。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: testing.concurrency.race-limits
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "一个并发服务通过了普通测试和 Go race detector，但线上仍出现顺序错误，请说明并发测试应验证哪些不变量，以及 race detector 的能力边界。"
+    rubric:
+      - id: concurrency-invariants
+        description: "说明并发测试应验证最终状态、原子性、幂等性、顺序约束和无死锁等业务不变量"
+        weight: 35
+      - id: race-detector-scope
+        description: "说明 race detector 只能报告实际执行路径上未同步的内存访问，依赖测试覆盖和运行时调度"
+        weight: 35
+      - id: concurrency-limitations
+        description: "说明无数据竞争不代表无逻辑竞争、死锁、活锁或跨进程一致性问题，需要压力、故障注入和模型化验证补充"
+        weight: 30
+    followUpGoals:
+      - id: concurrency-testing-clarification
+        kind: clarification
+        goal: "澄清线上错误属于共享内存竞争、事件顺序还是跨服务状态冲突"
+      - id: concurrency-testing-depth
+        kind: depth
+        goal: "说明如何扩大调度交错覆盖，同时保留失败时的事件顺序证据"
+    knowledgeExplanation: "race detector 对发现已执行路径中的共享内存数据竞争很有价值，但不能证明并发逻辑正确。并发测试还需围绕业务不变量构造竞争窗口、重复运行和故障条件，并记录足够事件顺序以重现失败。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: reliability.sli-slo.error-budget
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明如何为用户请求定义 SLI 与 SLO，并解释错误预算如何影响发布速度和可靠性改进优先级。"
+    rubric:
+      - id: sli-user-outcome
+        description: "说明 SLI 应从用户可感知结果定义成功率、延迟或新鲜度，并明确好事件和总事件"
+        weight: 35
+      - id: slo-window-target
+        description: "说明 SLO 需要目标比例、统计窗口、范围和排除规则，不能直接等同于内部资源指标"
+        weight: 35
+      - id: error-budget-policy
+        description: "说明错误预算是允许的不可靠量，消耗过快时应限制高风险变更并优先修复可靠性问题"
+        weight: 30
+    followUpGoals:
+      - id: sli-slo-clarification
+        kind: clarification
+        goal: "澄清用户认为一次请求成功需要满足哪些结果和延迟条件"
+      - id: sli-slo-depth
+        kind: depth
+        goal: "说明多时间窗口预算消耗率如何区分突发故障和长期缓慢劣化"
+    knowledgeExplanation: "SLI 量化用户体验，SLO 为一段时间内的目标水平，错误预算表示可容忍的失败空间。有效政策把预算消耗与发布、风险审查和可靠性工作联动，而不是把 SLO 当作没有取舍的百分之百承诺。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: observability.alert.actionability-runbook
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "某服务告警数量很多但值班人员经常无法采取行动，请说明高质量告警应如何选择信号、阈值、上下文和运行手册。"
+    rubric:
+      - id: alert-user-impact
+        description: "说明告警应优先反映用户影响、SLO 预算快速消耗或必须立即处理的容量与正确性风险"
+        weight: 35
+      - id: alert-noise-control
+        description: "说明阈值应结合持续时间、多窗口或变化率，并通过去重、分组和抑制减少抖动与告警风暴"
+        weight: 30
+      - id: alert-runbook
+        description: "说明告警应包含影响范围、仪表盘和关联标识，并链接经过演练的诊断、缓解、升级与验证运行手册"
+        weight: 35
+    followUpGoals:
+      - id: alert-quality-clarification
+        kind: clarification
+        goal: "澄清告警触发时是否存在真实用户影响或明确的值班动作"
+      - id: alert-quality-depth
+        kind: depth
+        goal: "说明运行手册如何验证缓解效果，并在依赖或架构变化后保持有效"
+    knowledgeExplanation: "告警的目标是促使及时且正确的行动，而不是报告所有异常指标。高质量告警基于用户影响或预算消耗，控制噪声，携带诊断上下文，并通过持续演练和维护的运行手册缩短恢复时间。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: observability.profiling.incident-postmortem
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "服务发布后 CPU 与尾延迟同时升高，请说明如何结合指标、trace、性能剖析和事件时间线定位问题，并在事后复盘中形成改进。"
+    rubric:
+      - id: incident-triage
+        description: "说明先确认用户影响、变更时间、受影响实例和资源饱和度，再缩小到具体请求路径"
+        weight: 30
+      - id: profiling-evidence
+        description: "说明使用 CPU、内存、阻塞或 mutex 剖析定位热点，并控制采样开销、持续时间和代表性"
+        weight: 35
+      - id: postmortem-learning
+        description: "说明复盘应建立基于证据的时间线和促成因素，避免归咎个人，并跟踪可验证的预防、检测和响应改进"
+        weight: 35
+    followUpGoals:
+      - id: profiling-incident-clarification
+        kind: clarification
+        goal: "澄清异常集中在所有请求、特定接口还是少量实例"
+      - id: profiling-incident-depth
+        kind: depth
+        goal: "说明剖析样本与 trace 如何相互验证，并避免把相关性误当成根因"
+    knowledgeExplanation: "事件诊断应从用户影响和时间线出发，用指标发现范围、trace 缩小路径、剖析确认资源热点。事后复盘需要区分直接触发因素和系统性条件，把结论转化为有负责人、期限和验证标准的改进项。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: engineering.shutdown.graceful-drain
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "服务实例需要在部署或缩容时退出，请说明 graceful shutdown 如何协调停止接收流量、处理在途请求、后台任务和最终资源释放。"
+    rubric:
+      - id: shutdown-readiness-drain
+        description: "说明先使实例退出就绪状态并等待负载均衡摘除传播，再停止接受新工作并开始连接排空"
+        weight: 35
+      - id: shutdown-inflight-work
+        description: "说明在统一截止时间内等待或取消在途请求和后台任务，并保持幂等、确认与事务边界"
+        weight: 35
+      - id: shutdown-bounded-release
+        description: "说明退出必须有超时和强制终止边界，按依赖顺序释放连接并记录未完成工作和退出原因"
+        weight: 30
+    followUpGoals:
+      - id: graceful-shutdown-clarification
+        kind: clarification
+        goal: "澄清服务包含长请求、长连接、消息消费还是周期后台任务"
+      - id: graceful-shutdown-depth
+        kind: depth
+        goal: "说明排空超时后未完成工作如何重试而不重复产生业务副作用"
+    knowledgeExplanation: "优雅退出不是无限等待，而是在有界时间内停止新工作、完成或安全取消已接受工作、释放资源并暴露未完成状态。就绪信号、负载均衡传播、幂等处理和平台终止期限必须协同设计。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: engineering.configuration.secrets
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明生产服务的配置与密钥应如何加载、校验、更新和观测，避免环境漂移、敏感信息泄露或错误配置静默生效。"
+    rubric:
+      - id: configuration-validation
+        description: "说明配置需要明确类型、必填项、范围和组合约束，并在启动或变更时快速失败"
+        weight: 35
+      - id: secrets-lifecycle
+        description: "说明密钥应由受控密钥系统提供，限制权限与暴露范围，支持轮换且不得进入源码、日志或普通配置快照"
+        weight: 35
+      - id: configuration-operations
+        description: "说明配置变更应版本化、审计、分环境管理并可回滚，同时观测生效版本而不记录敏感值"
+        weight: 30
+    followUpGoals:
+      - id: configuration-secrets-clarification
+        kind: clarification
+        goal: "澄清配置是启动时固定、运行时动态还是包含需要轮换的密钥"
+      - id: configuration-secrets-depth
+        kind: depth
+        goal: "说明密钥轮换期间如何兼容新旧凭据并验证所有实例完成切换"
+    knowledgeExplanation: "安全配置管理需要把普通配置和密钥分开治理：前者重视类型校验、版本和环境一致性，后者还需要最小权限、轮换和防泄露。系统应暴露配置版本与生效状态，但绝不能把密钥值写入日志或遥测。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: engineering.dependency.canary-rollback
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "一次关键依赖升级可能改变性能和兼容性，请说明升级前验证、金丝雀发布、逐步扩量与回滚条件应如何配合降低风险。"
+    rubric:
+      - id: dependency-upgrade-assessment
+        description: "说明应审查变更记录、兼容范围、安全修复、弃用项和迁移要求，并在接近生产的环境验证关键契约"
+        weight: 35
+      - id: canary-progressive-rollout
+        description: "说明先向小比例代表性流量发布，比较错误率、延迟、资源、业务指标和日志，再按观察窗口逐步扩量"
+        weight: 35
+      - id: rollback-readiness
+        description: "说明预先定义自动暂停与回滚阈值，并确认数据库或数据格式变更具有向前向后兼容性和可恢复路径"
+        weight: 30
+    followUpGoals:
+      - id: dependency-rollout-clarification
+        kind: clarification
+        goal: "澄清依赖升级是否涉及协议、持久化格式或运行时资源行为变化"
+      - id: dependency-rollout-depth
+        kind: depth
+        goal: "说明金丝雀结果如何与基线对照，以及不可逆数据迁移为何会限制快速回滚"
+    knowledgeExplanation: "依赖升级既可能修复风险，也可能引入兼容和性能回归。安全发布需要前置契约验证、代表性金丝雀、分阶段扩量和明确停止条件；涉及持久化格式时还必须先保证版本共存与数据恢复能力。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: engineering.capacity.headroom
+    contentVersion: 1
+    domain: testing_observability_engineering
+    difficulty: medium
+    questionType: design
+    sourceWording: "业务预计三个月后流量翻倍，请说明容量规划如何结合需求模型、负载测试、瓶颈识别、安全余量和扩容验证。"
+    rubric:
+      - id: capacity-demand-model
+        description: "说明根据峰值流量、请求组合、增长趋势、数据规模和服务等级建立需求模型，而不是只看平均利用率"
+        weight: 35
+      - id: capacity-load-bottleneck
+        description: "说明负载测试应接近真实请求分布并观察吞吐、尾延迟、队列、连接池和下游限制以识别瓶颈"
+        weight: 35
+      - id: capacity-headroom-validation
+        description: "说明为突发、故障转移和扩容延迟保留安全余量，设置容量阈值，并定期验证自动或人工扩容路径"
+        weight: 30
+    followUpGoals:
+      - id: capacity-planning-clarification
+        kind: clarification
+        goal: "澄清增长来自请求数量、单次请求成本、数据规模还是流量峰值变化"
+      - id: capacity-planning-depth
+        kind: depth
+        goal: "说明失去一个可用区或关键下游降速时，安全余量应如何调整"
+    knowledgeExplanation: "容量规划把业务需求转换为资源和依赖约束，需要关注峰值、尾延迟和故障情形。负载测试用于校准模型和发现瓶颈，安全余量覆盖突发与故障转移，扩容机制本身也必须定期演练和观测。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: testing-observability-engineering-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
