@@ -1,9 +1,18 @@
-import { normalizeQuestionBankSourcePath } from "@interview-agent/domain";
+import {
+  KNOWLEDGE_DOMAINS,
+  type KnowledgeDomain,
+  normalizeQuestionBankSourcePath,
+  parseAccountId,
+  parseInterviewId,
+  parseOperationId,
+} from "@interview-agent/domain";
 import { asc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-  interviewSessions,
+  InterviewCreationService,
+  PgInterviewRepository,
   PgQuestionBankRepository,
+  PgRepositoryUnitOfWork,
   QuestionBankImportService,
   QuestionBankVersionConflictError,
   questionBankSourceHash,
@@ -16,18 +25,25 @@ import type {
   QuestionBankImportEntry,
   QuestionBankImportRequest,
 } from "../src/repositories/question-bank-repository.js";
-import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import {
+  databaseNow,
+  type PostgresTestDatabase,
+  PostgresTestHarness,
+} from "./support/postgres-test-harness.js";
 import { questionDefinitionFixture } from "./support/question-definition-fixture.js";
 
 let harness: PostgresTestHarness;
 let testDatabase: PostgresTestDatabase;
 let service: QuestionBankImportService;
+let creationService: InterviewCreationService;
+let interviewRepository: PgInterviewRepository;
 
 function entry(
   id: string,
   contentVersion: number,
   overrides: {
     readonly active?: boolean;
+    readonly domain?: KnowledgeDomain;
     readonly sourceFile?: string;
     readonly sourceWording?: string;
   } = {},
@@ -36,6 +52,7 @@ function entry(
     definition: questionDefinitionFixture({
       id,
       contentVersion,
+      ...(overrides.domain === undefined ? {} : { domain: overrides.domain }),
       sourceWording:
         overrides.sourceWording ??
         `请解释 Go context 取消信号如何传播，以及调用方如何响应，版本 ${contentVersion}。`,
@@ -70,6 +87,10 @@ describe.sequential("question-bank PostgreSQL synchronization", () => {
     service = new QuestionBankImportService(
       new PgQuestionBankRepository(testDatabase.client.database),
     );
+    creationService = new InterviewCreationService(
+      new PgRepositoryUnitOfWork(testDatabase.client.database),
+    );
+    interviewRepository = new PgInterviewRepository(testDatabase.client.database);
   }, 120_000);
 
   beforeEach(async () => {
@@ -236,38 +257,51 @@ describe.sequential("question-bank PostgreSQL synchronization", () => {
     expect((await rowsFor("go.sync.concurrent")).filter((row) => row.active)).toHaveLength(1);
   });
 
-  it("keeps a v1 session snapshot unchanged after importing v2", async () => {
-    await service.synchronize(request([entry("go.sync.snapshot", 1)]));
-    await testDatabase.client.database.transaction(async (transaction) => {
-      await transaction.insert(user).values({
-        id: "snapshot-owner",
-        name: "Snapshot Owner",
-        email: "snapshot-owner@example.com",
-      });
-      await transaction.insert(interviewSessions).values({
-        id: "snapshot-interview",
-        ownerUserId: "snapshot-owner",
-        selectedQuestionCount: 5,
-        selectionSeed: "snapshot-seed",
-      });
-      await transaction.insert(sessionQuestionSnapshots).values(
-        Array.from({ length: 5 }, (_, index) => ({
-          id: `snapshot-${index + 1}`,
-          interviewId: "snapshot-interview",
-          position: index + 1,
-          sourceQuestionId: "go.sync.snapshot",
-          sourceQuestionVersion: 1,
-          domain: "go_language" as const,
-          sourceWording: "冻结的 v1 题目内容",
-          displayWording: "冻结的 v1 题目内容",
-          rubric: [],
-          followUpGoals: [],
-          knowledgeExplanation: "冻结的 v1 知识说明",
-        })),
-      );
+  it("creates complete snapshots that remain unchanged after importing later versions", async () => {
+    const versionOneEntries = KNOWLEDGE_DOMAINS.map((domain, index) =>
+      entry(`snapshot.${index + 1}`, 1, {
+        domain,
+        sourceWording: `请说明 ${domain} 的核心机制和工程取舍，版本 1。`,
+      }),
+    );
+    await service.synchronize(request(versionOneEntries));
+    await testDatabase.client.database.insert(user).values({
+      id: "snapshot-owner",
+      name: "Snapshot Owner",
+      email: "snapshot-owner@example.com",
     });
+    const occurredAt = await databaseNow(testDatabase);
+    const transition = await creationService.create({
+      accountId: parseAccountId("snapshot-owner"),
+      interviewId: parseInterviewId("snapshot-interview"),
+      operationId: parseOperationId("snapshot-create-operation"),
+      questionCount: 5,
+      occurredAt,
+    });
+    const originalBlueprint = transition.interview.blueprint.questions.map((item) => ({
+      position: item.position,
+      questionId: item.question.questionId,
+      questionVersion: item.question.questionVersion,
+      sourceWording: item.question.sourceWording,
+      rubric: item.question.rubric,
+      followUpGoals: item.question.followUpGoals,
+      knowledgeExplanation: item.question.knowledgeExplanation,
+    }));
 
-    await service.synchronize(request([entry("go.sync.snapshot", 2)]));
+    await service.synchronize(
+      request(
+        KNOWLEDGE_DOMAINS.map((domain, index) =>
+          entry(`snapshot.${index + 1}`, 2, {
+            domain,
+            sourceWording: `请说明 ${domain} 的核心机制和工程取舍，版本 2。`,
+          }),
+        ),
+      ),
+    );
+    const persisted = await interviewRepository.findById(
+      parseInterviewId("snapshot-interview"),
+      parseAccountId("snapshot-owner"),
+    );
     const snapshots = await testDatabase.client.database
       .select()
       .from(sessionQuestionSnapshots)
@@ -275,9 +309,29 @@ describe.sequential("question-bank PostgreSQL synchronization", () => {
       .orderBy(asc(sessionQuestionSnapshots.position));
 
     expect(snapshots).toHaveLength(5);
-    expect(snapshots.every((snapshot) => snapshot.sourceQuestionVersion === 1)).toBe(true);
-    expect(snapshots.every((snapshot) => snapshot.sourceWording === "冻结的 v1 题目内容")).toBe(
-      true,
-    );
+    expect(new Set(snapshots.map((snapshot) => snapshot.domain))).toHaveLength(5);
+    expect(
+      snapshots.map((snapshot) => ({
+        position: snapshot.position,
+        questionId: snapshot.sourceQuestionId,
+        questionVersion: snapshot.sourceQuestionVersion,
+        sourceWording: snapshot.sourceWording,
+        rubric: snapshot.rubric,
+        followUpGoals: snapshot.followUpGoals,
+        knowledgeExplanation: snapshot.knowledgeExplanation,
+      })),
+    ).toEqual(originalBlueprint);
+    expect(
+      persisted?.blueprint.questions.map((item) => ({
+        position: item.position,
+        questionId: item.question.questionId,
+        questionVersion: item.question.questionVersion,
+        sourceWording: item.question.sourceWording,
+        rubric: item.question.rubric,
+        followUpGoals: item.question.followUpGoals,
+        knowledgeExplanation: item.question.knowledgeExplanation,
+      })),
+    ).toEqual(originalBlueprint);
+    expect(originalBlueprint.every((question) => question.questionVersion === 1)).toBe(true);
   });
 });

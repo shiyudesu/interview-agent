@@ -19,13 +19,11 @@ export class BlueprintSelectionInputService {
   constructor(private readonly questionBankRepository: QuestionBankRepository) {}
 
   async load(input: LoadBlueprintSelectionInput): Promise<BlueprintSelectionInput> {
-    const [eligibleQuestions, recentQuestionIds] = await Promise.all([
-      this.questionBankRepository.listEligibleQuestions(),
-      this.questionBankRepository.findRecentQuestionIds(
-        input.accountId,
-        RECENT_INTERVIEW_AVOIDANCE_LIMIT,
-      ),
-    ]);
+    const eligibleQuestions = await this.questionBankRepository.listEligibleQuestions();
+    const recentQuestionIds = await this.questionBankRepository.findRecentQuestionIds(
+      input.accountId,
+      RECENT_INTERVIEW_AVOIDANCE_LIMIT,
+    );
     return {
       questionCount: input.questionCount,
       selectionSeed: selectionSeedForInterview(input.interviewId),

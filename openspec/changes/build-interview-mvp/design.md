@@ -187,7 +187,11 @@ slots are filled from a global stable seeded ordering of unseen candidates befor
 candidate is considered. A shortage is returned before a partial blueprint when mandatory domain
 coverage or total eligible capacity cannot be satisfied.
 
-The complete selected question, Rubric, follow-up goals, and version are copied into session snapshots. Historical interviews never read live question-bank rows.
+Interview creation runs the active-interview check, eligible/recent reads, deterministic selection,
+domain creation, and aggregate insert through one serializable repository unit of work. The complete
+selected question, source/display wording, Rubric, follow-up goals, knowledge explanation, and
+version are copied into session snapshots before the first question can be returned. Historical
+interviews never read live question-bank rows.
 
 ### 8. Treat model text and model facts differently
 
