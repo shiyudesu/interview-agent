@@ -335,6 +335,14 @@ Test tasks are not cached because database-time and container lifecycle assertio
 every validation run. Packages with implemented suites fail when no tests are discovered; the empty
 web suite remains explicitly allowed only until its planned UI testing task is implemented.
 
+The versioned evaluation fixture suite pins the current prompt/Schema versions and covers correct,
+partial, wholly incorrect, explicit unknown, explicit skipped, irrelevant-after-clarification,
+ambiguous, and prompt-injection answers. Model-evaluated fixtures carry valid evidence and
+follow-up-state semantics; unknown/skip fixtures explicitly bypass the model. Fixture validation
+mirrors production Rubric, missing-point, follow-up-kind, identifier, Simplified-Chinese, and
+untrusted-framing rules, and request builders create fresh Date values to prevent cross-test
+mutation.
+
 ## Risks / Trade-offs
 
 - **Model scores can vary despite a fixed Rubric** → Build a versioned evaluation fixture set, assert structural and scoring invariants, record model/prompt versions, and calibrate before treating scores as reliable.
