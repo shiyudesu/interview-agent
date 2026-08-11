@@ -30,7 +30,7 @@
 - [x] 4.1 Define the versioned YAML format and validator for stable IDs, domains, wording, Rubric weights, follow-up goals, knowledge explanations, and prohibited coding tasks.
 - [x] 4.2 Implement question-bank import and version synchronization into PostgreSQL without mutating historical interview snapshots.
 - [ ] 4.3 Implement deterministic seeded blueprint selection for 5, 10, and 15 questions with domain coverage and recent-three-interview avoidance.
-- [ ] 4.4 Implement creation and persistence of complete per-session question snapshots and test that later bank changes do not affect existing interviews.
+- [ ] 4.4 Complete interview-creation orchestration using the existing per-session snapshot persistence and extend the existing cross-version immutability test through that orchestration path.
 - [ ] 4.5 Add representative development fixtures for all six domains so end-to-end development can proceed before the release bank is complete.
 - [ ] 4.6 Author and review at least 15 Go language and standard-library questions.
 - [ ] 4.7 Author and review at least 15 concurrency, runtime, and performance questions.
@@ -46,8 +46,8 @@
 - [ ] 5.2 Implement the `EmailSender` port and Nodemailer/Mailpit local adapter with OTP expiry, attempt limiting, resend behavior, and redacted logging.
 - [ ] 5.3 Mount Better Auth in Fastify and add authenticated request context, same-origin cookie settings, Origin/CSRF protection, and authentication-specific rate limits.
 - [ ] 5.4 Implement account profile, linked-identity listing/linking, session handling, and ownership checks for interviews and reports.
-- [ ] 5.5 Implement reverse-chronological interview history projections for completed, early-ended, and abandoned interviews.
-- [ ] 5.6 Implement interview deletion and account deletion orchestration, including immediate access revocation, session revocation, delayed purge, and deletion lifecycle tests.
+- [x] 5.5 Implement reverse-chronological interview history projections for completed, early-ended, and abandoned interviews.
+- [ ] 5.6 Complete authenticated request-layer interview/account deletion orchestration using the existing immediate-inaccessibility, session-revocation, delayed-purge, audit, and lifecycle-test foundation.
 
 ## 6. Model and Interviewer Adapters
 
@@ -65,19 +65,19 @@
 - [ ] 7.2 Add `/api/v1` command endpoints requiring Idempotency Keys and expected interview versions, with stable conflict and retryable-error responses.
 - [ ] 7.3 Add canonical JSON endpoints for the current account, active interview, interview detail, Operation status, history, and report detail.
 - [ ] 7.4 Add the Operation SSE endpoint with operation IDs, monotonic event sequence numbers, text deltas, terminal status events, and disconnect-safe processing.
-- [ ] 7.5 Implement the explicit supplement window and ensure the next main question is not revealed until the user continues.
+- [ ] 7.5 Wire the existing domain/persistence supplement window through Operation handlers and API responses so the next main question is not revealed until the user continues.
 - [ ] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
 - [ ] 7.7 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.
 - [ ] 7.8 Add API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, and SSE disconnect recovery.
 
 ## 8. Assessment and Reports
 
-- [ ] 8.1 Persist structured per-question evaluations, Rubric evidence, awarded points, missing/incorrect points, follow-up eligibility, and zero-point reason labels.
-- [ ] 8.2 Generate and persist complete versioned report JSON after normal completion, including a valid zero-score complete report.
-- [ ] 8.3 Generate and persist incomplete report JSON after early ending without an overall score.
-- [ ] 8.4 Enforce evidence-backed feedback and tailored unknown, skipped, irrelevant, and incorrect zero-point feedback without exposing complete reference answers.
-- [ ] 8.5 Enforce report immutability, recorded model/prompt/Schema/question versions, private ownership, and rejection of regenerate, rescore, export, share, and continued-chat actions.
-- [ ] 8.6 Add domain and integration tests for complete reports, incomplete reports, unassessed domains, all-zero completion, report failure/retry, and historical immutability.
+- [ ] 8.1 Connect schema-constrained evaluation adapters and Operation handlers to the existing structured evaluation persistence, Rubric evidence, points, follow-up eligibility, and zero-reason validation.
+- [ ] 8.2 Implement complete-report analysis/generation and store it through the existing immutable versioned report persistence, including a valid zero-score complete report.
+- [ ] 8.3 Implement incomplete-report analysis/generation after early ending and store it through the existing immutable report persistence without an overall score.
+- [ ] 8.4 Apply the existing evidence and report validators to generated feedback, including tailored unknown, skipped, irrelevant, and incorrect zero-point feedback without complete reference answers.
+- [ ] 8.5 Complete private report application/API access and unsupported-action rejection using the existing immutable persistence and recorded model/prompt/Schema/question-version validation.
+- [ ] 8.6 Complete the remaining model/Operation integration coverage for report failure/retry while retaining the existing domain and persistence tests for complete/incomplete reports, unassessed domains, all-zero completion, and historical immutability.
 
 ## 9. Web Application
 
