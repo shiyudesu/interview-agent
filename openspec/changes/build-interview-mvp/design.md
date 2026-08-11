@@ -223,6 +223,13 @@ responses but cannot mutate provider delegation.
 - eligibility of a predefined follow-up goal;
 - report analysis fields and evidence references.
 
+All five model purposes use immutable prompt and output-Schema registries with explicit current
+versions. Candidate text and previously model-authored text are Base64URL-framed JSON in separate
+untrusted blocks, so delimiter strings cannot escape their frame. Trusted blocks contain only
+server-owned question facts, Rubric/goal identifiers, deterministic outcomes, scores, and versions.
+Evaluation and report model-output Schemas exclude provider/model/prompt/schema, latency, and token
+metadata; adapters attach those facts after the call completes.
+
 The Interview Engine validates every payload and performs all score calculations and state transitions. Schema failures receive one repair attempt with concrete validation errors. Transient provider failures receive at most two exponential-backoff retries. Exhaustion fails the Operation without changing interview state.
 
 Every decision-bearing call records provider, model ID, prompt version, schema version, question version, purpose, latency, and token usage. User content is delimited as untrusted data, and no chain-of-thought is requested or stored.

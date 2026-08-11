@@ -52,7 +52,7 @@
 ## 6. Model and Interviewer Adapters
 
 - [x] 6.1 Implement environment-selected `pi-ai` provider/model construction plus a Faux Provider path for automated tests.
-- [ ] 6.2 Create versioned prompt and Schema registries for question rephrasing, clarification, follow-up wording, answer evaluation, and report analysis.
+- [x] 6.2 Create versioned prompt and Schema registries for question rephrasing, clarification, follow-up wording, answer evaluation, and report analysis.
 - [ ] 6.3 Implement the no-tool Pi Agent interviewer adapter with bounded context, SSE text events, output checks, and reviewed-source fallback when question rephrasing fails.
 - [ ] 6.4 Implement the schema-constrained answer evaluation adapter with delimited untrusted input, one directed structure repair, two transient retries, and full model-version metadata.
 - [ ] 6.5 Implement the schema-constrained report analysis adapter using structured evaluations rather than the unrestricted transcript.
