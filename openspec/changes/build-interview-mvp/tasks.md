@@ -34,7 +34,7 @@
 - [x] 4.5 Add representative development fixtures for all six domains so end-to-end development can proceed before the release bank is complete.
 - [x] 4.6 Author and review at least 15 Go language and standard-library questions.
 - [x] 4.7 Author and review at least 15 concurrency, runtime, and performance questions.
-- [ ] 4.8 Author and review at least 15 HTTP, RPC, and API questions.
+- [x] 4.8 Author and review at least 15 HTTP, RPC, and API questions.
 - [ ] 4.9 Author and review at least 15 database and storage questions.
 - [ ] 4.10 Author and review at least 15 cache, messaging, and distributed-system fundamentals questions.
 - [ ] 4.11 Author and review at least 15 testing, observability, and engineering-practice questions.

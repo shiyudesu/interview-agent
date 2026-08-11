@@ -96,3 +96,390 @@ questions:
       reviewedAt: "2026-08-10T00:00:00Z"
       simplifiedChineseVerified: true
       technicalTermsVerified: true
+
+  - id: http.connection-reuse.body-lifecycle
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "在 Go HTTP 服务中，请说明请求与响应 body 的生命周期如何影响连接复用、资源释放和大报文处理。"
+    rubric:
+      - id: response-body-reuse
+        description: "说明客户端应关闭响应 body，并在需要复用持久连接时合理读取到结束；未正确处理可能使连接无法复用"
+        weight: 40
+      - id: request-body-lifecycle
+        description: "说明服务端请求 body 只应在当前请求处理生命周期内消费，并通过大小限制和流式读取控制资源占用"
+        weight: 35
+      - id: bounded-cleanup
+        description: "说明对不再需要或可能很大的 body 应采用有界清理或放弃复用，不能为复用而无界读取"
+        weight: 25
+    followUpGoals:
+      - id: body-lifecycle-clarification
+        kind: clarification
+        goal: "澄清讨论的是客户端响应 body 还是服务端请求 body"
+      - id: body-lifecycle-depth
+        kind: depth
+        goal: "说明大报文、提前返回和连接复用之间的资源取舍"
+    knowledgeExplanation: "HTTP body 是与单次请求绑定的流。客户端正确关闭并按需读完响应有利于连接复用，服务端应在处理边界内有界消费请求体；面对大报文时，释放资源和限制读取比强行复用连接更重要。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.validation.status-error-envelope
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: design
+    sourceWording: "一个写操作 API 需要处理参数校验、重复提交和业务冲突，请说明状态码、幂等语义与错误响应结构应如何设计。"
+    rubric:
+      - id: validation-status-semantics
+        description: "区分请求格式或参数错误、认证失败、权限不足、资源不存在、业务冲突、限流和服务端故障等状态语义"
+        weight: 40
+      - id: idempotent-outcome
+        description: "说明状态码本身不保证幂等，重复请求应依据稳定幂等键和原请求状态返回一致结果或明确冲突"
+        weight: 35
+      - id: stable-error-envelope
+        description: "说明错误响应应包含稳定机器码、可读消息、字段级校验信息和追踪标识，同时避免泄露内部细节"
+        weight: 25
+    followUpGoals:
+      - id: status-envelope-clarification
+        kind: clarification
+        goal: "澄清失败属于语法校验、业务规则还是并发冲突"
+      - id: status-envelope-depth
+        kind: depth
+        goal: "说明客户端如何依据机器码、状态码和重试提示采取后续动作"
+    knowledgeExplanation: "HTTP 状态码表达结果类别，稳定错误结构承载可操作细节，幂等记录则保证重复写请求不重复产生副作用。三者职责不同，应共同形成可演进且可诊断的失败契约。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.pagination.consistency
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "当列表数据持续新增和删除时，请比较 offset 分页与 cursor 分页，并说明如何保证翻页结果稳定。"
+    rubric:
+      - id: offset-tradeoff
+        description: "说明 offset 分页易于跳页，但深分页成本较高且并发变更可能造成重复或遗漏"
+        weight: 30
+      - id: cursor-ordering
+        description: "说明 cursor 应基于稳定且唯一的排序边界，通常需要业务排序字段加唯一键作为确定性顺序"
+        weight: 40
+      - id: consistency-contract
+        description: "说明需要定义实时视图或快照视图、游标不透明性、方向和失效行为等契约"
+        weight: 30
+    followUpGoals:
+      - id: pagination-clarification
+        kind: clarification
+        goal: "澄清调用方是否需要随机跳页还是连续浏览"
+      - id: pagination-depth
+        kind: depth
+        goal: "说明排序字段相同或数据在翻页期间变化时如何处理"
+    knowledgeExplanation: "offset 适合简单跳页，但在大数据量和并发变更下可能昂贵且不稳定。cursor 通过确定性排序边界继续读取，更适合连续翻页，但必须明确一致性、方向和游标失效规则。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.compatibility.versioning
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明一个已被多个客户端使用的 API 应如何判断兼容与破坏性变更，并制定版本演进和下线策略。"
+    rubric:
+      - id: compatibility-classification
+        description: "区分新增可选字段等通常可兼容变更与删除字段、改变含义、收紧输入或改变默认行为等破坏性变更"
+        weight: 40
+      - id: version-boundary
+        description: "说明重大不兼容变更需要清晰版本边界，并保持同一版本内的语义稳定"
+        weight: 30
+      - id: migration-deprecation
+        description: "说明通过兼容窗口、弃用通知、使用观测、迁移文档和明确下线时间管理客户端升级"
+        weight: 30
+    followUpGoals:
+      - id: compatibility-clarification
+        kind: clarification
+        goal: "澄清变化发生在请求结构、响应结构还是业务语义"
+      - id: compatibility-depth
+        kind: depth
+        goal: "说明服务端与客户端发布节奏不一致时如何安全迁移"
+    knowledgeExplanation: "API 兼容性不仅取决于字段能否解析，还包括字段含义、默认值和错误语义。版本边界用于隔离必要的不兼容变化，弃用流程和使用观测则降低长期并存与集中迁移的风险。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.authentication.authorization
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "用户已携带有效身份凭证但仍不能访问某个资源，请解释 authentication 与 authorization 的边界以及接口应如何处理。"
+    rubric:
+      - id: identity-boundary
+        description: "说明 authentication 验证调用方身份和凭证有效性，不能替代资源访问判断"
+        weight: 35
+      - id: authorization-policy
+        description: "说明 authorization 应结合主体、动作、资源归属、角色或策略执行最小权限检查"
+        weight: 40
+      - id: response-disclosure
+        description: "说明未认证与无权限应有明确语义，并根据资源敏感性避免通过响应泄露资源是否存在"
+        weight: 25
+    followUpGoals:
+      - id: auth-boundary-clarification
+        kind: clarification
+        goal: "澄清失败发生在凭证验证还是资源权限判断"
+      - id: auth-boundary-depth
+        kind: depth
+        goal: "说明多租户资源归属检查和权限变更后的失效策略"
+    knowledgeExplanation: "authentication 回答调用方是谁，authorization 回答该主体能否对目标资源执行当前动作。有效凭证只建立身份，资源归属、租户边界和最小权限仍需在可信服务端执行。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.rate-limit.policy
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明面向公开 API 的限流策略应如何选择统计维度、算法和超限响应，并避免误伤正常用户。"
+    rubric:
+      - id: limit-dimensions
+        description: "说明应按接口成本和风险选择账号、令牌、租户、来源地址或全局容量等一个或多个维度"
+        weight: 35
+      - id: algorithm-burst
+        description: "说明固定窗口、滑动窗口或令牌桶等策略在突发容忍、准确性和实现成本上的取舍"
+        weight: 35
+      - id: overload-response
+        description: "说明超限应返回稳定错误语义和合理重试提示，并考虑可信身份、公平性、白名单审计及分布式一致性"
+        weight: 30
+    followUpGoals:
+      - id: rate-limit-clarification
+        kind: clarification
+        goal: "澄清限流目标是防滥用、公平分配还是保护系统容量"
+      - id: rate-limit-depth
+        kind: depth
+        goal: "说明多实例部署和突发流量下如何控制误差与热点"
+    knowledgeExplanation: "限流应围绕资源成本和滥用模型选择维度。令牌桶等算法可吸收受控突发，分布式计数会引入准确性和可用性取舍；超限响应还应帮助客户端退避而不是立即形成重试风暴。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: rpc.retry-budget.circuit-breaker
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "某个下游服务故障后，上游重试使流量进一步放大，请说明重试预算、退避和 circuit breaker 应如何配合。"
+    rubric:
+      - id: retry-eligibility
+        description: "说明只对明确可重试且满足幂等条件的瞬时失败重试，并受端到端 deadline 和尝试次数约束"
+        weight: 35
+      - id: backoff-budget
+        description: "说明使用指数退避与 jitter 分散重试，并以重试预算限制额外流量占正常请求的比例"
+        weight: 35
+      - id: circuit-recovery
+        description: "说明 circuit breaker 在持续失败时快速失败，经过冷却和有限探测后再决定是否恢复"
+        weight: 30
+    followUpGoals:
+      - id: retry-budget-clarification
+        kind: clarification
+        goal: "澄清哪些错误可重试以及写操作是否具备幂等保证"
+      - id: retry-budget-depth
+        kind: depth
+        goal: "说明多级调用链各层同时重试为何会放大故障"
+    knowledgeExplanation: "重试只能缓解短暂故障，缺少约束会倍增流量。退避和 jitter 错开尝试，重试预算限制额外负载，circuit breaker 在失败持续时阻止无效调用，并通过受控探测判断恢复。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: grpc.deadline.status
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "在一条多级 gRPC 调用链中，请说明 deadline 的传播方式，以及服务端应如何选择和返回 status。"
+    rubric:
+      - id: deadline-propagation
+        description: "说明下游调用应继承上游剩余期限并及时观察取消，不能为每一跳重新获得完整超时"
+        weight: 40
+      - id: status-selection
+        description: "说明应按失败性质选择规范 status，区分参数、认证、权限、资源、并发冲突、容量和内部故障"
+        weight: 35
+      - id: retry-details
+        description: "说明重试性不能只由单一 status 决定，还要结合方法幂等性、错误详情和剩余 deadline"
+        weight: 25
+    followUpGoals:
+      - id: grpc-deadline-clarification
+        kind: clarification
+        goal: "澄清超时发生在本地处理还是下游调用阶段"
+      - id: grpc-status-depth
+        kind: depth
+        goal: "说明 status 映射和错误详情如何帮助客户端采取正确动作"
+    knowledgeExplanation: "gRPC deadline 表示调用方愿意等待的绝对边界，应沿调用链传播剩余时间并触发取消。status 提供稳定失败分类，但客户端是否重试还取决于操作语义、结构化详情和剩余预算。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: grpc.interceptor.boundaries
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: design
+    sourceWording: "请说明 gRPC unary interceptor 与 stream interceptor 适合承担哪些横切职责，以及设计拦截器链时应注意什么。"
+    rubric:
+      - id: interceptor-responsibilities
+        description: "说明认证、授权入口、追踪、指标、日志、限流和异常恢复等横切职责可在拦截器中统一处理"
+        weight: 35
+      - id: unary-stream-difference
+        description: "说明 unary interceptor 围绕一次请求响应，stream interceptor 还需包装流并处理多次收发与完整生命周期"
+        weight: 35
+      - id: chain-correctness
+        description: "说明链顺序、Context 传播、错误转换、数据脱敏和避免重复计量会影响正确性与可观测性"
+        weight: 30
+    followUpGoals:
+      - id: interceptor-clarification
+        kind: clarification
+        goal: "澄清目标职责作用于单次调用还是流中的每条消息"
+      - id: interceptor-depth
+        kind: depth
+        goal: "说明认证、恢复、追踪和日志拦截器的顺序为何重要"
+    knowledgeExplanation: "拦截器用于集中处理调用边界的横切逻辑。流式调用不仅有建立阶段，还包含多次消息收发和终止阶段，因此需要包装流并正确传播 Context、status 和观测信息。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: grpc.streaming.flow-control
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "当 gRPC streaming 的消费端持续变慢时，请说明 HTTP/2 flow control 与应用层背压各自能做什么。"
+    rubric:
+      - id: transport-flow-control
+        description: "说明 HTTP/2 的连接级和流级窗口限制在途数据，发送方可能因窗口不足而阻塞"
+        weight: 35
+      - id: application-backpressure
+        description: "说明传输层流控不能替代有界队列、按需读取、并发限制和生产速率控制"
+        weight: 40
+      - id: slow-consumer-lifecycle
+        description: "说明应通过 deadline、取消、空闲检测或明确丢弃策略处理长期慢消费者并释放资源"
+        weight: 25
+    followUpGoals:
+      - id: streaming-flow-clarification
+        kind: clarification
+        goal: "澄清积压发生在网络窗口、进程内队列还是业务处理阶段"
+      - id: streaming-flow-depth
+        kind: depth
+        goal: "说明双向流中读写互相独立时如何避免无界缓冲和资源泄漏"
+    knowledgeExplanation: "HTTP/2 flow control 约束连接和单个 stream 的在途字节，但应用仍可能在内存队列中无限积压。完整背压需要让生产速度感知消费能力，并为慢消费者设置有界资源和终止条件。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: api.rest-rpc.tradeoff
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较 REST 风格 HTTP API 与 RPC 接口在服务边界设计中的主要优势、限制和适用场景。"
+    rubric:
+      - id: rest-properties
+        description: "说明 REST 风格强调资源、统一 HTTP 语义和通用缓存工具，便于浏览器及开放生态集成"
+        weight: 35
+      - id: rpc-properties
+        description: "说明 RPC 更直接表达操作，常具备强类型契约、代码生成、高效传输和流式能力"
+        weight: 35
+      - id: boundary-choice
+        description: "说明选择应结合调用方生态、可观测性、演进方式、实时性、性能和团队运维能力，而非只按内部或外部机械划分"
+        weight: 30
+    followUpGoals:
+      - id: rest-rpc-clarification
+        kind: clarification
+        goal: "澄清接口面向浏览器、第三方开发者还是受控内部服务"
+      - id: rest-rpc-depth
+        kind: depth
+        goal: "说明同一系统同时使用 REST 与 RPC 时如何保持语义一致"
+    knowledgeExplanation: "REST 借助统一 HTTP 语义获得广泛互操作性，RPC 通过面向操作的强类型契约提高服务间调用效率。实际边界可混合使用，但应统一业务语义、错误分类和兼容策略。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: http.proxy-headers.trust
+    contentVersion: 1
+    domain: http_rpc_api
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "服务部署在多层反向代理之后，请说明如何安全使用 Forwarded、X-Forwarded-For、X-Forwarded-Proto 和 Host 信息。"
+    rubric:
+      - id: trusted-proxy-boundary
+        description: "说明只有来自已配置可信代理的转发头才能作为依据，直连客户端提供的同名头必须忽略或覆盖"
+        weight: 30
+      - id: forwarding-chain
+        description: "说明客户端地址需要按可信代理链规则解析，不能简单取最左或最右值而不验证每一跳"
+        weight: 25
+      - id: host-validation
+        description: "说明 Host 或转发主机仍需允许列表校验，生成绝对链接和重定向时宜使用配置的规范外部地址"
+        weight: 25
+      - id: security-impact
+        description: "说明错误信任会影响来源审计、限流、访问控制、重定向、绝对链接和安全 cookie 判断"
+        weight: 20
+    followUpGoals:
+      - id: proxy-trust-clarification
+        kind: clarification
+        goal: "澄清哪些网络入口和代理层由服务运营方控制"
+      - id: proxy-trust-depth
+        kind: depth
+        goal: "说明代理层数量变化或绕过代理直连时如何保持信任边界"
+    knowledgeExplanation: "转发头只是可伪造的请求数据，只有经过可信代理链规范化后才能代表原始客户端和协议；主机信息还需允许列表或规范外部地址校验。服务必须明确可信代理并防止绕过代理造成安全策略误判。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
