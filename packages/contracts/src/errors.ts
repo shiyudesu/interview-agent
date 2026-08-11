@@ -66,6 +66,14 @@ export const VersionConflictApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const CommandRejectedApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("command_rejected"),
+    message: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 export const OperationFailureApiErrorSchema = Type.Object(
   {
     code: Type.Literal("operation_failure"),
@@ -91,6 +99,7 @@ export const ApiErrorSchema = Type.Union([
   UnauthorizedApiErrorSchema,
   NotFoundApiErrorSchema,
   VersionConflictApiErrorSchema,
+  CommandRejectedApiErrorSchema,
   OperationFailureApiErrorSchema,
   InternalApiErrorSchema,
 ]);
@@ -107,6 +116,7 @@ export type ValidationApiErrorDto = Static<typeof ValidationApiErrorSchema>;
 export type UnauthorizedApiErrorDto = Static<typeof UnauthorizedApiErrorSchema>;
 export type NotFoundApiErrorDto = Static<typeof NotFoundApiErrorSchema>;
 export type VersionConflictApiErrorDto = Static<typeof VersionConflictApiErrorSchema>;
+export type CommandRejectedApiErrorDto = Static<typeof CommandRejectedApiErrorSchema>;
 export type OperationFailureCodeDto = Static<typeof OperationFailureCodeSchema>;
 export type OperationFailureDetailDto = Static<typeof OperationFailureDetailSchema>;
 export type OperationFailureApiErrorDto = Static<typeof OperationFailureApiErrorSchema>;

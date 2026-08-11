@@ -114,6 +114,9 @@ packages/domain ────────▶ no infrastructure dependencies
 - API 使用 `/api/v1` REST JSON。
 - 用户命令通过普通 HTTP 请求提交，Agent 增量输出使用 SSE 格式。
 - SSE 断线后通过 GET 重新获取权威状态，不永久保存或回放文本 delta。
+- Canonical interview responses only expose an Operation when its persisted row is loaded and
+  matches the aggregate; response mapping never fabricates processing state.
+- Report-generation failures remain retryable while the interview is `report_pending`.
 - OpenAPI JSON 和 Swagger UI 仅在本地及测试环境启用。
 - Web 与 API 正式部署同源；本地由 Vite proxy 转发 API，不启用通配 CORS。
 - 前端使用 `packages/contracts` 和手写的 `fetch`/SSE 客户端，不生成客户端代码。
@@ -137,6 +140,7 @@ Interview Engine 位于 `packages/domain`，负责：
 - 在数据库事务中检查面试场次版本号。
 - 只允许一个命令推进当前状态。
 - 对重复提交返回同一 Operation 结果。
+- 预期的领域命令拒绝映射为稳定且脱敏的客户端错误；蓝图、标识和其他可信上下文不变量失败仍作为内部错误处理。
 
 ## 7. Pi 与模型调用
 

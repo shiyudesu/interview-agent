@@ -188,22 +188,16 @@ function mapActiveInterview(interview: Interview, context: InterviewResponseCont
       return invalidInterviewState("Processing interviews require a pending Operation");
     }
     if (
-      context.operation !== null &&
-      (context.operation.status === "failed" ||
-        context.operation.operationId !== pending.operationId)
+      context.operation === null ||
+      context.operation.status !== "processing" ||
+      context.operation.operationId !== pending.operationId
     ) {
       return invalidInterviewState("Processing Operation does not match the domain state");
     }
     return {
       ...base,
       phase: "processing",
-      operation:
-        context.operation === null
-          ? {
-              operationId: String(pending.operationId),
-              status: "processing",
-            }
-          : mapOperation(context.operation),
+      operation: mapOperation(context.operation),
       availableActions: [],
     };
   }
@@ -258,6 +252,9 @@ function mapReportPendingInterview(interview: Interview, context: InterviewRespo
   if (context.operation === null) {
     return invalidInterviewState("Report-pending interviews require an Operation reference");
   }
+  if (context.operation.status === "failed" && !context.operation.failure.retryable) {
+    return invalidInterviewState("Report-pending failures must remain retryable");
+  }
   assertChronology(interview, context.messages);
   return {
     id: String(interview.id),
@@ -273,8 +270,7 @@ function mapReportPendingInterview(interview: Interview, context: InterviewRespo
     ),
     expiresAt: serializeIsoTimestamp(getInterviewExpiresAt(interview), "expiresAt"),
     operation: mapOperation(context.operation),
-    availableActions:
-      context.operation.status === "failed" && context.operation.failure.retryable ? ["retry"] : [],
+    availableActions: context.operation.status === "failed" ? ["retry"] : [],
   };
 }
 

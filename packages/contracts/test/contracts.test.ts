@@ -359,6 +359,12 @@ describe("discriminated interview lifecycle responses", () => {
     expect(
       Check(ActiveInterviewResponseSchema, {
         ...processing,
+        operation: { operationId: "operation-1", status: "pending" },
+      }),
+    ).toBe(false);
+    expect(
+      Check(ActiveInterviewResponseSchema, {
+        ...processing,
         availableActions: ["submit_answer"],
       }),
     ).toBe(false);
@@ -414,6 +420,16 @@ describe("discriminated interview lifecycle responses", () => {
       Check(ReportPendingInterviewResponseSchema, {
         ...reportPending,
         availableActions: ["retry", "submit_answer"],
+      }),
+    ).toBe(false);
+    expect(
+      Check(ReportPendingInterviewResponseSchema, {
+        ...reportPending,
+        operation: {
+          ...reportPending.operation,
+          failure: { ...reportPending.operation.failure, retryable: false },
+        },
+        availableActions: [],
       }),
     ).toBe(false);
   });

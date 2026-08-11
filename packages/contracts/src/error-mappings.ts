@@ -1,4 +1,8 @@
-import { type InterviewId, InterviewVersionConflictError } from "@interview-agent/domain";
+import {
+  type InterviewId,
+  InterviewVersionConflictError,
+  InvalidInterviewCommandError,
+} from "@interview-agent/domain";
 
 import { type ErrorEnvelopeDto, ErrorEnvelopeSchema } from "./errors.js";
 import { InboundRequestValidationError, parseMappedDto } from "./mapping-validation.js";
@@ -37,6 +41,19 @@ export function mapDomainErrorToEnvelope(
         },
       },
       "validation error",
+    );
+  }
+
+  if (error instanceof InvalidInterviewCommandError) {
+    return parseMappedDto(
+      ErrorEnvelopeSchema,
+      {
+        error: {
+          code: "command_rejected",
+          message: "The interview does not accept this command in its current state.",
+        },
+      },
+      "command rejection error",
     );
   }
 

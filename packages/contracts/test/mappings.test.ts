@@ -2,8 +2,8 @@ import {
   aggregateCompleteInterviewScore,
   createZeroQuestionOutcome,
   type Interview,
-  InterviewDomainError,
   InterviewVersionConflictError,
+  InvalidInterviewCommandError,
   parseAccountId,
   parseAnswerMaterialId,
   parseInterviewId,
@@ -501,7 +501,13 @@ describe("interview response mappings", () => {
           previousPhase: "awaiting_response",
         },
       }),
-      responseContext,
+      {
+        ...responseContext,
+        operation: {
+          operationId: parseOperationId("operation-1"),
+          status: "processing",
+        },
+      },
     );
     expect(processing).toMatchObject({
       status: "active",
@@ -509,6 +515,21 @@ describe("interview response mappings", () => {
       operation: { operationId: "operation-1", status: "processing" },
       availableActions: [],
     });
+    expect(() =>
+      mapInterviewToResponse(
+        makeInterview({
+          phase: "processing",
+          pendingOperation: {
+            operationId: parseOperationId("operation-missing"),
+            operation: "answer_analysis",
+            questionPosition: 1,
+            acceptedAt: new Date(occurredAt),
+            previousPhase: "awaiting_response",
+          },
+        }),
+        responseContext,
+      ),
+    ).toThrow(ContractMappingError);
 
     const answeredQuestions = makeInterview().questions.map((question, index) =>
       index === 0 ? { ...question, outcome: createZeroQuestionOutcome("unknown") } : question,
@@ -919,11 +940,16 @@ describe("error mappings", () => {
 
   it("does not expose domain details, secrets, or unknown error messages", () => {
     const domainEnvelope = mapDomainErrorToEnvelope(
-      new InterviewDomainError("invalid_interview_command", "secret answer contents"),
+      new InvalidInterviewCommandError("secret answer contents"),
     );
     const unknownEnvelope = mapDomainErrorToEnvelope(new Error("token=super-secret"));
     expect(JSON.stringify(domainEnvelope)).not.toContain("secret answer contents");
-    expect(domainEnvelope.error.code).toBe("internal_error");
+    expect(domainEnvelope).toEqual({
+      error: {
+        code: "command_rejected",
+        message: "The interview does not accept this command in its current state.",
+      },
+    });
     expect(JSON.stringify(unknownEnvelope)).not.toContain("super-secret");
     expect(unknownEnvelope).toEqual({
       error: {

@@ -241,7 +241,7 @@ export const ProcessingInterviewResponseSchema = Type.Object(
   {
     ...activeInterviewProperties,
     phase: Type.Literal("processing"),
-    operation: CurrentOperationReferenceSchema,
+    operation: ProcessingOperationReferenceSchema,
     availableActions: NoActionsSchema,
   },
   { additionalProperties: false },
@@ -308,14 +308,6 @@ export const ReportPendingInterviewResponseSchema = Type.Union([
       ...reportPendingProperties,
       operation: RetryableFailedOperationReferenceSchema,
       availableActions: Type.Array(Type.Literal("retry"), { minItems: 1, maxItems: 1 }),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      ...reportPendingProperties,
-      operation: NonRetryableFailedOperationReferenceSchema,
-      availableActions: NoActionsSchema,
     },
     { additionalProperties: false },
   ),
