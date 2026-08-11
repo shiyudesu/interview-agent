@@ -241,6 +241,15 @@ metadata; adapters attach those facts after the call completes.
 
 The Interview Engine validates every payload and performs all score calculations and state transitions. Schema failures receive one repair attempt with concrete validation errors. Transient provider failures receive at most two exponential-backoff retries. Exhaustion fails the Operation without changing interview state.
 
+The answer-evaluation adapter submits exactly one constrained output-tool value using the registered
+metadata-free Schema. It validates every Rubric ID exactly once, per-item weights, supplied evidence
+IDs, bounded missing/incorrect text, classification-compatible unused follow-up goals and kinds, and
+the first-irrelevant clarification rule before returning domain values. One repair call receives all
+independently detectable sanitized issues plus Base64URL-framed invalid output. Initial and repair
+calls each reserve system, tool-Schema, output, and retry space within the fixed model context.
+Provider failures retain attempted-call metadata; only transient failures receive at most two
+100/200 ms retries.
+
 Every decision-bearing call records provider, model ID, prompt version, schema version, question version, purpose, latency, and token usage. User content is delimited as untrusted data, and no chain-of-thought is requested or stored.
 
 ### 9. Store reports as immutable structured snapshots

@@ -14,6 +14,7 @@ import {
   fauxProvider,
   type Model,
   type Models,
+  type ModelsSimpleStreamOptions,
   type Provider,
 } from "@earendil-works/pi-ai";
 import { builtinProviders, radiusProvider } from "@earendil-works/pi-ai/providers/all";
@@ -66,6 +67,13 @@ export class FixedModelClient<TApi extends Api> {
 
   complete(context: Context): Promise<AssistantMessage> {
     return this.#models.complete(this.#model, context);
+  }
+
+  completeStructured(context: Context): Promise<AssistantMessage> {
+    const options: ModelsSimpleStreamOptions = {
+      maxRetries: 0,
+    };
+    return this.#models.completeSimple(this.#model, context, options);
   }
 
   stream(context: Context): AssistantMessageEventStream {
