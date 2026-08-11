@@ -221,10 +221,10 @@ describe("server-owned prompt safety invariants", () => {
 
   it("preserves purpose-specific question, Rubric, follow-up, and report constraints", () => {
     expect(modelPromptRegistry.current("rephrase_question").template.system).toMatch(
-      /Preserve every condition, technical term, difficulty, assessment goal, and Rubric/u,
+      /Preserve every stated condition, technical term, difficulty, and assessment scope/u,
     );
     expect(modelPromptRegistry.current("clarify_question").template.system).toMatch(
-      /Do not reveal hints, expected points, Rubric items/u,
+      /Do not reveal hints, expected points, scoring criteria/u,
     );
     expect(modelPromptRegistry.current("clarify_question").template.inputTemplate).not.toContain(
       "displayedWording={{",
@@ -235,6 +235,11 @@ describe("server-owned prompt safety invariants", () => {
     expect(modelPromptRegistry.current("answer_evaluation").template.inputTemplate).not.toContain(
       "questionSnapshot={{",
     );
+    for (const purpose of ["rephrase_question", "clarify_question", "phrase_follow_up"] as const) {
+      expect(modelPromptRegistry.current(purpose).template.inputTemplate).not.toContain(
+        "rubric={{",
+      );
+    }
     expect(modelPromptRegistry.current("phrase_follow_up").template.system).toMatch(
       /single server-selected predefined goal/u,
     );

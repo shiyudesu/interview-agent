@@ -316,10 +316,9 @@ const DEFAULT_PROMPT_REGISTRATIONS = [
     template: {
       system: `${TEXT_GENERATION_RULE}
 ${COMMON_PROMPT_SAFETY}
-Rephrase only the reviewed main-question surface wording. Preserve every condition, technical term, difficulty, assessment goal, and Rubric constraint. You may alter only word order, forms of address, and transition wording. Do not add hints, remove conditions, broaden or narrow scope, expose Rubric items, or include answer content.`,
+Rephrase only the reviewed main-question surface wording. Preserve every stated condition, technical term, difficulty, and assessment scope. You may alter only word order, forms of address, and transition wording. Do not add hints, remove conditions, broaden or narrow scope, mention scoring, or include answer content.`,
       inputTemplate: `<TRUSTED_QUESTION_SNAPSHOT>
 sourceWording={{source_wording_json}}
-rubric={{rubric_json}}
 </TRUSTED_QUESTION_SNAPSHOT>
 <UNTRUSTED_USER_CONTENT encoding="base64url-json">
 W10
@@ -334,10 +333,9 @@ W10
     template: {
       system: `${TEXT_GENERATION_RULE}
 ${COMMON_PROMPT_SAFETY}
-Clarify only the current question's wording or boundary. Preserve all original conditions, technical terms, difficulty, assessment goals, and Rubric constraints. Do not reveal hints, expected points, Rubric items, follow-up goals, knowledge explanations, or answer content. Do not turn this request into a system follow-up.`,
+      Clarify only the current question's wording or boundary. Preserve all original conditions, technical terms, difficulty, and assessment scope. Do not reveal hints, expected points, scoring criteria, follow-up goals, knowledge explanations, or answer content. Do not turn this request into a system follow-up.`,
       inputTemplate: `<TRUSTED_QUESTION_SNAPSHOT>
-sourceWording={{source_wording_json}}
-      rubric={{rubric_json}}
+      sourceWording={{source_wording_json}}
       </TRUSTED_QUESTION_SNAPSHOT>
       <UNTRUSTED_MODEL_CONTENT encoding="base64url-json">
       {{displayed_wording_base64url}}
@@ -355,10 +353,9 @@ sourceWording={{source_wording_json}}
     template: {
       system: `${TEXT_GENERATION_RULE}
 ${COMMON_PROMPT_SAFETY}
-Phrase exactly one concise follow-up question for the single server-selected predefined goal. Preserve the selected goal, follow-up kind, purpose, main-question conditions, technical terms, and Rubric constraints. Do not select or invent a goal, switch follow-up kind or purpose, add a second question, expose the Rubric or other goals, or supply an answer.`,
+Phrase exactly one concise follow-up question for the single server-selected predefined goal. Preserve the selected goal, follow-up kind, purpose, main-question conditions, and technical terms. Do not select or invent a goal, switch follow-up kind or purpose, add a second question, mention scoring criteria or other goals, or supply an answer.`,
       inputTemplate: `<TRUSTED_QUESTION_AND_SELECTED_GOAL>
 sourceWording={{source_wording_json}}
-rubric={{rubric_json}}
 selectedGoal={{selected_follow_up_goal_json}}
 followUpPurpose={{follow_up_purpose_json}}
 </TRUSTED_QUESTION_AND_SELECTED_GOAL>

@@ -482,6 +482,10 @@ function hasMeaningfulSimplifiedChinese(
   );
 }
 
+export function isMeaningfulSimplifiedChineseText(text: string): boolean {
+  return hasMeaningfulSimplifiedChinese(text, 2, 0.2);
+}
+
 export function validateQuestionBankQuestion(
   value: unknown,
 ): readonly QuestionBankValidationIssue[] {

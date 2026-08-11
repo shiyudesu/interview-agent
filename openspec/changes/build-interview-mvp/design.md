@@ -208,6 +208,15 @@ Pi Agent Core is used only for streamed interviewer text:
 
 The Agent has no tools. It receives only the current question snapshot, the allowed wording objective, and the minimum required context. If main-question rephrasing fails, the system displays the reviewed source wording rather than blocking the interview.
 
+The interviewer adapter creates a fresh single-turn Pi Agent with `tools: []` for each rephrase,
+clarification, or predefined-goal follow-up. Candidate/model-authored text remains Base64URL-framed;
+text calls receive no Rubric content, other follow-up goals, knowledge explanation, or unrelated
+transcript. Follow-up answer context is capped at eight items and 12,000 characters. Final text must
+pass the registered Schema, Simplified-Chinese, private-label, technical-term, semantic-anchor, and
+single-follow-up checks. Deltas are buffered until the final output passes validation so rejected
+content cannot leak through presentation events. Invalid/failed rephrasing emits the reviewed source
+wording with attempted-model metadata; clarification and follow-up failures remain explicit.
+
 At startup the server constructs exactly one `pi-ai` provider/model runtime. Real providers keep
 their native credential transformation while reading one immutable configured API-key credential
 with no ambient environment fallback. Dynamic catalogs refresh through the configured provider
