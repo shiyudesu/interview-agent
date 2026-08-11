@@ -11,6 +11,7 @@ import {
   PgQuestionBankRepository,
   QuestionBankImportService,
 } from "../src/index.js";
+import { runPreMigrationRepairs } from "../src/migrate.js";
 import { validateOperationPayload } from "../src/repositories/operation-payload.js";
 import { questionDefinitionFixture } from "./support/question-definition-fixture.js";
 
@@ -187,9 +188,13 @@ async function applyThroughMigration0003(pool: Pool): Promise<void> {
   await applySqlMigration(pool, "0003_repository_invariants.sql");
 }
 
-async function applyThroughMigration0006(pool: Pool): Promise<void> {
+async function applyThroughMigration0004(pool: Pool): Promise<void> {
   await applyThroughMigration0003(pool);
   await applySqlMigration(pool, "0004_operation_lifecycle.sql");
+}
+
+async function applyThroughMigration0006(pool: Pool): Promise<void> {
+  await applyThroughMigration0004(pool);
   await applySqlMigration(pool, "0005_deletion_lifecycle.sql");
   await applySqlMigration(pool, "0006_deletion_request_minimization.sql");
 }
@@ -504,6 +509,16 @@ describe.sequential("database migration CLI", () => {
          )`,
       );
       await pool.query(
+        `insert into session (id, expires_at, token, updated_at, user_id)
+         values (
+           'legacy-deletion-session',
+           now() + interval '1 day',
+           'legacy-deletion-session-token',
+           now(),
+           'deadline-owner'
+         )`,
+      );
+      await pool.query(
         `insert into verification (id, identifier, value, expires_at)
          values
            ('owned-verification', 'sign-in-otp-deadline-owner@example.com', 'secret', now()),
@@ -571,6 +586,41 @@ describe.sequential("database migration CLI", () => {
         { id: "unrelated-verification" },
         { id: "unsupported-unicode-json-value" },
       ]);
+      await pool.query(
+        `alter table verification disable trigger verification_user_not_deleting_trigger`,
+      );
+      await pool.query(
+        `insert into verification (id, identifier, value, expires_at)
+         values (
+           'escaped-owned-verification',
+           'sign-in-otp-deadline-owner@example.com',
+           'secret',
+           now()
+         )`,
+      );
+      await pool.query(
+        `alter table verification enable trigger verification_user_not_deleting_trigger`,
+      );
+      await applySqlMigration(pool, "0008_question_bank_sync.sql");
+      await applySqlMigration(pool, "0009_deletion_upgrade_cleanup.sql");
+      expect(
+        (
+          await pool.query<{ count: string }>(
+            `select count(*)::text as count
+               from session
+              where user_id = 'deadline-owner'`,
+          )
+        ).rows[0]?.count,
+      ).toBe("0");
+      expect(
+        (
+          await pool.query<{ count: string }>(
+            `select count(*)::text as count
+               from verification
+              where id = 'escaped-owned-verification'`,
+          )
+        ).rows[0]?.count,
+      ).toBe("0");
       expect(
         (
           await pool.query<{
@@ -679,6 +729,57 @@ describe.sequential("database migration CLI", () => {
     } finally {
       await pool.end();
       await dropDatabase(databaseUrl, databaseName);
+    }
+  }, 120_000);
+
+  it("clears legacy failed deletion completion timestamps during the 0005 upgrade", async () => {
+    const upgradeDatabaseName = "deletion_lifecycle_failed_upgrade";
+    const upgradeDatabaseUrl = await recreateDatabase(databaseUrl, upgradeDatabaseName);
+    const pool = new Pool({ connectionString: upgradeDatabaseUrl });
+
+    try {
+      await applyThroughMigration0004(pool);
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ('legacy-failed-owner', 'Legacy Failed Owner', 'legacy-failed@example.com')`,
+      );
+      await pool.query(
+        `insert into deletion_requests
+           (id, owner_user_id, scope, status, requested_at, inaccessible_at, purge_due_at,
+            processing_started_at, completed_at, error)
+         values (
+           'legacy-failed-request',
+           'legacy-failed-owner',
+           'account',
+           'failed',
+           now() - interval '1 day',
+           now() - interval '1 day',
+           now() + interval '5 days',
+           now() - interval '1 hour',
+           now() - interval '30 minutes',
+           '{"code":"legacy_failure"}'::jsonb
+         )`,
+      );
+
+      await runPreMigrationRepairs(pool);
+      await expect(applySqlMigration(pool, "0005_deletion_lifecycle.sql")).resolves.toBeUndefined();
+      const result = await pool.query<{
+        completed_at: Date | null;
+        last_error_code: string;
+        status: string;
+      }>(
+        `select status, completed_at, last_error_code
+           from deletion_requests
+          where id = 'legacy-failed-request'`,
+      );
+      expect(result.rows[0]).toEqual({
+        status: "failed",
+        completed_at: null,
+        last_error_code: "migration_recovery",
+      });
+    } finally {
+      await pool.end();
+      await dropDatabase(databaseUrl, upgradeDatabaseName);
     }
   }, 120_000);
 

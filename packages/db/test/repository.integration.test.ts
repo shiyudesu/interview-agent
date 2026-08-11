@@ -35,6 +35,7 @@ import {
   createDatabaseClient,
   type DatabaseClient,
   type EvaluationPersistence,
+  interviewMessages,
   interviewSessions,
   type JsonObject,
   operations,
@@ -595,6 +596,86 @@ describe.sequential("PostgreSQL repositories", () => {
     await expect(interviewRepository.findActiveByAccountId(created.accountId)).resolves.toEqual(
       created,
     );
+  });
+
+  it("persists new messages against legacy non-derived snapshot IDs", async () => {
+    await seedOwner("legacy-snapshot-owner");
+    const legacyBlueprint = blueprint("legacy-snapshot");
+    await client.database.transaction(async (transaction) => {
+      await transaction.insert(interviewSessions).values({
+        id: "legacy-snapshot-interview",
+        ownerUserId: "legacy-snapshot-owner",
+        selectedQuestionCount: 5,
+        selectionSeed: legacyBlueprint.selectionSeed,
+        createdAt: STARTED_AT,
+        lastEffectiveActivityAt: STARTED_AT,
+      });
+      await transaction.insert(sessionQuestionSnapshots).values(
+        legacyBlueprint.questions.map((item) => ({
+          id: `legacy-persisted-snapshot-${item.position}`,
+          interviewId: "legacy-snapshot-interview",
+          position: item.position,
+          sourceQuestionId: item.question.questionId,
+          sourceQuestionVersion: item.question.questionVersion,
+          domain: item.question.domain,
+          sourceWording: item.question.sourceWording,
+          displayWording: item.question.displayedWording,
+          rubric: item.question.rubric,
+          followUpGoals: item.question.followUpGoals,
+          knowledgeExplanation: item.question.knowledgeExplanation,
+          createdAt: STARTED_AT,
+        })),
+      );
+    });
+
+    const interview = required(
+      await interviewRepository.findById(parseInterviewId("legacy-snapshot-interview")),
+    );
+    const operationId = nextOperationId("legacy-snapshot-clarification");
+    const acceptedAt = new Date(STARTED_AT.getTime() + 1_000);
+    await createOperationForTest(operationRepository, {
+      id: operationId,
+      accountId: interview.accountId,
+      interviewId: interview.id,
+      type: "request_question_clarification",
+      idempotencyKey: "legacy-snapshot-clarification",
+      expectedVersion: interview.version,
+      input: { questionPosition: 1 },
+      createdAt: acceptedAt,
+    });
+    const plan = expectPlan(
+      handleInterviewCommand(interview, {
+        type: "request_question_clarification",
+        interviewId: interview.id,
+        operationId,
+        expectedVersion: interview.version,
+        occurredAt: acceptedAt,
+      }),
+    );
+    await saveAcceptedOperation(interview, plan);
+    const accepted = required(await interviewRepository.findById(interview.id));
+    const completed = completeInterviewOperation(accepted, plan, {
+      type: "record_question_clarification",
+      interviewId: accepted.id,
+      operationId,
+      expectedVersion: accepted.version,
+      occurredAt: new Date(acceptedAt.getTime() + 1_000),
+      messageId: parseMessageId("legacy-snapshot-clarification-message"),
+      text: "Clarified wording",
+    });
+    await saveSuccessfulCompletion({
+      previous: accepted,
+      current: completed.interview,
+      events: completed.events,
+    });
+
+    const messages = await client.database
+      .select({
+        questionSnapshotId: interviewMessages.questionSnapshotId,
+      })
+      .from(interviewMessages)
+      .where(eq(interviewMessages.interviewId, interview.id));
+    expect(messages).toEqual([{ questionSnapshotId: "legacy-persisted-snapshot-1" }]);
   });
 
   it("persists accepted processing, cancellation, messages, evaluation clearing, and replacement", async () => {

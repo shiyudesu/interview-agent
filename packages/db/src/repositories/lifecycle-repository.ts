@@ -354,7 +354,8 @@ export class PgLifecycleRepository {
           ),
         )
         .orderBy(
-          sql`${deletionRequests.lastAttemptAt} asc nulls first`,
+          sql`(${deletionRequests.purgeDeadlineAt} <= ${databaseStatementTime}) desc`,
+          sql`coalesce(${deletionRequests.lastAttemptAt}, ${deletionRequests.purgeDueAt}) asc`,
           asc(deletionRequests.purgeDeadlineAt),
           asc(deletionRequests.purgeDueAt),
           asc(deletionRequests.id),

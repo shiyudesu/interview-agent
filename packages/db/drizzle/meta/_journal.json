@@ -64,6 +64,13 @@
       "when": 1786367055106,
       "tag": "0008_question_bank_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786424066157,
+      "tag": "0009_deletion_upgrade_cleanup",
+      "breakpoints": true
     }
   ]
 }

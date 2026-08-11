@@ -55,8 +55,15 @@ describe("database configuration", () => {
     expect(
       requirePurgeAuditHashSecret({
         PURGE_AUDIT_HASH_SECRET: "a-distinct-secret-with-at-least-32-characters",
+        BETTER_AUTH_SECRET: "a-different-auth-secret-with-at-least-32-characters",
       }),
     ).toBe("a-distinct-secret-with-at-least-32-characters");
+    expect(() =>
+      requirePurgeAuditHashSecret({
+        PURGE_AUDIT_HASH_SECRET: "same-secret-with-at-least-32-characters",
+        BETTER_AUTH_SECRET: "same-secret-with-at-least-32-characters",
+      }),
+    ).toThrowError("PURGE_AUDIT_HASH_SECRET must be distinct from BETTER_AUTH_SECRET.");
   });
 
   it("accepts the minimum bounded integer and rejects disabled or excessive values", () => {

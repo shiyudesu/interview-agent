@@ -35,6 +35,16 @@ lock order through the database trigger. A concurrent session insert either comm
 marker is acquired and is then deleted, or waits for the marker and is rejected. The workflow
 deliberately does not invoke Better Auth hard deletion.
 
+The forward migration chain also contains an idempotent cleanup for databases that had already
+installed deletion write guards while legacy sessions still existed. It locks the session table
+against concurrent writers and removes every session owned by a deletion-marked account. The same
+forward cleanup repeats attributable verification removal after the verification write guard is
+already active, covering rows that could have committed during an older migration's cleanup window.
+
+Before applying the historical deletion-lifecycle migration, the project migration runner performs
+an idempotent compatibility repair for legacy failed/processing requests whose completion timestamp
+would violate the newer lifecycle constraint. Checked migration files remain immutable.
+
 Deletion markers make interviews, transcripts, evaluations, Operations, reports, and account data
 unavailable immediately. Application code must treat a `null` owner-scoped repository result as
 non-disclosive. Operation creation locks the user and interview rows around lookup, deletion checks,
@@ -46,9 +56,10 @@ Operation.
 Eligible requests are selected with ordered `FOR UPDATE SKIP LOCKED`, but each request is claimed
 only immediately before its purge attempt. The configured batch size bounds attempts per cycle
 rather than simultaneously leased rows. Overdue monitoring uses the hard seven-day deadline rather
-than the earlier eligibility time. A successful purge deletes the request, authentication rows, and
-business content in one transaction and writes success audit rows in that same transaction. Audit
-rows contain only:
+than the earlier eligibility time. Claim ordering places overdue work before pre-deadline work, then
+uses the oldest effective attempt time to preserve fairness between new and previously failed
+requests. A successful purge deletes the request, authentication rows, and business content in one
+transaction and writes success audit rows in that same transaction. Audit rows contain only:
 
 - HMAC-SHA-256 subject identifier hash;
 - deletion timestamp;

@@ -1638,6 +1638,7 @@ describe.sequential("interview expiry and deletion lifecycle", () => {
       id: "fairness-failure-interview",
       owner: "fairness-failure-owner",
     });
+
     await seedInterview({
       id: "fairness-healthy-interview",
       owner: "fairness-healthy-owner",
@@ -1710,6 +1711,60 @@ describe.sequential("interview expiry and deletion lifecycle", () => {
     } finally {
       await client.pool.query("drop table lifecycle_fairness_blocker");
     }
+  });
+
+  it("prioritizes overdue failed purges ahead of newer pre-deadline work", async () => {
+    for (const suffix of ["overdue", "newer"]) {
+      await seedOwner(`deadline-priority-owner-${suffix}`);
+      await seedInterview({
+        id: `deadline-priority-interview-${suffix}`,
+        owner: `deadline-priority-owner-${suffix}`,
+      });
+      await lifecycle.requestInterviewDeletion(
+        interviewId(`deadline-priority-interview-${suffix}`),
+        ownerId(`deadline-priority-owner-${suffix}`),
+      );
+    }
+    const requests = await client.database
+      .select()
+      .from(deletionRequests)
+      .orderBy(deletionRequests.ownerUserId);
+    const newer = requests.find((request) => request.ownerUserId.endsWith("-newer"));
+    const overdue = requests.find((request) => request.ownerUserId.endsWith("-overdue"));
+    if (newer === undefined || overdue === undefined) {
+      throw new Error("Expected deadline-priority deletion requests");
+    }
+    await client.pool.query(
+      `update deletion_requests
+          set status = case when id = $1 then 'failed'::deletion_status else 'pending'::deletion_status end,
+              last_attempt_at = case when id = $1 then statement_timestamp() else null end,
+              last_error_category = case when id = $1 then 'database' else null end,
+              last_error_code = case when id = $1 then 'transient_failure' else null end,
+              requested_at = case
+                when id = $1 then statement_timestamp() - interval '7 days 1 second'
+                else statement_timestamp() - interval '6 days'
+              end,
+              inaccessible_at = case
+                when id = $1 then statement_timestamp() - interval '7 days 1 second'
+                else statement_timestamp() - interval '6 days'
+              end,
+              purge_due_at = statement_timestamp() - interval '1 minute',
+              purge_deadline_at = case
+                when id = $1 then statement_timestamp() - interval '1 second'
+                else statement_timestamp() + interval '1 day'
+              end
+        where id in ($1, $2)`,
+      [overdue.id, newer.id],
+    );
+
+    const claims = await lifecycleRepository.claimDueDeletionRequests({
+      batchSize: 1,
+      leaseOwner: "deadline-priority",
+      leaseDurationMs: 60_000,
+      failedRetryDelayMs: 60_000,
+    });
+
+    expect(claims.map((claim) => claim.requestId)).toEqual([overdue.id]);
   });
 
   it("persists lease-loss failure and does not reclaim the request in the same cycle", async () => {

@@ -86,7 +86,7 @@ describe("migration integrity", () => {
         ...metadata,
         snapshots: {
           ...metadata.snapshots,
-          "0009_snapshot.json": {
+          "0010_snapshot.json": {
             id: "orphan",
             prevId: "orphan-parent",
             version: "7",

@@ -50,6 +50,10 @@ export function requirePurgeAuditHashSecret(
   if (secret.length < 32) {
     throw new Error("PURGE_AUDIT_HASH_SECRET must contain at least 32 characters.");
   }
+  const authenticationSecret = environment["BETTER_AUTH_SECRET"];
+  if (authenticationSecret !== undefined && secret === authenticationSecret) {
+    throw new Error("PURGE_AUDIT_HASH_SECRET must be distinct from BETTER_AUTH_SECRET.");
+  }
   return secret;
 }
 

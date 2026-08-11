@@ -593,6 +593,22 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
       evaluationWrites.map((write) => [write.evaluationId, write] as const),
     );
     let storedReport = false;
+    const questionPositions = new Set(
+      events.map(eventQuestionPosition).filter((position) => position > 0),
+    );
+    const snapshotIdsByPosition = new Map<number, string>();
+    if (questionPositions.size > 0) {
+      const snapshotRows = await transaction
+        .select({
+          id: sessionQuestionSnapshots.id,
+          position: sessionQuestionSnapshots.position,
+        })
+        .from(sessionQuestionSnapshots)
+        .where(eq(sessionQuestionSnapshots.interviewId, interview.id));
+      for (const row of snapshotRows) {
+        snapshotIdsByPosition.set(row.position, row.id);
+      }
+    }
     const hasMessageEvents = events.some(
       (event) =>
         event.type === "answer_material_submitted" ||
@@ -623,7 +639,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             id: event.answerMaterialId,
             interviewId: interview.id,
             sequence: ++nextMessageSequence,
-            questionSnapshotId: requiredSnapshotId(interview.id, snapshot, event.questionPosition),
+            questionSnapshotId: requiredSnapshotId(
+              interview.id,
+              snapshot,
+              event.questionPosition,
+              snapshotIdsByPosition,
+            ),
             questionPosition: event.questionPosition,
             role: "user",
             kind: event.materialKind,
@@ -650,7 +671,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             id: event.messageId,
             interviewId: interview.id,
             sequence: ++nextMessageSequence,
-            questionSnapshotId: requiredSnapshotId(interview.id, snapshot, event.questionPosition),
+            questionSnapshotId: requiredSnapshotId(
+              interview.id,
+              snapshot,
+              event.questionPosition,
+              snapshotIdsByPosition,
+            ),
             questionPosition: event.questionPosition,
             role: "assistant",
             kind: "question_clarification",
@@ -666,7 +692,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             id: event.messageId,
             interviewId: interview.id,
             sequence: ++nextMessageSequence,
-            questionSnapshotId: requiredSnapshotId(interview.id, snapshot, event.questionPosition),
+            questionSnapshotId: requiredSnapshotId(
+              interview.id,
+              snapshot,
+              event.questionPosition,
+              snapshotIdsByPosition,
+            ),
             questionPosition: event.questionPosition,
             role: "assistant",
             kind: "system_follow_up",
@@ -687,7 +718,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             .where(
               eq(
                 questionEvaluations.questionSnapshotId,
-                requiredSnapshotId(interview.id, snapshot, event.questionPosition),
+                requiredSnapshotId(
+                  interview.id,
+                  snapshot,
+                  event.questionPosition,
+                  snapshotIdsByPosition,
+                ),
               ),
             );
           await clearSnapshotOutcome(transaction, interview.id, event.questionPosition);
@@ -710,6 +746,7 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             interview.id,
             snapshot,
             event.questionPosition,
+            snapshotIdsByPosition,
           );
           await transaction
             .delete(questionEvaluations)
@@ -743,7 +780,12 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             .where(
               eq(
                 questionEvaluations.questionSnapshotId,
-                requiredSnapshotId(interview.id, snapshot, event.questionPosition),
+                requiredSnapshotId(
+                  interview.id,
+                  snapshot,
+                  event.questionPosition,
+                  snapshotIdsByPosition,
+                ),
               ),
             );
           await setSnapshotOutcome(
@@ -1764,6 +1806,7 @@ function requiredSnapshotId(
   interviewId: InterviewId,
   snapshot: Interview["blueprint"]["questions"][number] | undefined,
   position: number,
+  snapshotIdsByPosition: ReadonlyMap<number, string>,
 ): string {
   if (snapshot === undefined || snapshot.position !== position) {
     throw new RepositoryCorruptionError(
@@ -1772,7 +1815,15 @@ function requiredSnapshotId(
       `question position ${position} is outside the blueprint`,
     );
   }
-  return snapshotId(interviewId, position);
+  const persistedSnapshotId = snapshotIdsByPosition.get(position);
+  if (persistedSnapshotId === undefined) {
+    throw new RepositoryCorruptionError(
+      "interview save",
+      interviewId,
+      `question position ${position} has no persisted snapshot identity`,
+    );
+  }
+  return persistedSnapshotId;
 }
 
 function snapshotId(interviewId: InterviewId, position: number): string {
