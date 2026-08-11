@@ -9,7 +9,7 @@ import {
   type OperationId,
 } from "@interview-agent/domain";
 
-import { PgRepositoryUnitOfWork } from "../repositories/unit-of-work.js";
+import type { PgRepositoryUnitOfWork } from "../repositories/unit-of-work.js";
 import { BlueprintSelectionInputService } from "./blueprint-selection-input-service.js";
 
 export interface CreateInterviewInput {

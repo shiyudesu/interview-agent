@@ -231,6 +231,12 @@ The report generator reads structured evaluations rather than the unrestricted t
 
 Better Auth provides GitHub OAuth, email OTP, PostgreSQL sessions, and explicit linking. Configuration disables implicit linking and permits an authenticated user to link a GitHub identity with a different email without changing the primary email.
 
+The server factory binds Better Auth to the checked Drizzle `user`, `session`, `account`, and
+`verification` schema, disables cookie-cached sessions, and enables secure cookies in production.
+Email OTP values are stored through an HMAC keyed by the authentication secret, with six digits,
+five-minute expiry, three attempts, and rotation on resend. Better Auth change-email and direct
+delete-user endpoints remain disabled because those workflows are project-owned.
+
 The application owns interview-history access and deletion orchestration. Account deletion immediately revokes sessions and marks all related content inaccessible and non-restorable. A sweeper physically deletes authentication and business rows within seven days. Better Auth's immediate delete endpoint is not exposed directly.
 
 Email delivery is behind an `EmailSender` port. The local adapter uses Nodemailer and Mailpit; a production adapter is deferred.
