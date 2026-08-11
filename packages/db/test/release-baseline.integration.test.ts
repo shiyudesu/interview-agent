@@ -45,6 +45,7 @@ import {
   readPostgresCatalog,
 } from "./support/postgres-catalog.js";
 import {
+  databaseNow,
   migrationHashes,
   type PostgresTestDatabase,
   PostgresTestHarness,
@@ -55,7 +56,7 @@ import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.j
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const migrationCli = resolve(packageRoot, "dist/cli/migrate.js");
 const catalogSnapshotPath = resolve(packageRoot, "test/fixtures/postgres-catalog.snapshot.json");
-const STARTED_AT = new Date("2026-08-10T08:00:00.000Z");
+let STARTED_AT: Date;
 const ACCOUNT_ID = parseAccountId("release-baseline-owner");
 const INTERVIEW_ID = parseInterviewId("release-baseline-interview");
 const OPERATION_ID = parseOperationId("release-baseline-answer-operation");
@@ -101,6 +102,7 @@ describe.sequential("clean PostgreSQL release integration baseline", () => {
   beforeAll(async () => {
     harness = await PostgresTestHarness.start();
     primary = await harness.createDatabase({ name: "release_baseline_primary" });
+    STARTED_AT = await databaseNow(primary, -60_000);
   }, 120_000);
 
   afterAll(async () => {

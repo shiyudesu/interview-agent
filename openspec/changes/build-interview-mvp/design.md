@@ -221,6 +221,7 @@ The first implementation slice creates:
 
 - Biome formatting and linting;
 - TypeScript project references and type checking;
+- strict TypeScript checking for discovered test sources;
 - Vitest unit tests for domain transitions and scoring;
 - Testcontainers integration tests for migrations, constraints, repositories, and idempotency;
 - Pi Faux Provider tests for model contracts and retries;
@@ -229,6 +230,9 @@ The first implementation slice creates:
 - GitHub Actions running install, question-bank validation, lint, typecheck, tests, and build.
 
 CI uses no live model, OAuth, or email provider credentials.
+Test tasks are not cached because database-time and container lifecycle assertions must execute on
+every validation run. Packages with implemented suites fail when no tests are discovered; the empty
+web suite remains explicitly allowed only until its planned UI testing task is implemented.
 
 ## Risks / Trade-offs
 

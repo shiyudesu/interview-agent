@@ -313,6 +313,8 @@ HTTP command
 - React 使用 Testing Library。
 - Playwright 覆盖认证替身、完整面试、恢复、报告和删除关键路径。
 - 格式化与 lint 使用 Biome，类型检查使用 TypeScript。
+- 已有测试套件必须发现测试文件并通过独立的测试源码 TypeScript 检查；仅尚未进入 UI 测试阶段的 `apps/web` 暂时允许空测试集。
+- Testcontainers 和其他依赖数据库当前时间的测试不使用 Turborepo 缓存，测试活动时间从 PostgreSQL `statement_timestamp()` 派生，避免跨日期假绿或假红。
 
 类型依赖：
 

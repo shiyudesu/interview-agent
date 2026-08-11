@@ -37,6 +37,18 @@ export interface CreateTestDatabaseOptions {
   readonly name?: string;
 }
 
+export async function databaseNow(database: PostgresTestDatabase, offsetMs = 0): Promise<Date> {
+  const result = await database.pool.query<{ current_time: Date }>(
+    `select statement_timestamp() + ($1::bigint * interval '1 millisecond') as current_time`,
+    [offsetMs],
+  );
+  const currentTime = result.rows[0]?.current_time;
+  if (!(currentTime instanceof Date) || !Number.isFinite(currentTime.getTime())) {
+    throw new Error("PostgreSQL did not return a valid statement timestamp");
+  }
+  return currentTime;
+}
+
 export class PostgresTestHarness {
   readonly adminDatabaseUrl: string;
   private databaseSequence = 0;

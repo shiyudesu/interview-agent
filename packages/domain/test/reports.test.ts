@@ -10,7 +10,17 @@ const domains = [
   "testing_observability_engineering",
 ] as const;
 
-function reportQuestions(questionDomains = domains.slice(0, 5)) {
+function firstFiveDomainAt(index: number): (typeof domains)[number] {
+  const domain = domains[index % 5];
+  if (domain === undefined) {
+    throw new Error("Expected a five-domain report fixture");
+  }
+  return domain;
+}
+
+function reportQuestions(
+  questionDomains: readonly (typeof domains)[number][] = domains.slice(0, 5),
+) {
   return questionDomains.map((domain, index) => {
     const questionId = `question-${index + 1}`;
     const evidence = [{ source: "question_snapshot" as const, questionId }];
@@ -48,7 +58,9 @@ function domainResults(questions: readonly ReturnType<typeof reportQuestions>[nu
   });
 }
 
-function completeReport(questionDomains = domains.slice(0, 5)) {
+function completeReport(
+  questionDomains: readonly (typeof domains)[number][] = domains.slice(0, 5),
+) {
   const questions = reportQuestions(questionDomains);
   return {
     kind: "complete",
@@ -176,8 +188,8 @@ describe("immutable report snapshots", () => {
 
   it.each([
     [5, [domains[0], domains[1], domains[2], domains[3], domains[0]]],
-    [10, Array.from({ length: 10 }, (_, index) => domains[index % 5])],
-    [15, Array.from({ length: 15 }, (_, index) => domains[index % 5])],
+    [10, Array.from({ length: 10 }, (_, index) => firstFiveDomainAt(index))],
+    [15, Array.from({ length: 15 }, (_, index) => firstFiveDomainAt(index))],
   ] as const)(
     "rejects a complete %i-question report without the required domain coverage",
     (_, questionDomains) => {

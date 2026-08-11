@@ -44,10 +44,12 @@
       "persistent": true
     },
     "test": {
+      "cache": false,
       "dependsOn": ["^build"],
       "outputs": []
     },
     "test:coverage": {
+      "cache": false,
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
@@ -56,6 +58,11 @@
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
+      "outputs": []
+    },
+    "typecheck:test": {
+      "cache": false,
+      "dependsOn": ["^build"],
       "outputs": []
     }
   }

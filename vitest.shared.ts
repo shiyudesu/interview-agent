@@ -1,11 +1,18 @@
 import { defineConfig } from "vitest/config";
 
-export function createVitestConfig(environment: "jsdom" | "node") {
+export interface SharedVitestOptions {
+  readonly passWithNoTests?: boolean;
+}
+
+export function createVitestConfig(
+  environment: "jsdom" | "node",
+  options: SharedVitestOptions = {},
+) {
   return defineConfig({
     test: {
       clearMocks: true,
       environment,
-      passWithNoTests: true,
+      passWithNoTests: options.passWithNoTests ?? false,
       restoreMocks: true,
       coverage: {
         include: ["src/**/*.{ts,tsx}"],

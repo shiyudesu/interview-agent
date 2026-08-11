@@ -1,4 +1,10 @@
-import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
+import {
+  parseAccountId,
+  parseFollowUpGoalId,
+  parseInterviewId,
+  parseOperationId,
+  parseRubricItemId,
+} from "@interview-agent/domain";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -68,14 +74,24 @@ async function seedQuestionBank(): Promise<void> {
       contentVersion: 1,
       domain: "go_language" as const,
       sourceWording: `Question ${index + 1}`,
-      rubric: [{ id: `rubric-${index + 1}`, description: "Point", weight: 100 }],
+      rubric: [
+        {
+          id: parseRubricItemId(`rubric-${index + 1}`),
+          description: "Point",
+          weight: 100,
+        },
+      ],
       followUpGoals: [
         {
-          id: `clarification-${index + 1}`,
+          id: parseFollowUpGoalId(`clarification-${index + 1}`),
           kind: "clarification" as const,
           goal: "Clarify",
         },
-        { id: `depth-${index + 1}`, kind: "depth" as const, goal: "Explore depth" },
+        {
+          id: parseFollowUpGoalId(`depth-${index + 1}`),
+          kind: "depth" as const,
+          goal: "Explore depth",
+        },
       ],
       knowledgeExplanation: "Internal",
       active: true,
@@ -117,14 +133,24 @@ async function seedInterview(input: {
         domain: "go_language" as const,
         sourceWording: `Question ${index + 1}`,
         displayWording: `Question ${index + 1}`,
-        rubric: [{ id: `rubric-${index + 1}`, description: "Point", weight: 100 }],
+        rubric: [
+          {
+            id: parseRubricItemId(`rubric-${index + 1}`),
+            description: "Point",
+            weight: 100,
+          },
+        ],
         followUpGoals: [
           {
-            id: `clarification-${index + 1}`,
+            id: parseFollowUpGoalId(`clarification-${index + 1}`),
             kind: "clarification" as const,
             goal: "Clarify",
           },
-          { id: `depth-${index + 1}`, kind: "depth" as const, goal: "Explore depth" },
+          {
+            id: parseFollowUpGoalId(`depth-${index + 1}`),
+            kind: "depth" as const,
+            goal: "Explore depth",
+          },
         ],
         knowledgeExplanation: "Internal",
         createdAt: NOW,

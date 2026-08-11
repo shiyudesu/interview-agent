@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
 
-import type { QuestionDefinition } from "@interview-agent/domain";
+import { normalizeQuestionBankSourcePath, type QuestionDefinition } from "@interview-agent/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Database } from "../client.js";
-import { normalizeQuestionBankSourcePath } from "../question-bank-source-path.js";
 import { questionBankVersions } from "../schema/index.js";
 import {
   QuestionBankValidationError,

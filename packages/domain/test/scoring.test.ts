@@ -38,6 +38,10 @@ const RUBRIC: readonly RubricItemSnapshot[] = [
 ];
 
 const MATERIAL_ID = parseAnswerMaterialId("answer-1");
+const FIRST_RUBRIC = RUBRIC[0];
+if (FIRST_RUBRIC === undefined) {
+  throw new Error("Expected a Rubric fixture");
+}
 
 function evaluation(
   points: readonly [number, number, number],
@@ -46,12 +50,18 @@ function evaluation(
   return {
     id: parseEvaluationId("evaluation-1"),
     classification,
-    rubricItems: RUBRIC.map((item, index) => ({
-      rubricItemId: item.id,
-      evidenceMaterialIds: points[index] > 0 ? [MATERIAL_ID] : [],
-      awardedPoints: points[index] ?? 0,
-      missingOrIncorrectPoints: points[index] === item.weight ? [] : ["Missing detail"],
-    })),
+    rubricItems: RUBRIC.map((item, index) => {
+      const awardedPoints = points[index];
+      if (awardedPoints === undefined) {
+        throw new Error(`Missing awarded-points fixture at index ${index}`);
+      }
+      return {
+        rubricItemId: item.id,
+        evidenceMaterialIds: awardedPoints > 0 ? [MATERIAL_ID] : [],
+        awardedPoints,
+        missingOrIncorrectPoints: awardedPoints === item.weight ? [] : ["Missing detail"],
+      };
+    }),
   };
 }
 
@@ -142,7 +152,11 @@ describe("Rubric validation and deterministic question scoring", () => {
     expect(Object.isFrozen(result.rubricItems[0])).toBe(true);
   });
 
-  it.each([
+  const rubricCases: readonly {
+    readonly code: InvalidRubricError["code"];
+    readonly name: string;
+    readonly rubric: readonly RubricItemSnapshot[];
+  }[] = [
     {
       name: "empty Rubric",
       rubric: [],
@@ -150,25 +164,26 @@ describe("Rubric validation and deterministic question scoring", () => {
     },
     {
       name: "duplicate item",
-      rubric: [RUBRIC[0], RUBRIC[0]],
+      rubric: [FIRST_RUBRIC, FIRST_RUBRIC],
       code: "duplicate_rubric_item",
     },
     {
       name: "fractional weight",
-      rubric: [{ ...RUBRIC[0], weight: 99.5 }],
+      rubric: [{ ...FIRST_RUBRIC, weight: 99.5 }],
       code: "invalid_rubric_weight",
     },
     {
       name: "weight outside range",
-      rubric: [{ ...RUBRIC[0], weight: 101 }],
+      rubric: [{ ...FIRST_RUBRIC, weight: 101 }],
       code: "invalid_rubric_weight",
     },
     {
       name: "weights not totaling 100",
-      rubric: [{ ...RUBRIC[0], weight: 99 }],
+      rubric: [{ ...FIRST_RUBRIC, weight: 99 }],
       code: "invalid_rubric_total",
     },
-  ])("rejects $name", ({ rubric, code }) => {
+  ];
+  it.each(rubricCases)("rejects $name", ({ rubric, code }) => {
     expect(() => validateRubric(rubric)).toThrowError(
       expect.objectContaining<Partial<InvalidRubricError>>({
         name: "InvalidRubricError",
@@ -177,7 +192,11 @@ describe("Rubric validation and deterministic question scoring", () => {
     );
   });
 
-  it.each([
+  const awardCases: readonly {
+    readonly code: InvalidRubricAwardError["code"];
+    readonly makeEvaluation: () => QuestionEvaluationInput;
+    readonly name: string;
+  }[] = [
     {
       name: "missing award",
       makeEvaluation: () => ({
@@ -203,7 +222,7 @@ describe("Rubric validation and deterministic question scoring", () => {
         return {
           ...value,
           rubricItems: value.rubricItems.map((award, index) =>
-            index === 1 ? { ...award, rubricItemId: RUBRIC[0]?.id } : award,
+            index === 1 ? { ...award, rubricItemId: FIRST_RUBRIC.id } : award,
           ),
         };
       },
@@ -239,7 +258,8 @@ describe("Rubric validation and deterministic question scoring", () => {
       }),
       code: "invalid_awarded_points",
     },
-  ])("rejects $name", ({ makeEvaluation, code }) => {
+  ];
+  it.each(awardCases)("rejects $name", ({ makeEvaluation, code }) => {
     expect(() =>
       scoreQuestion({
         rubric: RUBRIC,
@@ -270,7 +290,7 @@ describe("Rubric validation and deterministic question scoring", () => {
     ).toThrowError(
       expect.objectContaining<Partial<InvalidRubricAwardError>>({
         code: "missing_evidence",
-        rubricItemId: RUBRIC[0]?.id,
+        rubricItemId: FIRST_RUBRIC.id,
       }),
     );
   });

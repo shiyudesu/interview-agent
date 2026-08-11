@@ -3,7 +3,7 @@ import type {
   RubricItemEvaluation,
   RubricItemSnapshot,
 } from "@interview-agent/domain";
-import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
+import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -39,7 +39,20 @@ function columnNames(table: PgTable): string[] {
 }
 
 function indexNames(table: PgTable): string[] {
-  return getTableConfig(table).indexes.map((item) => item.config.name);
+  return getTableConfig(table).indexes.map((item) => {
+    const name = item.config.name;
+    if (name === undefined) {
+      throw new Error(`Expected an explicit index name on ${getTableConfig(table).name}`);
+    }
+    return name;
+  });
+}
+
+function timestampUsesTimezone(column: PgColumn): boolean {
+  if (!("withTimezone" in column) || typeof column["withTimezone"] !== "boolean") {
+    throw new Error(`Expected timestamp timezone metadata for ${column.name}`);
+  }
+  return column["withTimezone"];
 }
 
 function uniqueConstraintNames(table: PgTable): string[] {
@@ -323,7 +336,7 @@ describe("interview persistence PostgreSQL schema", () => {
     );
 
     expect(timestampColumns.length).toBeGreaterThan(0);
-    expect(timestampColumns.every((column) => column.withTimezone)).toBe(true);
+    expect(timestampColumns.every((column) => timestampUsesTimezone(column))).toBe(true);
   });
 
   it("restricts persisted evaluation outcomes and minimizes purge audit data", () => {

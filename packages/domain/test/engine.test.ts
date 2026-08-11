@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type AnswerAnalysisPlan,
   cancelInterviewOperation,
   completeInterviewOperation,
   getCurrentQuestion,
@@ -133,8 +134,8 @@ function submitAnswerPlan(
   interview: Interview,
   text = "An answer",
   occurredAt = new Date(interview.lastEffectiveActivityAt.getTime() + 1_000),
-) {
-  return expectPlan(
+): AnswerAnalysisPlan {
+  const plan = expectPlan(
     handleInterviewCommand(interview, {
       type: "submit_answer",
       interviewId: interview.id,
@@ -145,14 +146,18 @@ function submitAnswerPlan(
       text,
     }),
   );
+  if (plan.operation !== "answer_analysis") {
+    throw new Error("Expected an answer-analysis Operation plan");
+  }
+  return plan;
 }
 
 function submitSupplementPlan(
   interview: Interview,
   text = "A supplement",
   occurredAt = new Date(interview.lastEffectiveActivityAt.getTime() + 1_000),
-) {
-  return expectPlan(
+): AnswerAnalysisPlan {
+  const plan = expectPlan(
     handleInterviewCommand(interview, {
       type: "submit_supplement",
       interviewId: interview.id,
@@ -163,6 +168,10 @@ function submitSupplementPlan(
       text,
     }),
   );
+  if (plan.operation !== "answer_analysis") {
+    throw new Error("Expected an answer-analysis Operation plan");
+  }
+  return plan;
 }
 
 function evaluation(

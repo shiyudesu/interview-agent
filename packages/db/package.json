@@ -33,6 +33,7 @@
     "test": "pnpm run build && pnpm run db:check && vitest run",
     "test:coverage": "pnpm run build && vitest run --coverage",
     "typecheck": "tsc -b --pretty false",
+    "typecheck:test": "tsc -p tsconfig.test.json --pretty false",
     "typecheck:toolchain": "tsc -p tsconfig.type-tests.json --pretty false"
   },
   "dependencies": {

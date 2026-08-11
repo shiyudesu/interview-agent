@@ -1,3 +1,3 @@
 import { createVitestConfig } from "../../vitest.shared.ts";
 
-export default createVitestConfig("jsdom");
+export default createVitestConfig("jsdom", { passWithNoTests: true });

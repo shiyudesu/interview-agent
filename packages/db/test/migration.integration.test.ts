@@ -6,13 +6,13 @@ import { Pool, type PoolClient } from "pg";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { mapQuestionBankQuestionDtoToDefinition } from "../../contracts/src/question-bank-mappings.js";
 import {
   createDatabaseClient,
   PgQuestionBankRepository,
   QuestionBankImportService,
 } from "../src/index.js";
 import { validateOperationPayload } from "../src/repositories/operation-payload.js";
+import { questionDefinitionFixture } from "./support/question-definition-fixture.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -1012,24 +1012,13 @@ describe.sequential("database migration CLI", () => {
         sourceVersion: 1,
         entries: [
           {
-            definition: mapQuestionBankQuestionDtoToDefinition({
+            definition: questionDefinitionFixture({
               id: "go.upgrade.hash",
               contentVersion: 1,
-              domain: "go_language",
-              difficulty: "medium",
-              questionType: "conceptual",
               sourceWording,
-              rubric,
-              followUpGoals,
               knowledgeExplanation: "Context 通过 Done 通道传播取消，调用方应停止工作并释放资源。",
               active: true,
               reviewed: true,
-              reviewMetadata: {
-                reviewedBy: "reviewer-id",
-                reviewedAt: "2026-08-10T00:00:00.000Z",
-                simplifiedChineseVerified: true,
-                technicalTermsVerified: true,
-              },
             }),
             schemaVersion: "1.0",
             sourceFile: "legacy",

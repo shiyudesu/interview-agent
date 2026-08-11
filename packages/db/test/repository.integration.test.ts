@@ -3,6 +3,7 @@ import {
   aggregateDomainScores,
   cancelInterviewOperation,
   completeInterviewOperation,
+  createZeroQuestionOutcome,
   handleInterviewCommand,
   type ImmutableReportSnapshot,
   type Interview,
@@ -25,6 +26,7 @@ import {
   parseQuestionId,
   parseReportId,
   parseRubricItemId,
+  type SelectedQuestionScore,
 } from "@interview-agent/domain";
 import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -52,10 +54,14 @@ import {
   user,
   withTransaction,
 } from "../src/index.js";
-import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import {
+  databaseNow,
+  type PostgresTestDatabase,
+  PostgresTestHarness,
+} from "./support/postgres-test-harness.js";
 import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
-const STARTED_AT = new Date("2026-08-10T12:00:00.000Z");
+let STARTED_AT: Date;
 const DOMAINS: readonly KnowledgeDomain[] = [
   "go_language",
   "concurrency_runtime_performance",
@@ -340,7 +346,7 @@ async function saveSuccessfulCompletion(input: {
       previous: input.previous,
       current: input.current,
       events: input.events,
-      evaluations: input.evaluations,
+      ...(input.evaluations === undefined ? {} : { evaluations: input.evaluations }),
     });
   });
 }
@@ -470,19 +476,7 @@ function reportPersistence(
       questionId: question.questionId,
       questionVersion: question.questionVersion,
     })),
-    domains: aggregateDomainScores(
-      reportQuestions.map((question) => ({
-        domain: question.domain,
-        outcome:
-          question.outcome === "scored"
-            ? { kind: "scored" as const, score: parsePositiveQuestionScore(question.score) }
-            : {
-                kind: question.outcome,
-                score: 0 as const,
-                zeroScoreReason: question.zeroScoreReason,
-              },
-      })),
-    ),
+    domains: aggregateDomainScores(reportQuestionScores(reportQuestions)),
     questions: reportQuestions,
   };
   const snapshot: ImmutableReportSnapshot =
@@ -495,6 +489,18 @@ function reportPersistence(
     modelMetadata: reportMetadata,
     createdAt,
   };
+}
+
+function reportQuestionScores(
+  questions: readonly ImmutableReportSnapshot["questions"][number][],
+): readonly SelectedQuestionScore[] {
+  return questions.map((question) => ({
+    domain: question.domain,
+    outcome:
+      question.outcome === "scored"
+        ? { kind: "scored", score: parsePositiveQuestionScore(question.score) }
+        : createZeroQuestionOutcome(question.zeroScoreReason),
+  }));
 }
 
 async function finishReport(
@@ -556,6 +562,7 @@ describe.sequential("PostgreSQL repositories", () => {
   beforeAll(async () => {
     harness = await PostgresTestHarness.start();
     testDatabase = await harness.createDatabase({ name: "repository_tests" });
+    STARTED_AT = await databaseNow(testDatabase, -60_000);
     databaseUrl = testDatabase.databaseUrl;
     client = testDatabase.client;
     interviewRepository = new PgInterviewRepository(client.database);
@@ -1566,28 +1573,7 @@ describe.sequential("PostgreSQL repositories", () => {
           ? {
               ...persistence.snapshot,
               questions,
-              domains: [
-                {
-                  status: "assessed" as const,
-                  domain: "go_language" as const,
-                  score: 0,
-                  questionCount: 2,
-                },
-                ...DOMAINS.slice(1, 4).map((domain) => ({
-                  status: "assessed" as const,
-                  domain,
-                  score: 0,
-                  questionCount: 1,
-                })),
-                {
-                  status: "unassessed" as const,
-                  domain: "cache_messaging_distributed" as const,
-                },
-                {
-                  status: "unassessed" as const,
-                  domain: "testing_observability_engineering" as const,
-                },
-              ],
+              domains: aggregateDomainScores(reportQuestionScores(questions)),
             }
           : { ...persistence.snapshot, generatedAt: "1" };
 

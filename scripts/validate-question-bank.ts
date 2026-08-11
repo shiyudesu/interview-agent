@@ -14,7 +14,7 @@ import {
   type QuestionBankValidationIssue,
   validateQuestionBankSource,
 } from "../packages/contracts/src/question-bank.js";
-import { normalizeQuestionBankSourcePath } from "../packages/db/src/question-bank-source-path.js";
+import { normalizeQuestionBankSourcePath } from "../packages/domain/src/question-bank-source-path.js";
 
 const SUPPORTED_SCHEMA_VERSION = "1.0";
 const MAX_FILE_BYTES = 1_000_000;

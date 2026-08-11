@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { account, session, user, verification } from "../src/schema/index.js";
 
+function timestampUsesTimezone(column: object, name: string): boolean {
+  if (!("withTimezone" in column) || typeof column["withTimezone"] !== "boolean") {
+    throw new Error(`Expected timestamp timezone metadata for ${name}`);
+  }
+  return column["withTimezone"];
+}
+
 describe("Better Auth PostgreSQL schema", () => {
   it("uses the Better Auth model table names", () => {
     expect(
@@ -33,7 +40,7 @@ describe("Better Auth PostgreSQL schema", () => {
 
   it("keeps framework timestamps compatible and uses timestamptz for project deletion state", () => {
     expect(user.createdAt.columnType).toBe("PgTimestamp");
-    expect(user.createdAt.withTimezone).toBe(false);
+    expect(timestampUsesTimezone(user.createdAt, "user.createdAt")).toBe(false);
     expect(user.createdAt.hasDefault).toBe(true);
     expect(session.expiresAt.notNull).toBe(true);
     expect(session.expiresAt.hasDefault).toBe(false);
@@ -42,7 +49,7 @@ describe("Better Auth PostgreSQL schema", () => {
     expect(session.updatedAt.defaultFn).toBeUndefined();
     expect(session.updatedAt.onUpdateFn).toBeTypeOf("function");
     expect(verification.updatedAt.hasDefault).toBe(true);
-    expect(user.deletionRequestedAt.withTimezone).toBe(true);
+    expect(timestampUsesTimezone(user.deletionRequestedAt, "user.deletionRequestedAt")).toBe(true);
   });
 
   it("supports linking while preserving the user primary email", () => {

@@ -25,10 +25,14 @@ import {
   sessionQuestionSnapshots,
   user,
 } from "../src/index.js";
-import { type PostgresTestDatabase, PostgresTestHarness } from "./support/postgres-test-harness.js";
+import {
+  databaseNow,
+  type PostgresTestDatabase,
+  PostgresTestHarness,
+} from "./support/postgres-test-harness.js";
 import { questionBankFixtureSourceHash } from "./support/question-bank-fixture.js";
 
-const NOW = new Date("2026-08-10T00:00:00.000Z");
+let NOW: Date;
 const OWNER_ID = parseAccountId("operation-owner");
 const INTERVIEW_ID = parseInterviewId("operation-interview");
 const INPUT = { questionPosition: 1, text: "immutable answer" } as const;
@@ -138,6 +142,7 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
   beforeAll(async () => {
     harness = await PostgresTestHarness.start();
     testDatabase = await harness.createDatabase({ name: "operation_lifecycle_tests" });
+    NOW = await databaseNow(testDatabase, -60_000);
     client = testDatabase.client;
     repository = new PgOperationRepository(client.database);
     unitOfWork = new PgRepositoryUnitOfWork(client.database);
