@@ -1496,6 +1496,9 @@ describe("startup configuration schema", () => {
     DATABASE_URL: "postgres://localhost:5432/interview",
     BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
     BETTER_AUTH_URL: "http://localhost:3000",
+    SMTP_HOST: "localhost",
+    SMTP_PORT: "1025",
+    SMTP_FROM: "interview-agent@example.test",
     MODEL_ID: "test-model",
     NODE_ENV: "test",
   };

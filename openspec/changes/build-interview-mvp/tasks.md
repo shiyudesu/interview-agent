@@ -43,7 +43,7 @@
 ## 5. Authentication and Account Access
 
 - [x] 5.1 Configure Better Auth with the Drizzle adapter, PostgreSQL sessions, GitHub OAuth, email OTP, disabled implicit linking, and explicit different-email GitHub linking.
-- [ ] 5.2 Implement the `EmailSender` port and Nodemailer/Mailpit local adapter with OTP expiry, attempt limiting, resend behavior, and redacted logging.
+- [x] 5.2 Implement the `EmailSender` port and Nodemailer/Mailpit local adapter with OTP expiry, attempt limiting, resend behavior, and redacted logging.
 - [ ] 5.3 Mount Better Auth in Fastify and add authenticated request context, same-origin cookie settings, Origin/CSRF protection, and authentication-specific rate limits.
 - [ ] 5.4 Implement account profile, linked-identity listing/linking, session handling, and ownership checks for interviews and reports.
 - [x] 5.5 Implement reverse-chronological interview history projections for completed, early-ended, and abandoned interviews.

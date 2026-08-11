@@ -6,6 +6,7 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins";
 
 import type { ServerConfig } from "./config.js";
+import type { EmailSender } from "./email-sender.js";
 
 export const EMAIL_OTP_LENGTH = 6;
 export const EMAIL_OTP_EXPIRES_IN_SECONDS = 5 * 60;
@@ -16,7 +17,7 @@ export const AUTH_SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
 export interface CreateAuthenticationInput {
   readonly database: Database;
   readonly config: Pick<ServerConfig, "environment" | "auth">;
-  readonly sendVerificationOtp: EmailOTPOptions["sendVerificationOTP"];
+  readonly emailSender: EmailSender;
 }
 
 export interface Authentication {
@@ -24,12 +25,27 @@ export interface Authentication {
   readonly options: BetterAuthOptions;
 }
 
-export function createEmailOtpOptions(
-  sendVerificationOtp: EmailOTPOptions["sendVerificationOTP"],
-  secret: string,
-): EmailOTPOptions {
+export class AuthenticationEmailDeliveryError extends Error {
+  constructor() {
+    super("Authentication email delivery failed");
+    this.name = "AuthenticationEmailDeliveryError";
+  }
+}
+
+export function createEmailOtpOptions(emailSender: EmailSender, secret: string): EmailOTPOptions {
   return {
-    sendVerificationOTP: sendVerificationOtp,
+    sendVerificationOTP: async ({ email, otp, type }) => {
+      try {
+        await emailSender.sendVerificationOtp({
+          recipient: email,
+          code: otp,
+          purpose: type,
+          expiresInSeconds: EMAIL_OTP_EXPIRES_IN_SECONDS,
+        });
+      } catch {
+        throw new AuthenticationEmailDeliveryError();
+      }
+    },
     otpLength: EMAIL_OTP_LENGTH,
     expiresIn: EMAIL_OTP_EXPIRES_IN_SECONDS,
     allowedAttempts: EMAIL_OTP_ALLOWED_ATTEMPTS,
@@ -89,6 +105,6 @@ export function createAuthentication(input: CreateAuthenticationInput): Authenti
       useSecureCookies: input.config.environment === "production",
     },
     telemetry: { enabled: false },
-    plugins: [emailOTP(createEmailOtpOptions(input.sendVerificationOtp, input.config.auth.secret))],
+    plugins: [emailOTP(createEmailOtpOptions(input.emailSender, input.config.auth.secret))],
   });
 }

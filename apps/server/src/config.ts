@@ -17,6 +17,11 @@ export interface ServerConfig {
       readonly clientSecret: string;
     };
   };
+  readonly email: {
+    readonly smtpHost: string;
+    readonly smtpPort: number;
+    readonly from: string;
+  };
   readonly model:
     | {
         readonly provider: "faux";
@@ -64,6 +69,9 @@ const SERVER_ENVIRONMENT_KEYS = [
   "BETTER_AUTH_URL",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_FROM",
   "MODEL_PROVIDER",
   "MODEL_ID",
   "MODEL_API_KEY",
@@ -81,11 +89,11 @@ function selectServerEnvironment(environment: Readonly<Record<string, string | u
   );
 }
 
-function parsePort(port: string | undefined) {
-  const parsedPort = Number.parseInt(port ?? String(DEFAULT_PORT), 10);
+function parsePort(port: string, name: string) {
+  const parsedPort = Number.parseInt(port, 10);
 
   if (parsedPort < 1 || parsedPort > 65_535) {
-    throw new ConfigurationError(["/PORT must be between 1 and 65535"]);
+    throw new ConfigurationError([`/${name} must be between 1 and 65535`]);
   }
 
   return parsedPort;
@@ -144,12 +152,17 @@ export function loadServerConfig(
   return {
     environment: selectedEnvironment.NODE_ENV ?? "development",
     host: selectedEnvironment.HOST ?? DEFAULT_HOST,
-    port: parsePort(selectedEnvironment.PORT),
+    port: parsePort(selectedEnvironment.PORT ?? String(DEFAULT_PORT), "PORT"),
     databaseUrl: selectedEnvironment.DATABASE_URL,
     auth: {
       secret: selectedEnvironment.BETTER_AUTH_SECRET,
       baseUrl: selectedEnvironment.BETTER_AUTH_URL,
       ...(github === undefined ? {} : { github }),
+    },
+    email: {
+      smtpHost: selectedEnvironment.SMTP_HOST,
+      smtpPort: parsePort(selectedEnvironment.SMTP_PORT, "SMTP_PORT"),
+      from: selectedEnvironment.SMTP_FROM,
     },
     model,
     logLevel: selectedEnvironment.LOG_LEVEL ?? "info",

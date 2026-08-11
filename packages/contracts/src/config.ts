@@ -11,6 +11,9 @@ const environmentProperties = {
   BETTER_AUTH_URL: Type.String({ format: "uri" }),
   GITHUB_CLIENT_ID: Type.Optional(Type.String({ minLength: 1 })),
   GITHUB_CLIENT_SECRET: Type.Optional(Type.String({ minLength: 1 })),
+  SMTP_HOST: Type.String({ minLength: 1 }),
+  SMTP_PORT: Type.String({ pattern: "^[0-9]+$" }),
+  SMTP_FROM: Type.String({ format: "email" }),
   MODEL_ID: Type.String({ minLength: 1 }),
   MODEL_BASE_URL: Type.Optional(Type.String({ format: "uri" })),
   LOG_LEVEL: Type.Optional(

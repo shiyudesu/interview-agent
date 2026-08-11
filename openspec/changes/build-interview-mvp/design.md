@@ -240,6 +240,11 @@ delete-user endpoints remain disabled because those workflows are project-owned.
 The application owns interview-history access and deletion orchestration. Account deletion immediately revokes sessions and marks all related content inaccessible and non-restorable. A sweeper physically deletes authentication and business rows within seven days. Better Auth's immediate delete endpoint is not exposed directly.
 
 Email delivery is behind an `EmailSender` port. The local adapter uses Nodemailer and Mailpit; a production adapter is deferred.
+The adapter sends text-only OTP messages through validated SMTP host, port, and sender settings.
+Delivery logs contain only fixed event and purpose fields; recipient addresses, OTP values, and raw
+SMTP errors are never forwarded to Better Auth logging. Delivery failures are rethrown internally as
+a fixed credential-free authentication error while the public send flow retains anti-enumeration
+semantics. OTP expiry, attempt count, keyed storage, and resend rotation are configured centrally.
 
 ### 11. Validate configuration and secure the same-origin API
 

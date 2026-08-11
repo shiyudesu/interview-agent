@@ -6,6 +6,9 @@ const validEnvironment = {
   DATABASE_URL: "postgresql://interview:interview@localhost:5432/interview",
   BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
   BETTER_AUTH_URL: "http://localhost:3000",
+  SMTP_HOST: "localhost",
+  SMTP_PORT: "1025",
+  SMTP_FROM: "interview-agent@example.test",
   MODEL_PROVIDER: "faux",
   MODEL_ID: "test-model",
 } as const;
@@ -20,6 +23,11 @@ describe("loadServerConfig", () => {
       auth: {
         secret: validEnvironment.BETTER_AUTH_SECRET,
         baseUrl: validEnvironment.BETTER_AUTH_URL,
+      },
+      email: {
+        smtpHost: "localhost",
+        smtpPort: 1025,
+        from: "interview-agent@example.test",
       },
       model: {
         provider: "faux",
@@ -70,6 +78,12 @@ describe("loadServerConfig", () => {
   it("rejects ports outside the TCP range", () => {
     expect(() => loadServerConfig({ ...validEnvironment, PORT: "65536" })).toThrow(
       "/PORT must be between 1 and 65535",
+    );
+  });
+
+  it("rejects SMTP ports outside the TCP range", () => {
+    expect(() => loadServerConfig({ ...validEnvironment, SMTP_PORT: "0" })).toThrow(
+      "/SMTP_PORT must be between 1 and 65535",
     );
   });
 

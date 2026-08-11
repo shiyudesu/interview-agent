@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AUTH_SESSION_EXPIRES_IN_SECONDS,
   AUTH_SESSION_UPDATE_AGE_SECONDS,
+  AuthenticationEmailDeliveryError,
   createAuthentication,
   createEmailOtpOptions,
   EMAIL_OTP_ALLOWED_ATTEMPTS,
@@ -38,6 +39,10 @@ function database() {
   return client.database;
 }
 
+function emailSender(sendVerificationOtp = vi.fn(async () => undefined)) {
+  return { sendVerificationOtp };
+}
+
 afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
@@ -47,7 +52,7 @@ describe("createAuthentication", () => {
     const auth = createAuthentication({
       database: database(),
       config: authConfig({ environment: "production" }),
-      sendVerificationOtp: vi.fn(),
+      emailSender: emailSender(),
     });
 
     expect(auth.options.baseURL).toBe("http://localhost:3000");
@@ -92,7 +97,7 @@ describe("createAuthentication", () => {
           baseUrl: "http://localhost:3000",
         },
       }),
-      sendVerificationOtp: vi.fn(),
+      emailSender: emailSender(),
     });
 
     expect(auth.options.socialProviders).toEqual({});
@@ -102,7 +107,10 @@ describe("createAuthentication", () => {
 
   it("uses bounded hashed rotating email OTP settings and delegates delivery", async () => {
     const sendVerificationOtp = vi.fn(async () => undefined);
-    const options = createEmailOtpOptions(sendVerificationOtp, "0123456789abcdef0123456789abcdef");
+    const options = createEmailOtpOptions(
+      emailSender(sendVerificationOtp),
+      "0123456789abcdef0123456789abcdef",
+    );
     const message = {
       email: "candidate@example.test",
       otp: "123456",
@@ -125,6 +133,27 @@ describe("createAuthentication", () => {
       "8d969eef6ecad3c29a3a629280e686cff8caedb10f60a93c27608d3f0a3981",
     );
     await options.sendVerificationOTP(message);
-    expect(sendVerificationOtp).toHaveBeenCalledWith(message);
+    expect(sendVerificationOtp).toHaveBeenCalledWith({
+      recipient: message.email,
+      code: message.otp,
+      purpose: message.type,
+      expiresInSeconds: EMAIL_OTP_EXPIRES_IN_SECONDS,
+    });
+  });
+
+  it("replaces SMTP failures with a credential-free authentication error", async () => {
+    const rawFailure = new Error("SMTP rejected candidate@example.test with OTP 123456");
+    const options = createEmailOtpOptions(
+      emailSender(vi.fn(async () => Promise.reject(rawFailure))),
+      "0123456789abcdef0123456789abcdef",
+    );
+
+    await expect(
+      options.sendVerificationOTP({
+        email: "candidate@example.test",
+        otp: "123456",
+        type: "sign-in",
+      }),
+    ).rejects.toEqual(new AuthenticationEmailDeliveryError());
   });
 });
