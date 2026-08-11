@@ -208,6 +208,14 @@ Pi Agent Core is used only for streamed interviewer text:
 
 The Agent has no tools. It receives only the current question snapshot, the allowed wording objective, and the minimum required context. If main-question rephrasing fails, the system displays the reviewed source wording rather than blocking the interview.
 
+At startup the server constructs exactly one `pi-ai` provider/model runtime. Real providers keep
+their native credential transformation while reading one immutable configured API-key credential
+with no ambient environment fallback. Dynamic catalogs refresh through the configured provider
+gateway with a ten-second startup timeout before the selected model is locked. The public runtime
+exposes no login, credential override, provider mutation, request-time auth override, or alternate
+model dispatch surface. Automated tests use a narrowed deterministic Faux controller that can queue
+responses but cannot mutate provider delegation.
+
 `pi-ai` controlled calls return decision-bearing TypeBox payloads for:
 
 - response classification;
