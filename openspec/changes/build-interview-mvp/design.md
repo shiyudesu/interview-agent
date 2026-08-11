@@ -343,6 +343,12 @@ mirrors production Rubric, missing-point, follow-up-kind, identifier, Simplified
 untrusted-framing rules, and request builders create fresh Date values to prevent cross-test
 mutation.
 
+Faux Provider tests additionally prove invalid or failed interviewer output emits no pre-validation
+deltas, rephrase fallback uses reviewed text, transient retries exhaust deterministically, evidence
+is required and question-scoped, unknown/skipped feedback cannot cite answer evidence, adapter input
+objects remain unchanged after failure, and domain cancellation restores answer, supplement, and
+clarification phases without new business facts.
+
 ## Risks / Trade-offs
 
 - **Model scores can vary despite a fixed Rubric** → Build a versioned evaluation fixture set, assert structural and scoring invariants, record model/prompt versions, and calibrate before treating scores as reliable.

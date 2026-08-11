@@ -430,8 +430,10 @@ describe("PiAnswerEvaluationModel", () => {
         delays.push(delayMs);
       },
     });
+    const freshRequest = createFixtureEvaluationRequest(correctFixture);
+    const originalRequest = structuredClone(freshRequest);
 
-    await expect(adapter.evaluate(request)).rejects.toMatchObject({
+    await expect(adapter.evaluate(freshRequest)).rejects.toMatchObject({
       code: "provider_failure",
       metadata: {
         provider: "faux",
@@ -443,6 +445,7 @@ describe("PiAnswerEvaluationModel", () => {
     expect(calls).toBe(1);
     expect(delays).toEqual([]);
     expect(runtime.faux.getPendingResponseCount()).toBe(1);
+    expect(freshRequest).toEqual(originalRequest);
   });
 
   it.each([
@@ -491,6 +494,21 @@ describe("PiAnswerEvaluationModel", () => {
         recommendedFollowUp: null,
       },
       issueCode: "unknown_evidence_id",
+    },
+    {
+      name: "positive award without evidence",
+      output: {
+        classification: "relevant",
+        rubricItems: [
+          {
+            ...fullAwards[0],
+            evidenceMaterialIds: [],
+          },
+          fullAwards[1],
+        ],
+        recommendedFollowUp: null,
+      },
+      issueCode: "missing_evidence",
     },
     {
       name: "missing first irrelevant clarification",

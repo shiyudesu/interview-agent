@@ -521,6 +521,28 @@ describe("answer processing and clarification", () => {
     });
     expect(cancelledSupplement.questions[0]?.answerMaterial).toHaveLength(1);
     expect(cancelledSupplement.questions[0]?.outcome).toMatchObject({ score: 50 });
+
+    const clarificationPlan = expectPlan(
+      handleInterviewCommand(cancelledAnswer, {
+        type: "request_question_clarification",
+        interviewId: cancelledAnswer.id,
+        operationId: nextOperationId(),
+        expectedVersion: cancelledAnswer.version,
+        occurredAt: new Date(cancelledAnswer.lastEffectiveActivityAt.getTime() + 1_000),
+      }),
+    );
+    const cancelledClarification = cancelInterviewOperation(
+      clarificationPlan.interview,
+      clarificationPlan,
+    );
+
+    expect(cancelledClarification).toMatchObject({
+      version: clarificationPlan.interview.version,
+      phase: "awaiting_response",
+      pendingOperation: null,
+    });
+    expect(cancelledClarification.questions[0]?.questionClarifications).toEqual([]);
+    expect(cancelledClarification.questions[0]?.systemFollowUps).toEqual([]);
   });
 
   it("records user-requested clarification without consuming follow-ups or changing scoring", () => {

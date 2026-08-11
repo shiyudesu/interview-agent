@@ -488,6 +488,28 @@ describe("PiReportAnalysisModel", () => {
       issueCode: "unknown_evidence_id",
     },
     {
+      name: "evaluated question without evidence",
+      mutate: (_request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => ({
+        ...output,
+        perQuestion: output.perQuestion.map((analysis, index) =>
+          index === 0 ? { ...analysis, evidenceMaterialIds: [] } : analysis,
+        ),
+      }),
+      issueCode: "missing_question_evidence",
+    },
+    {
+      name: "unknown question with evidence",
+      mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => ({
+        ...output,
+        perQuestion: output.perQuestion.map((analysis, index) =>
+          request.questions[index]?.evaluation === null
+            ? { ...analysis, evidenceMaterialIds: ["answer-0"] }
+            : analysis,
+        ),
+      }),
+      issueCode: "unexpected_question_evidence",
+    },
+    {
       name: "internal knowledge leakage",
       mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => ({
         ...output,
@@ -672,6 +694,7 @@ describe("PiReportAnalysisModel", () => {
         delays.push(delayMs);
       },
     });
+    const originalRequest = structuredClone(request);
 
     await expect(adapter.analyze(request)).rejects.toMatchObject({
       code: "provider_failure",
@@ -683,6 +706,7 @@ describe("PiReportAnalysisModel", () => {
     expect(calls).toBe(1);
     expect(delays).toEqual([]);
     expect(runtime.faux.getPendingResponseCount()).toBe(1);
+    expect(request).toEqual(originalRequest);
   });
 
   it("rejects request evidence outside item and character bounds", async () => {

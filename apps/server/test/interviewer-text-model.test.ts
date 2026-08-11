@@ -264,8 +264,15 @@ describe("PiAgentInterviewerTextModel", () => {
     const runtime = await fauxRuntime();
     runtime.faux.setResponses([fauxAssistantMessage(output)]);
     const adapter = new PiAgentInterviewerTextModel(runtime);
+    const events: InterviewerTextEvent[] = [];
 
-    await expect(collectEvents(adapter.stream(request))).rejects.toMatchObject({
+    await expect(
+      (async () => {
+        for await (const event of adapter.stream(request)) {
+          events.push(event);
+        }
+      })(),
+    ).rejects.toMatchObject({
       name: "InterviewerTextModelError",
       code: "invalid_output",
       metadata: {
@@ -275,7 +282,32 @@ describe("PiAgentInterviewerTextModel", () => {
         questionVersion: 7,
       },
     });
+    expect(events).toEqual([]);
   });
+
+  it.each([clarificationRequest, followUpRequest])(
+    "emits no events when %s provider work fails",
+    async (request) => {
+      const runtime = await fauxRuntime();
+      runtime.faux.setResponses([
+        fauxAssistantMessage("不应泄漏的部分输出", {
+          stopReason: "error",
+          errorMessage: "503 service unavailable",
+        }),
+      ]);
+      const adapter = new PiAgentInterviewerTextModel(runtime);
+      const events: InterviewerTextEvent[] = [];
+
+      await expect(
+        (async () => {
+          for await (const event of adapter.stream(request)) {
+            events.push(event);
+          }
+        })(),
+      ).rejects.toMatchObject({ code: "model_call_failed" });
+      expect(events).toEqual([]);
+    },
+  );
 
   it("returns reviewed source wording for both failed and invalid rephrasing attempts", async () => {
     const runtime = await fauxRuntime("configured-fallback-model");
