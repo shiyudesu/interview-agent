@@ -10,7 +10,7 @@ under the matching domain directory:
 - `cache_messaging_distributed/`
 - `testing_observability_engineering/`
 
-The checked-in development bank contains three reviewed questions in each domain, which is enough
+The checked-in development bank contains at least three reviewed questions in each domain, which is enough
 to exercise 5, 10, and 15-question selection locally. Development validation does not enforce the
 release counts:
 

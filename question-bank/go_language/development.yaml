@@ -90,3 +90,387 @@ questions:
       reviewedAt: "2026-08-10T00:00:00Z"
       simplifiedChineseVerified: true
       technicalTermsVerified: true
+
+  - id: go.type.defined-alias-assignability
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较 Go 中已定义类型与类型别名在类型身份、赋值兼容性和显式转换方面的区别。"
+    rubric:
+      - id: defined-type-identity
+        description: "说明已定义类型会获得区别于底层类型的新类型身份"
+        weight: 40
+      - id: alias-type-identity
+        description: "说明类型别名与目标类型保持相同的类型身份"
+        weight: 35
+      - id: assignability-conversion
+        description: "说明不同已定义类型之间通常需要依据赋值规则或进行显式转换"
+        weight: 25
+    followUpGoals:
+      - id: defined-type-clarification
+        kind: clarification
+        goal: "澄清类型身份与底层类型相同是否是一回事"
+      - id: defined-type-depth
+        kind: depth
+        goal: "说明已定义类型如何用于建立更明确的领域边界"
+    knowledgeExplanation: "已定义类型基于某个底层类型形成新的类型身份，类型别名只是目标类型的另一名称；两者在赋值兼容性和转换要求上不同。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.errors.wrapping-inspection
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请说明 Go 的错误包装链如何保留原因，以及 errors.Is、errors.As 与直接比较各自适合什么场景。"
+    rubric:
+      - id: error-wrapping-chain
+        description: "说明带有 Unwrap 语义的包装能够保留底层错误链"
+        weight: 40
+      - id: error-is-as
+        description: "说明 errors.Is 用于匹配目标错误，errors.As 用于提取兼容的错误类型"
+        weight: 35
+      - id: direct-comparison-limit
+        description: "说明直接相等比较或类型断言可能无法穿透包装层"
+        weight: 25
+    followUpGoals:
+      - id: error-chain-clarification
+        kind: clarification
+        goal: "澄清关注的是特定错误值还是某一类错误"
+      - id: error-chain-depth
+        kind: depth
+        goal: "说明自定义错误包装应如何保留可检查的原因"
+    knowledgeExplanation: "错误包装通过 Unwrap 形成可遍历的原因链，errors.Is 和 errors.As 能沿链匹配错误身份或类型，比只检查最外层更稳健。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.control.defer-panic-recover
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请解释 defer 的求值与执行顺序，以及 panic 展开和 recover 生效所需的边界条件。"
+    rubric:
+      - id: defer-evaluation-order
+        description: "说明 defer 的实参在登记时求值，而延迟调用按后进先出顺序执行"
+        weight: 35
+      - id: panic-unwind-recover
+        description: "说明 panic 会在当前 goroutine 展开调用栈并执行已登记的延迟调用"
+        weight: 35
+      - id: recover-boundary
+        description: "说明 recover 需要在发生 panic 的 goroutine 中由延迟调用直接触发，并且不应替代常规错误处理"
+        weight: 30
+    followUpGoals:
+      - id: defer-clarification
+        kind: clarification
+        goal: "澄清延迟调用的实参求值时机与实际调用时机"
+      - id: recover-depth
+        kind: depth
+        goal: "说明服务边界捕获 panic 后仍需完成哪些隔离和记录工作"
+    knowledgeExplanation: "defer 在登记时确定实参并在函数退出时逆序执行；panic 沿当前 goroutine 的调用栈展开，recover 只有位于合适的延迟调用边界时才能终止展开。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.map.zero-value-comma-ok
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明 Go map 在键缺失、零值、nil map 和遍历顺序方面容易混淆的语义。"
+    rubric:
+      - id: map-missing-key
+        description: "说明读取缺失键会得到元素类型零值，并可用 comma-ok 形式区分是否存在"
+        weight: 40
+      - id: nil-map-behavior
+        description: "说明 nil map 可以读取、遍历、delete 和 clear，但元素赋值会触发 panic"
+        weight: 30
+      - id: map-iteration-order
+        description: "说明 map 的遍历顺序未被语言保证，不能作为稳定排序依据"
+        weight: 30
+    followUpGoals:
+      - id: map-clarification
+        kind: clarification
+        goal: "澄清零值结果与键实际存在但值为零之间的区别"
+      - id: map-depth
+        kind: depth
+        goal: "说明依赖稳定顺序时应如何在 map 之外建立顺序"
+    knowledgeExplanation: "map 查询在键缺失时返回零值，存在性需要额外布尔结果确认；nil map 的读取、遍历、delete 和 clear 安全，但元素赋值会触发 panic，遍历顺序也不构成稳定契约。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.text.string-byte-rune
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请比较 Go 中 string、[]byte 与 []rune 对文本的表示方式，并说明 UTF-8 遍历时索引和值分别代表什么。"
+    rubric:
+      - id: string-byte-sequence
+        description: "说明 string 是不可变字节序列，本身不保证内容一定是有效 UTF-8"
+        weight: 35
+      - id: byte-rune-semantics
+        description: "说明 []byte 面向原始字节，[]rune 面向 Unicode 码点"
+        weight: 35
+      - id: utf8-range-behavior
+        description: "说明 range 遍历 string 时索引是字节偏移，值是解码后的 rune，并需考虑无效编码和转换成本"
+        weight: 30
+    followUpGoals:
+      - id: text-clarification
+        kind: clarification
+        goal: "澄清业务需要按字节、Unicode 码点还是用户可见字符处理"
+      - id: text-depth
+        kind: depth
+        goal: "说明无效 UTF-8 和组合字符为何会影响长度判断"
+    knowledgeExplanation: "string 保存不可变字节，[]byte 适合字节级处理，[]rune 适合码点级处理；UTF-8 中一个 rune 可能占多个字节，用户可见字符还可能由多个码点组成。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.memory.copy-sharing-escape
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明 Go 的值传递为何不等于深拷贝，以及逃逸分析如何影响对象的存放位置和生命周期。"
+    rubric:
+      - id: value-copy-semantics
+        description: "说明值传递会复制值本身，但指针、slice 和 map 等值仍可能引用共享数据"
+        weight: 40
+      - id: escape-analysis
+        description: "说明逃逸分析根据值是否可能超出当前调用生命周期决定栈或堆等存放策略"
+        weight: 35
+      - id: retention-ownership
+        description: "说明长期保留共享引用或较小子 slice 可能延长整块底层数据的存活时间"
+        weight: 25
+    followUpGoals:
+      - id: memory-clarification
+        kind: clarification
+        goal: "澄清被复制的是完整数据还是包含共享引用的描述值"
+      - id: memory-depth
+        kind: depth
+        goal: "说明 API 边界何时需要主动复制以隔离后续修改和内存保留"
+    knowledgeExplanation: "Go 统一采用值传递，但某些值内部包含对共享数据的引用；逃逸分析依据生命周期选择存放位置，引用保留方式还会影响底层对象何时可被回收。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.method.method-set-embedding
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请解释值接收者与指针接收者的方法集差异，以及结构体嵌入带来的方法提升为何不等同于继承。"
+    rubric:
+      - id: receiver-method-sets
+        description: "说明值类型的方法集只包含值接收者方法，而对应指针类型还包含指针接收者方法"
+        weight: 40
+      - id: addressable-call-interface
+        description: "说明可寻址值的方法调用便利规则不会改变该值满足接口时使用的方法集"
+        weight: 35
+      - id: embedding-promotion
+        description: "说明嵌入会提升字段和方法，但冲突、遮蔽与显式选择规则不同于继承体系"
+        weight: 25
+    followUpGoals:
+      - id: method-set-clarification
+        kind: clarification
+        goal: "澄清讨论的是方法调用可行性还是接口满足关系"
+      - id: embedding-depth
+        kind: depth
+        goal: "说明嵌入成员发生名称冲突时外层类型的选择规则"
+    knowledgeExplanation: "方法集决定接口满足关系，编译器对可寻址值的调用便利不会扩大值类型的方法集；嵌入提供组合与成员提升，但没有继承的替换和重写语义。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.generics.constraints-type-inference
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: conceptual
+    sourceWording: "请说明 Go 泛型函数的类型约束如何决定可用操作，以及调用或赋值时的类型推断在什么情况下仍需要显式类型实参。"
+    rubric:
+      - id: constraint-type-set
+        description: "说明约束接口通过类型集合限定允许作为类型实参的类型"
+        weight: 40
+      - id: constraint-operations
+        description: "说明泛型逻辑只能依赖约束所保证的操作和方法"
+        weight: 35
+      - id: inference-limits
+        description: "说明泛型函数可依据调用实参、赋值上下文和约束关系推断，信息不足或关系不明确时仍需显式指定"
+        weight: 25
+    followUpGoals:
+      - id: generics-clarification
+        kind: clarification
+        goal: "澄清约束是在限制具体类型还是表达可依赖的能力"
+      - id: generics-depth
+        kind: depth
+        goal: "说明过宽或过窄的约束分别会带来什么维护问题"
+    knowledgeExplanation: "泛型约束既限定类型集合，也定义泛型逻辑可安全使用的能力；泛型函数可从调用实参、赋值上下文和约束关系推断类型，信息不足时需要显式类型实参，而泛型类型的实例化需要提供完整类型实参。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.io.reader-writer-contracts
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: design
+    sourceWording: "请解释 io.Reader 与 io.Writer 的关键返回值契约，以及这些小接口为何便于流式组合。"
+    rubric:
+      - id: reader-result-contract
+        description: "说明 Reader 可能同时返回正数长度和错误，调用方应先处理已读取数据再处理错误"
+        weight: 35
+      - id: writer-result-contract
+        description: "说明 Writer 在未写完全部输入时必须返回能够解释短写的非 nil 错误"
+        weight: 35
+      - id: io-composition
+        description: "说明面向顺序字节流的小接口便于缓冲、限制、转换和复制组件相互组合"
+        weight: 30
+    followUpGoals:
+      - id: io-contract-clarification
+        kind: clarification
+        goal: "澄清返回长度与错误同时出现时的处理顺序"
+      - id: io-contract-depth
+        kind: depth
+        goal: "说明包装 Reader 或 Writer 时如何保持短读、短写和错误语义"
+    knowledgeExplanation: "Reader 和 Writer 用很小的契约描述字节流，长度与错误需要分别解释；遵守这些契约后，不同缓冲、转换和传输组件可以透明组合。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.time.timer-ticker-lifecycle
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: scenario
+    sourceWording: "请比较 time.Timer 与 time.Ticker 的语义，并说明停止、重置和接收时间信号时应关注的生命周期问题。"
+    rubric:
+      - id: timer-ticker-semantics
+        description: "说明 Timer 面向单次时间事件，Ticker 面向周期事件且慢接收方可能观察不到每个间隔"
+        weight: 35
+      - id: timer-lifecycle-owner
+        description: "说明 Stop 和 Reset 应由明确的生命周期所有者协调，避免并发接收或重复调度造成逻辑竞争"
+        weight: 35
+      - id: timeout-not-cancellation
+        description: "说明收到时间信号不等于相关工作已经取消，仍需传播取消并释放资源"
+        weight: 30
+    followUpGoals:
+      - id: timer-clarification
+        kind: clarification
+        goal: "澄清需求是一次性截止时间还是持续周期调度"
+      - id: timer-depth
+        kind: depth
+        goal: "说明计时器所有权与 context 取消如何共同定义任务退出条件"
+    knowledgeExplanation: "Timer 产生一次时间事件，Ticker 周期性产生事件并可能调整或丢弃节拍；计时器的停止和重置需要清晰所有权，时间信号本身不会自动终止业务工作。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.json.absent-null-zero
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: troubleshooting
+    sourceWording: "请解释 encoding/json 处理缺失字段、null、零值、omitempty 和未知字段时的主要行为。"
+    rubric:
+      - id: json-absent-null
+        description: "说明缺失字段通常保留目标中的原值，而 null 对指针、map、slice 和 interface 等可空目标会产生 nil 语义"
+        weight: 40
+      - id: json-zero-omitempty
+        description: "说明 omitempty 影响编码时是否省略字段，不能单独解决解码时区分缺失与显式零值的问题"
+        weight: 30
+      - id: json-unknown-fields
+        description: "说明结构体解码默认忽略未知字段，严格输入边界可通过 Decoder 拒绝未知字段"
+        weight: 30
+    followUpGoals:
+      - id: json-clarification
+        kind: clarification
+        goal: "澄清业务需要区分缺失字段、显式 null 还是显式零值"
+      - id: json-depth
+        kind: depth
+        goal: "说明复用已有结构体作为解码目标为何可能保留旧字段值"
+    knowledgeExplanation: "encoding/json 的编码和解码规则并不对称：缺失字段不会主动清零已有目标，null 只对部分类型表达空值，omitempty 只控制编码省略，未知字段默认也较宽松。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true
+
+  - id: go.stdlib.small-interface-composition
+    contentVersion: 1
+    domain: go_language
+    difficulty: medium
+    questionType: design
+    sourceWording: "请分析 Go 标准库为何常使用小接口与组合，而不是庞大的通用接口，并说明这种设计的边界。"
+    rubric:
+      - id: small-interface-decoupling
+        description: "说明小接口只表达调用方真正需要的行为，可降低耦合并扩大可替换范围"
+        weight: 40
+      - id: composition-adapters
+        description: "说明组合与适配器可以逐步叠加缓冲、限制、转换或观测等能力"
+        weight: 35
+      - id: interface-boundary
+        description: "说明不应为抽象而提前扩大接口，无替换需求时返回具体类型通常更清晰"
+        weight: 25
+    followUpGoals:
+      - id: small-interface-clarification
+        kind: clarification
+        goal: "澄清接口应由能力提供方还是行为使用方定义"
+      - id: small-interface-depth
+        kind: depth
+        goal: "说明接口过大如何影响测试替身、兼容演进和组件复用"
+    knowledgeExplanation: "Go 标准库常以小接口描述最少行为，再通过包装和组合扩展能力；接口应服务真实替换边界，过早或过大的抽象会增加实现负担和演进成本。"
+    active: true
+    reviewed: true
+    reviewMetadata:
+      reviewedBy: development-fixture-review
+      reviewedAt: "2026-08-11T00:00:00Z"
+      simplifiedChineseVerified: true
+      technicalTermsVerified: true

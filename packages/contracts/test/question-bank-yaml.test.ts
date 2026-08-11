@@ -16,7 +16,7 @@ const repositoryQuestionBankRoot = fileURLToPath(
 );
 
 describe("repository question-bank YAML", () => {
-  it("provides three reviewed development questions in every domain", async () => {
+  it("provides 15 reviewed Go questions and three fixtures in remaining domains", async () => {
     const result = await loadQuestionBankDirectory(repositoryQuestionBankRoot);
     const counts = new Map<string, number>();
     for (const file of result.files) {
@@ -28,12 +28,12 @@ describe("repository question-bank YAML", () => {
     expect(result).toMatchObject({
       valid: true,
       fileCount: 6,
-      questionCount: 18,
-      activeReviewedCount: 18,
+      questionCount: 30,
+      activeReviewedCount: 30,
       issues: [],
     });
     expect(Object.fromEntries(counts)).toEqual({
-      go_language: 3,
+      go_language: 15,
       concurrency_runtime_performance: 3,
       http_rpc_api: 3,
       database_storage: 3,
