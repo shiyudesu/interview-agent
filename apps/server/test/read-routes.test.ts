@@ -176,6 +176,7 @@ function interviewCommands(): InterviewCommandRouteDependencies {
       abandon: unavailable,
       retry: unavailable,
     },
+    starter: { start: () => undefined },
     states: { findById: async () => null },
     now: () => new Date(occurredAt),
     nextInterviewId: () => parseInterviewId("generated-interview"),

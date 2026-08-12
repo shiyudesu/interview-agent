@@ -68,7 +68,7 @@
 - [x] 7.5 Wire the existing domain/persistence supplement window through Operation handlers and API responses so the next main question is not revealed until the user continues.
 - [x] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
 - [x] 7.7 Reconcile the implemented Operation, assessment, and report scope with the design and remaining task boundaries before further feature work.
-- [ ] 7.8 Separate durable model/report Operation acceptance from execution so command endpoints return `202` with the canonical Operation before provider completion.
+- [x] 7.8 Separate durable model/report Operation acceptance from execution so command endpoints return `202` with the canonical Operation before provider completion.
 - [ ] 7.9 Add server-owned detached execution lifecycle handling plus real command-to-SSE integration tests proving disconnect-safe completion and canonical recovery.
 - [ ] 7.10 Reject the Faux Provider in production configuration while retaining it for development, CI, and automated tests.
 - [ ] 7.11 Complete deletion-route TypeBox parameter/error contracts and make account/interview Operation-event erasure explicit, immediate, and non-silent.

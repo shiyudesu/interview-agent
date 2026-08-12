@@ -21,6 +21,10 @@ import {
   OperationEventBroker,
   type OperationEventRouteDependencies,
 } from "../src/operation-events.js";
+import {
+  type AcceptedOperationExecution,
+  ServerOwnedOperationStarter,
+} from "../src/operation-runner.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
@@ -38,6 +42,7 @@ const config = {
     baseUrl: "http://localhost:3000",
   },
 } as const;
+type CommandResult = StoredOperation | AcceptedOperationExecution;
 
 function authentication(context: AuthenticatedRequestContext | null = authContext): Authentication {
   const options: BetterAuthOptions = {};
@@ -120,24 +125,37 @@ function operation(
   };
 }
 
-function commandDependencies() {
+function commandDependencies(
+  starter: InterviewCommandRouteDependencies["starter"] = { start: () => undefined },
+) {
   let operationSequence = 0;
   const handlers = {
-    createInterview: vi.fn(async (input) => operation(input, "create_interview")),
-    submitAnswer: vi.fn(async (input) => operation(input, "submit_answer")),
-    submitSupplement: vi.fn(async (input) => operation(input, "submit_supplement")),
-    requestQuestionClarification: vi.fn(async (input) =>
-      operation(input, "request_question_clarification"),
+    createInterview: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "create_interview"),
     ),
-    markUnknown: vi.fn(async (input) => operation(input, "mark_question_unknown")),
-    skip: vi.fn(async (input) => operation(input, "skip_question")),
-    continueInterview: vi.fn(async (input) => operation(input, "continue_interview")),
-    endEarly: vi.fn(async (input) => operation(input, "end_interview_early")),
-    abandon: vi.fn(async (input) => operation(input, "abandon_interview")),
-    retry: vi.fn(async (input) => operation(input, "retry_operation")),
+    submitAnswer: vi.fn(async (input): Promise<CommandResult> => operation(input, "submit_answer")),
+    submitSupplement: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "submit_supplement"),
+    ),
+    requestQuestionClarification: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "request_question_clarification"),
+    ),
+    markUnknown: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "mark_question_unknown"),
+    ),
+    skip: vi.fn(async (input): Promise<CommandResult> => operation(input, "skip_question")),
+    continueInterview: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "continue_interview"),
+    ),
+    endEarly: vi.fn(
+      async (input): Promise<CommandResult> => operation(input, "end_interview_early"),
+    ),
+    abandon: vi.fn(async (input): Promise<CommandResult> => operation(input, "abandon_interview")),
+    retry: vi.fn(async (input): Promise<CommandResult> => operation(input, "retry_operation")),
   } satisfies InterviewCommandRouteDependencies["handlers"];
   const dependencies: InterviewCommandRouteDependencies = {
     handlers,
+    starter,
     states: {
       findById: async () => ({
         version: 3,
@@ -415,6 +433,71 @@ describe("interview command routes", () => {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     });
+  });
+
+  it("returns 202 before blocked server-owned work completes and starts a duplicate once", async () => {
+    const { dependencies, handlers } = commandDependencies(new ServerOwnedOperationStarter());
+    let canonical: StoredOperation | undefined;
+    let releaseWork: (() => void) | undefined;
+    let starts = 0;
+    let finished = false;
+    const workGate = new Promise<void>((resolve) => {
+      releaseWork = resolve;
+    });
+    handlers.submitAnswer.mockImplementation(async (input) => {
+      if (canonical !== undefined) {
+        return { operation: canonical, work: null };
+      }
+      canonical = operation(input, "submit_answer", {
+        status: "processing",
+        result: null,
+        completedAt: null,
+        leaseAcquiredAt: now,
+        leaseExpiresAt: new Date(now.getTime() + 60_000),
+        leaseOwner: "worker-1",
+      });
+      const acceptedOperation = canonical;
+      return {
+        operation: acceptedOperation,
+        work: {
+          operationId: acceptedOperation.id,
+          async start() {
+            starts += 1;
+            await workGate;
+            finished = true;
+            return { ...acceptedOperation, status: "succeeded", completedAt: now };
+          },
+        },
+      };
+    });
+    const instance = await createApp(dependencies);
+
+    const first = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews/interview-1/answers",
+      headers: { "idempotency-key": "blocked-answer-key" },
+      payload: { expectedVersion: 3, text: "回答" },
+    });
+    expect(first.statusCode).toBe(202);
+    expect(first.json()).toMatchObject({
+      operationId: "server-operation-1",
+      status: "processing",
+    });
+    expect(starts).toBe(1);
+    expect(finished).toBe(false);
+
+    const duplicate = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews/interview-1/answers",
+      headers: { "idempotency-key": "blocked-answer-key" },
+      payload: { expectedVersion: 3, text: "回答" },
+    });
+    expect(duplicate.statusCode).toBe(202);
+    expect(duplicate.json()).toEqual(first.json());
+    expect(starts).toBe(1);
+
+    releaseWork?.();
+    await vi.waitFor(() => expect(finished).toBe(true));
   });
 
   it("returns canonical report Operation results and stable retryable failures", async () => {

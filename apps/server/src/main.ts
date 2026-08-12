@@ -16,7 +16,11 @@ import { createNodemailerEmailSender } from "./email-sender.js";
 import { PiAgentInterviewerTextModel } from "./interviewer-text-model.js";
 import { createModelRuntime, type ModelRuntime } from "./model-runtime.js";
 import { createOperationEventRouteDependencies, OperationEventBroker } from "./operation-events.js";
-import { InterviewOperationHandlers, OperationRunner } from "./operation-runner.js";
+import {
+  InterviewOperationHandlers,
+  OperationRunner,
+  ServerOwnedOperationStarter,
+} from "./operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { PiReportAnalysisModel } from "./report-analysis-model.js";
 import { installGracefulShutdown } from "./shutdown.js";
@@ -49,20 +53,29 @@ const interviewOperations = new InterviewOperationHandlers(
     },
   ),
 );
-const interviewCommands = createInterviewCommandRouteDependencies(interviewOperations, {
-  async findById(interviewId, accountId) {
-    const interview = await unitOfWork.run((repositories) =>
-      repositories.interviews.findById(interviewId, accountId),
-    );
-    return interview === null
-      ? null
-      : {
-          version: interview.version,
-          status: interview.status,
-          phase: interview.phase,
-        };
+const interviewCommands = createInterviewCommandRouteDependencies(
+  interviewOperations,
+  {
+    async findById(interviewId, accountId) {
+      const interview = await unitOfWork.run((repositories) =>
+        repositories.interviews.findById(interviewId, accountId),
+      );
+      return interview === null
+        ? null
+        : {
+            version: interview.version,
+            status: interview.status,
+            phase: interview.phase,
+          };
+    },
   },
-});
+  new ServerOwnedOperationStarter((operationId) => {
+    app.log.error(
+      { event: "operation_execution_failed", operationId },
+      "Server-owned Operation execution failed",
+    );
+  }),
+);
 const canonicalReads = createCanonicalReadRouteDependencies(unitOfWork);
 const operationEvents = createOperationEventRouteDependencies(unitOfWork, operationEventBroker);
 

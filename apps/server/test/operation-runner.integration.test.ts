@@ -225,6 +225,95 @@ describe.sequential("persisted OperationRunner", () => {
     ).rejects.toBeInstanceOf(RepositoryIdempotencyConflictError);
   });
 
+  it("accepts model work durably before starting it and starts an idempotent duplicate once", async () => {
+    const interviewId = await createInterview("runner-accepted-answer");
+    let releaseEvaluation: ((result: AnswerEvaluationResult) => void) | undefined;
+    let deferredRequest: AnswerEvaluationRequest | undefined;
+    evaluator.implementation = (request) =>
+      new Promise<AnswerEvaluationResult>((resolve) => {
+        deferredRequest = request;
+        releaseEvaluation = resolve;
+      });
+
+    const accepted = await handlers.acceptSubmitAnswer({
+      ...commandInput(OWNER_ID, interviewId, "accepted-answer", "accepted-answer-key", 1),
+      text: "该回答在模型完成前只存在于 Operation 的不可变输入中。",
+    });
+
+    expect(accepted.operation).toMatchObject({
+      id: parseOperationId("accepted-answer"),
+      type: "submit_answer",
+      status: "processing",
+      result: null,
+      error: null,
+    });
+    expect(accepted.work).not.toBeNull();
+    expect(evaluator.requests).toHaveLength(0);
+    const processing = await requiredInterview(interviewId, OWNER_ID);
+    expect(processing).toMatchObject({
+      version: 2,
+      status: "active",
+      phase: "processing",
+      currentQuestionPosition: 1,
+      pendingOperation: {
+        operationId: accepted.operation.id,
+        operation: "answer_analysis",
+        questionPosition: 1,
+        previousPhase: "awaiting_response",
+      },
+    });
+    expect(processing.questions[0]).toMatchObject({
+      answerMaterial: [],
+      questionClarifications: [],
+      systemFollowUps: [],
+      evaluation: null,
+      outcome: null,
+      frozen: false,
+    });
+
+    const duplicate = await handlers.acceptSubmitAnswer({
+      ...commandInput(OWNER_ID, interviewId, "ignored-accepted-answer", "accepted-answer-key", 1),
+      text: "该回答在模型完成前只存在于 Operation 的不可变输入中。",
+    });
+    expect(duplicate.operation).toEqual(accepted.operation);
+    expect(duplicate.work).toBeNull();
+
+    if (accepted.work === null) {
+      throw new Error("Accepted answer has no server-owned work");
+    }
+    const execution = accepted.work.start();
+    expect(accepted.work.start()).toBe(execution);
+    expect(evaluator.requests).toHaveLength(1);
+    expect((await requiredInterview(interviewId, OWNER_ID)).questions[0]).toMatchObject({
+      answerMaterial: [],
+      evaluation: null,
+      outcome: null,
+    });
+    if (deferredRequest === undefined) {
+      throw new Error("Accepted answer did not reach the evaluator");
+    }
+    releaseEvaluation?.(fullEvaluation(deferredRequest));
+
+    await expect(execution).resolves.toMatchObject({
+      id: accepted.operation.id,
+      status: "succeeded",
+    });
+    expect(await requiredInterview(interviewId, OWNER_ID)).toMatchObject({
+      version: 2,
+      phase: "awaiting_continue",
+      pendingOperation: null,
+      questions: [
+        expect.objectContaining({
+          answerMaterial: [expect.objectContaining({ text: expect.any(String) })],
+          evaluation: expect.any(Object),
+          outcome: expect.any(Object),
+        }),
+        ...Array.from({ length: 4 }, () => expect.any(Object)),
+      ],
+    });
+    expect(evaluator.requests).toHaveLength(1);
+  });
+
   it("persists a recoverable pending creation Operation before finalization", async () => {
     const interviewId = parseInterviewId("runner-create-recoverable");
     await testDatabase.pool.query(
@@ -759,7 +848,7 @@ describe.sequential("persisted OperationRunner", () => {
         release = () => resolve(fullEvaluation(request));
       });
     const retryOperationId = parseOperationId("shared-lease-retry");
-    const retryPromise = handlers.retry({
+    const acceptedRetry = await handlers.acceptRetry({
       ...retryInput(
         OWNER_ID,
         interviewId,
@@ -769,8 +858,28 @@ describe.sequential("persisted OperationRunner", () => {
         2,
       ),
     });
-    await waitForOperation(target.id, "processing");
-    await waitForOperation(retryOperationId, "processing");
+    expect(acceptedRetry.operation).toMatchObject({
+      id: retryOperationId,
+      type: "retry_operation",
+      status: "processing",
+    });
+    expect(acceptedRetry.work).not.toBeNull();
+    expect(await operationRepository.findById(target.id, OWNER_ID)).toMatchObject({
+      status: "processing",
+    });
+    expect(evaluator.requests).toHaveLength(1);
+    const duplicate = await handlers.acceptRetry({
+      ...retryInput(
+        OWNER_ID,
+        interviewId,
+        "ignored-shared-lease-retry",
+        "shared-lease-retry-key",
+        target.id,
+        2,
+      ),
+    });
+    expect(duplicate.operation).toEqual(acceptedRetry.operation);
+    expect(duplicate.work).toBeNull();
     const leaseRows = await testDatabase.pool.query<{
       id: string;
       lease_expires_at: Date;
@@ -783,6 +892,11 @@ describe.sequential("persisted OperationRunner", () => {
     );
     expect(leaseRows.rows).toHaveLength(2);
     expect(leaseRows.rows[0]?.lease_expires_at).toEqual(leaseRows.rows[1]?.lease_expires_at);
+    if (acceptedRetry.work === null) {
+      throw new Error("Accepted retry has no server-owned work");
+    }
+    const retryPromise = acceptedRetry.work.start();
+    expect(evaluator.requests).toHaveLength(2);
     release?.();
     await expect(retryPromise).resolves.toMatchObject({ status: "succeeded" });
   }, 20_000);
@@ -1340,15 +1454,65 @@ describe.sequential("persisted OperationRunner", () => {
     expect(evaluator.requests).toHaveLength(0);
   });
 
-  it("stores an incomplete report after early ending", async () => {
+  it("accepts early-end report work before analysis and finalizes the canonical report", async () => {
     const interviewId = await createInterview("runner-incomplete-report");
     await handlers.markUnknown(
       commandInput(OWNER_ID, interviewId, "incomplete-unknown", "incomplete-unknown-key", 1),
     );
-    const completed = await handlers.endEarly(
+    let releaseReport: ((result: ReportAnalysisResult) => void) | undefined;
+    let deferredRequest: ReportAnalysisRequest | undefined;
+    let markReportStarted: (() => void) | undefined;
+    const reportStarted = new Promise<void>((resolve) => {
+      markReportStarted = resolve;
+    });
+    reportAnalyzer.implementation = (request) =>
+      new Promise<ReportAnalysisResult>((resolve) => {
+        deferredRequest = request;
+        releaseReport = resolve;
+        markReportStarted?.();
+      });
+    const accepted = await handlers.acceptEndEarly(
       commandInput(OWNER_ID, interviewId, "incomplete-end", "incomplete-end-key", 2),
     );
 
+    expect(accepted.operation).toMatchObject({
+      type: "generate_report",
+      status: "processing",
+      result: null,
+    });
+    expect(accepted.work).not.toBeNull();
+    expect(reportAnalyzer.requests).toHaveLength(0);
+    const reportPending = await requiredInterview(interviewId, OWNER_ID);
+    expect(reportPending).toMatchObject({
+      status: "report_pending",
+      pendingReportKind: "incomplete",
+      version: 3,
+      reportId: null,
+    });
+    expect(reportPending.questions[0]).toMatchObject({
+      outcome: { kind: "unknown" },
+      evaluation: null,
+    });
+    const duplicate = await handlers.acceptEndEarly(
+      commandInput(OWNER_ID, interviewId, "ignored-incomplete-end", "incomplete-end-key", 2),
+    );
+    expect(duplicate.operation).toEqual(accepted.operation);
+    expect(duplicate.work).toBeNull();
+    if (accepted.work === null) {
+      throw new Error("Accepted early end has no server-owned report work");
+    }
+    const execution = accepted.work.start();
+    expect(accepted.work.start()).toBe(execution);
+    await reportStarted;
+    expect(reportAnalyzer.requests).toHaveLength(1);
+    await expect(
+      createCanonicalReadRouteDependencies(unitOfWork).reportDetail(OWNER_ID, interviewId),
+    ).resolves.toBeNull();
+    if (deferredRequest === undefined) {
+      throw new Error("Accepted early end did not reach the report analyzer");
+    }
+    releaseReport?.(fullReportAnalysis(deferredRequest));
+    const completed = await execution;
     expect(completed).toMatchObject({
       type: "generate_report",
       status: "succeeded",
@@ -1551,7 +1715,19 @@ describe.sequential("persisted OperationRunner", () => {
       }
     }
 
-    const first = await handlers.continueInterview(
+    let releaseReport: ((result: ReportAnalysisResult) => void) | undefined;
+    let deferredRequest: ReportAnalysisRequest | undefined;
+    let markReportStarted: (() => void) | undefined;
+    const reportStarted = new Promise<void>((resolve) => {
+      markReportStarted = resolve;
+    });
+    reportAnalyzer.implementation = (request) =>
+      new Promise<ReportAnalysisResult>((resolve) => {
+        deferredRequest = request;
+        releaseReport = resolve;
+        markReportStarted?.();
+      });
+    const first = await handlers.acceptContinueInterview(
       commandInput(
         OWNER_ID,
         interviewId,
@@ -1560,7 +1736,7 @@ describe.sequential("persisted OperationRunner", () => {
         version,
       ),
     );
-    const replay = await handlers.continueInterview(
+    const replay = await handlers.acceptContinueInterview(
       commandInput(
         OWNER_ID,
         interviewId,
@@ -1569,8 +1745,25 @@ describe.sequential("persisted OperationRunner", () => {
         version,
       ),
     );
-    expect(replay).toEqual(first);
-    expect(first).toMatchObject({ type: "generate_report", status: "succeeded" });
+    expect(first.operation).toMatchObject({ type: "generate_report", status: "processing" });
+    expect(replay.operation).toEqual(first.operation);
+    expect(replay.work).toBeNull();
+    expect(reportAnalyzer.requests).toHaveLength(0);
+    if (first.work === null) {
+      throw new Error("Accepted final continue has no server-owned report work");
+    }
+    const execution = first.work.start();
+    await reportStarted;
+    expect(reportAnalyzer.requests).toHaveLength(1);
+    if (deferredRequest === undefined) {
+      throw new Error("Accepted final continue did not reach the report analyzer");
+    }
+    releaseReport?.(fullReportAnalysis(deferredRequest));
+    await expect(execution).resolves.toMatchObject({
+      id: first.operation.id,
+      type: "generate_report",
+      status: "succeeded",
+    });
     expect(reportAnalyzer.requests).toHaveLength(1);
   });
 
@@ -1602,19 +1795,26 @@ describe.sequential("persisted OperationRunner", () => {
       "report-restart-old-worker",
       undefined,
       blockedAnalyzer,
-      20,
     );
-    const abandonedExecution = crashedHandlers
-      .endEarly(
-        commandInput(OWNER_ID, interviewId, "report-restart-end", "report-restart-end-key", 2),
-      )
-      .catch((error: unknown) => error);
+    const accepted = await crashedHandlers.acceptEndEarly(
+      commandInput(OWNER_ID, interviewId, "report-restart-end", "report-restart-end-key", 2),
+    );
+    if (accepted.work === null) {
+      throw new Error("Accepted restart report has no server-owned work");
+    }
+    const abandonedExecution = accepted.work.start().catch((error: unknown) => error);
     await reportStarted;
     const processing = await waitForLatestReportOperation(interviewId, "processing");
     if (processing.leaseExpiresAt === null) {
       throw new Error("Processing report Operation is missing its lease expiry");
     }
-    await waitForDatabaseTime(processing.leaseExpiresAt);
+    await testDatabase.pool.query(
+      `update operations
+          set lease_acquired_at = statement_timestamp() - interval '2 minutes',
+              lease_expires_at = statement_timestamp() - interval '1 minute'
+        where id = $1`,
+      [processing.id],
+    );
 
     const restartedAnalyzer = new FauxReportAnalysisModel();
     const restartedHandlers = createHandlers(

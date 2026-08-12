@@ -116,6 +116,43 @@ export class ServerOwnedOperationExecution implements OperationExecution {
   }
 }
 
+export interface AcceptedOperationWork {
+  readonly operationId: OperationId;
+  start(): Promise<StoredOperation>;
+}
+
+export interface AcceptedOperationExecution {
+  readonly operation: StoredOperation;
+  readonly work: AcceptedOperationWork | null;
+}
+
+export interface OperationExecutionStarter {
+  start(work: AcceptedOperationWork): void;
+}
+
+export class ServerOwnedOperationStarter implements OperationExecutionStarter {
+  constructor(private readonly onFailure: (operationId: OperationId) => void = () => undefined) {}
+
+  start(work: AcceptedOperationWork): void {
+    let execution: Promise<StoredOperation>;
+    try {
+      execution = work.start();
+    } catch {
+      this.reportFailure(work.operationId);
+      return;
+    }
+    void execution.catch(() => this.reportFailure(work.operationId));
+  }
+
+  private reportFailure(operationId: OperationId): void {
+    try {
+      this.onFailure(operationId);
+    } catch {
+      return;
+    }
+  }
+}
+
 type ProgressOperationType = Exclude<
   CreateOperation["type"],
   "create_interview" | "retry_operation" | "generate_report"
@@ -269,16 +306,19 @@ export class OperationRunner {
   }
 
   async run(request: ProgressCommandRequest): Promise<StoredOperation> {
+    return this.executeAccepted(await this.accept(request));
+  }
+
+  async accept(request: ProgressCommandRequest): Promise<AcceptedOperationExecution> {
     const prepared = await this.prepare(request);
-    if (prepared.kind === "canonical") {
-      return prepared.operation;
-    }
-    return prepared.kind === "model"
-      ? this.executeModelOperation(prepared.execution)
-      : this.executeReportOperation(prepared.execution);
+    return this.acceptPrepared(prepared);
   }
 
   async retry(input: RetryInterviewOperationInput): Promise<StoredOperation> {
+    return this.executeAccepted(await this.acceptRetry(input));
+  }
+
+  async acceptRetry(input: RetryInterviewOperationInput): Promise<AcceptedOperationExecution> {
     const retryOperation = await this.unitOfWork.run((repositories) =>
       repositories.operations.createOrLoad({
         id: input.operationId,
@@ -294,7 +334,7 @@ export class OperationRunner {
     );
     const canonicalRetry = retryOperation.operation;
     if (canonicalRetry.status === "succeeded" || canonicalRetry.status === "failed") {
-      return retryOperation.operation;
+      return canonicalExecution(retryOperation.operation);
     }
 
     let prepared: PreparedOperation;
@@ -426,14 +466,9 @@ export class OperationRunner {
       if (!isRetryCommandRejection(error)) {
         throw error;
       }
-      return this.failRetryCommand(canonicalRetry, error);
+      return canonicalExecution(await this.failRetryCommand(canonicalRetry, error));
     }
-    if (prepared.kind === "canonical") {
-      return prepared.operation;
-    }
-    return prepared.kind === "model"
-      ? this.executeModelOperation(prepared.execution)
-      : this.executeReportOperation(prepared.execution);
+    return this.acceptPrepared(prepared);
   }
 
   private failRetryCommand(
@@ -691,6 +726,24 @@ export class OperationRunner {
       }
       return { kind: "canonical", operation: completed };
     });
+  }
+
+  private acceptPrepared(prepared: PreparedOperation): AcceptedOperationExecution {
+    if (prepared.kind === "canonical") {
+      return canonicalExecution(prepared.operation);
+    }
+    if (prepared.kind === "model") {
+      return acceptedExecution(responseOperation(prepared.execution), () =>
+        this.executeModelOperation(prepared.execution),
+      );
+    }
+    return acceptedExecution(responseOperation(prepared.execution), () =>
+      this.executeReportOperation(prepared.execution),
+    );
+  }
+
+  private executeAccepted(accepted: AcceptedOperationExecution): Promise<StoredOperation> {
+    return accepted.work?.start() ?? Promise.resolve(accepted.operation);
   }
 
   private async executeModelOperation(execution: ClaimedModelOperation): Promise<StoredOperation> {
@@ -1096,40 +1149,82 @@ export class InterviewOperationHandlers {
     return this.execute(() => this.runner.createInterview(input));
   }
 
+  async acceptCreateInterview(
+    input: CreateInterviewOperationInput,
+  ): Promise<AcceptedOperationExecution> {
+    return canonicalExecution(await this.runner.createInterview(input));
+  }
+
   submitAnswer(input: TextInterviewOperationInput): Promise<StoredOperation> {
     return this.progress("submit_answer", input);
+  }
+
+  acceptSubmitAnswer(input: TextInterviewOperationInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("submit_answer", input);
   }
 
   submitSupplement(input: TextInterviewOperationInput): Promise<StoredOperation> {
     return this.progress("submit_supplement", input);
   }
 
+  acceptSubmitSupplement(input: TextInterviewOperationInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("submit_supplement", input);
+  }
+
   requestQuestionClarification(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("request_question_clarification", input);
+  }
+
+  acceptQuestionClarification(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("request_question_clarification", input);
   }
 
   markUnknown(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("mark_question_unknown", input);
   }
 
+  acceptMarkUnknown(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("mark_question_unknown", input);
+  }
+
   skip(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("skip_question", input);
+  }
+
+  acceptSkip(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("skip_question", input);
   }
 
   continueInterview(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("continue_interview", input);
   }
 
+  acceptContinueInterview(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("continue_interview", input);
+  }
+
   endEarly(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("end_interview_early", input);
+  }
+
+  acceptEndEarly(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("end_interview_early", input);
   }
 
   abandon(input: OperationCommandInput): Promise<StoredOperation> {
     return this.progress("abandon_interview", input);
   }
 
+  acceptAbandon(input: OperationCommandInput): Promise<AcceptedOperationExecution> {
+    return this.acceptProgress("abandon_interview", input);
+  }
+
   retry(input: RetryInterviewOperationInput): Promise<StoredOperation> {
     return this.execute(() => this.runner.retry(input));
+  }
+
+  acceptRetry(input: RetryInterviewOperationInput): Promise<AcceptedOperationExecution> {
+    return this.runner.acceptRetry(input);
   }
 
   private progress(
@@ -1147,6 +1242,17 @@ export class InterviewOperationHandlers {
 
   private execute(operation: () => Promise<StoredOperation>): Promise<StoredOperation> {
     return this.execution.execute(operation);
+  }
+
+  private acceptProgress(
+    type: ProgressOperationType,
+    input: OperationCommandInput | TextInterviewOperationInput,
+  ): Promise<AcceptedOperationExecution> {
+    return this.runner.accept({
+      type,
+      ...input,
+      ...("text" in input ? { text: input.text } : {}),
+    });
   }
 }
 
@@ -1170,6 +1276,33 @@ function publishOperationEvent(publish: () => unknown): void {
   } catch {
     return;
   }
+}
+
+function canonicalExecution(operation: StoredOperation): AcceptedOperationExecution {
+  return { operation, work: null };
+}
+
+function acceptedExecution(
+  operation: StoredOperation,
+  execute: () => Promise<StoredOperation>,
+): AcceptedOperationExecution {
+  let started: Promise<StoredOperation> | null = null;
+  return {
+    operation,
+    work: {
+      operationId: operation.id,
+      start() {
+        started ??= execute();
+        return started;
+      },
+    },
+  };
+}
+
+function responseOperation(
+  execution: ClaimedModelOperation | ClaimedReportOperation,
+): StoredOperation {
+  return execution.retryCommand?.operation ?? execution.claimed.operation;
 }
 
 function isRetryCommandRejection(

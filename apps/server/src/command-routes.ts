@@ -56,27 +56,31 @@ import {
 } from "@interview-agent/domain";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type {
-  CreateInterviewOperationInput,
-  InterviewOperationHandlers,
-  OperationCommandInput,
-  RetryInterviewOperationInput,
-  TextInterviewOperationInput,
+import {
+  type AcceptedOperationExecution,
+  type CreateInterviewOperationInput,
+  ServerOwnedOperationStarter as DefaultOperationStarter,
+  type InterviewOperationHandlers,
+  type OperationCommandInput,
+  type OperationExecutionStarter,
+  type RetryInterviewOperationInput,
+  type TextInterviewOperationInput,
 } from "./operation-runner.js";
 
-type InterviewCommandHandlers = Pick<
-  InterviewOperationHandlers,
-  | "createInterview"
-  | "submitAnswer"
-  | "submitSupplement"
-  | "requestQuestionClarification"
-  | "markUnknown"
-  | "skip"
-  | "continueInterview"
-  | "endEarly"
-  | "abandon"
-  | "retry"
->;
+interface InterviewCommandHandlers {
+  createInterview(input: CreateInterviewOperationInput): Promise<CommandAcceptance>;
+  submitAnswer(input: TextInterviewOperationInput): Promise<CommandAcceptance>;
+  submitSupplement(input: TextInterviewOperationInput): Promise<CommandAcceptance>;
+  requestQuestionClarification(input: OperationCommandInput): Promise<CommandAcceptance>;
+  markUnknown(input: OperationCommandInput): Promise<CommandAcceptance>;
+  skip(input: OperationCommandInput): Promise<CommandAcceptance>;
+  continueInterview(input: OperationCommandInput): Promise<CommandAcceptance>;
+  endEarly(input: OperationCommandInput): Promise<CommandAcceptance>;
+  abandon(input: OperationCommandInput): Promise<CommandAcceptance>;
+  retry(input: RetryInterviewOperationInput): Promise<CommandAcceptance>;
+}
+
+type CommandAcceptance = AcceptedOperationExecution | StoredOperation;
 
 export interface InterviewCommandStateReader {
   findById(
@@ -87,6 +91,7 @@ export interface InterviewCommandStateReader {
 
 export interface InterviewCommandRouteDependencies {
   readonly handlers: InterviewCommandHandlers;
+  readonly starter: OperationExecutionStarter;
   readonly states: InterviewCommandStateReader;
   readonly now: () => Date;
   readonly nextInterviewId: () => InterviewId;
@@ -94,11 +99,24 @@ export interface InterviewCommandRouteDependencies {
 }
 
 export function createInterviewCommandRouteDependencies(
-  handlers: InterviewCommandHandlers,
+  handlers: InterviewOperationHandlers,
   states: InterviewCommandStateReader,
+  starter: OperationExecutionStarter = new DefaultOperationStarter(),
 ): InterviewCommandRouteDependencies {
   return {
-    handlers,
+    handlers: {
+      createInterview: (input) => handlers.acceptCreateInterview(input),
+      submitAnswer: (input) => handlers.acceptSubmitAnswer(input),
+      submitSupplement: (input) => handlers.acceptSubmitSupplement(input),
+      requestQuestionClarification: (input) => handlers.acceptQuestionClarification(input),
+      markUnknown: (input) => handlers.acceptMarkUnknown(input),
+      skip: (input) => handlers.acceptSkip(input),
+      continueInterview: (input) => handlers.acceptContinueInterview(input),
+      endEarly: (input) => handlers.acceptEndEarly(input),
+      abandon: (input) => handlers.acceptAbandon(input),
+      retry: (input) => handlers.acceptRetry(input),
+    },
+    starter,
     states,
     now: () => new Date(),
     nextInterviewId: () => parseInterviewId(`interview-${randomUUID()}`),
@@ -297,7 +315,7 @@ async function executeTextCommand(
   }>,
   reply: FastifyReply,
   dependencies: InterviewCommandRouteDependencies,
-  invoke: (input: TextInterviewOperationInput) => Promise<StoredOperation>,
+  invoke: (input: TextInterviewOperationInput) => Promise<CommandAcceptance>,
 ) {
   const accountId = authenticatedAccountId(request, reply);
   if (accountId === null) {
@@ -319,7 +337,7 @@ async function executeControlCommand(
   }>,
   reply: FastifyReply,
   dependencies: InterviewCommandRouteDependencies,
-  invoke: (input: OperationCommandInput) => Promise<StoredOperation>,
+  invoke: (input: OperationCommandInput) => Promise<CommandAcceptance>,
 ) {
   const accountId = authenticatedAccountId(request, reply);
   if (accountId === null) {
@@ -354,13 +372,19 @@ async function executeCommand(
   reply: FastifyReply,
   dependencies: InterviewCommandRouteDependencies,
   interviewId: InterviewId,
-  invoke: () => Promise<StoredOperation>,
+  invoke: () => Promise<CommandAcceptance>,
 ) {
   try {
-    const operation = await invoke();
+    const result = await invoke();
+    const accepted = "operation" in result ? result : { operation: result, work: null };
+    const { operation } = accepted;
     const response = mapOperationToStatusResponse(operation);
     if (response.status === "pending" || response.status === "processing") {
-      return reply.code(202).send(response);
+      const sent = reply.code(202).send(response);
+      if (accepted.work !== null) {
+        dependencies.starter.start(accepted.work);
+      }
+      return sent;
     }
     if (response.status === "succeeded") {
       return reply.code(200).send(response);
