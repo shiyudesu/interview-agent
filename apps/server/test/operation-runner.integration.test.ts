@@ -1437,9 +1437,14 @@ describe.sequential("persisted OperationRunner", () => {
     }
 
     let completeRetry: (() => void) | undefined;
+    let markRetryStarted: (() => void) | undefined;
+    const retryStarted = new Promise<void>((resolve) => {
+      markRetryStarted = resolve;
+    });
     const retryAnalyzer = new FauxReportAnalysisModel();
     retryAnalyzer.implementation = (request) =>
       new Promise<ReportAnalysisResult>((resolve) => {
+        markRetryStarted?.();
         completeRetry = () => resolve(fullReportAnalysis(request));
       });
     const retryHandlers = createHandlers(
@@ -1463,6 +1468,7 @@ describe.sequential("persisted OperationRunner", () => {
         ),
       )
       .catch((error: unknown) => error);
+    await retryStarted;
     const processing = await waitForLatestReportOperation(interviewId, "processing");
     if (processing.lastAttemptAt === null) {
       throw new Error("Claimed report retry is missing its attempt time");
