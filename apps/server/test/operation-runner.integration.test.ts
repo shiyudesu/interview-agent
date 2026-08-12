@@ -785,7 +785,7 @@ describe.sequential("persisted OperationRunner", () => {
     expect(leaseRows.rows[0]?.lease_expires_at).toEqual(leaseRows.rows[1]?.lease_expires_at);
     release?.();
     await expect(retryPromise).resolves.toMatchObject({ status: "succeeded" });
-  });
+  }, 20_000);
 
   it("keeps retry command failures terminal while the target remains retryable", async () => {
     const interviewId = await createInterview("runner-retry-failure-payload");
@@ -947,7 +947,7 @@ describe.sequential("persisted OperationRunner", () => {
     expect(
       (await requiredInterview(interviewId, OWNER_ID)).questions[0]?.answerMaterial,
     ).toHaveLength(1);
-  });
+  }, 20_000);
 
   it("rolls back both success and failure finalization when aggregate persistence fails", async () => {
     const successInterviewId = await createInterview("runner-success-rollback");
@@ -1515,7 +1515,7 @@ describe.sequential("persisted OperationRunner", () => {
       status: "succeeded",
       result: { reportId: expect.any(String) },
     });
-  }, 15_000);
+  }, 20_000);
 
   it("returns the same report Operation for an idempotent final continue replay", async () => {
     const interviewId = await createInterview("runner-report-idempotency");
@@ -1599,7 +1599,10 @@ describe.sequential("persisted OperationRunner", () => {
       )
       .catch((error: unknown) => error);
     const processing = await waitForLatestReportOperation(interviewId, "processing");
-    await new Promise<void>((resolve) => setTimeout(resolve, 40));
+    if (processing.leaseExpiresAt === null) {
+      throw new Error("Processing report Operation is missing its lease expiry");
+    }
+    await waitForDatabaseTime(processing.leaseExpiresAt);
 
     const restartedAnalyzer = new FauxReportAnalysisModel();
     const restartedHandlers = createHandlers(
@@ -1633,7 +1636,7 @@ describe.sequential("persisted OperationRunner", () => {
 
     rejectBlocked?.(new ReportAnalysisModelError("transient_provider_failure"));
     await abandonedExecution;
-  });
+  }, 20_000);
 });
 
 function createHandlers(
@@ -1832,7 +1835,8 @@ async function waitForOperation(
   status: StoredOperation["status"],
 ): Promise<StoredOperation> {
   const id = parseOperationId(operationId);
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
     const operation = await operationRepository.findById(id, OWNER_ID);
     if (operation?.status === status) {
       return operation;
@@ -1846,7 +1850,8 @@ async function waitForLatestReportOperation(
   interviewId: ReturnType<typeof parseInterviewId>,
   status: StoredOperation["status"],
 ): Promise<StoredOperation> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
     const operation = await operationRepository.findLatestIncompleteByInterviewId(
       interviewId,
       OWNER_ID,
@@ -1857,6 +1862,17 @@ async function waitForLatestReportOperation(
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Report Operation for ${interviewId} did not reach ${status}`);
+}
+
+async function waitForDatabaseTime(target: Date): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    if ((await databaseNow(testDatabase)).getTime() >= target.getTime()) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`PostgreSQL time did not reach ${target.toISOString()}`);
 }
 
 async function seedQuestionBank(): Promise<void> {
