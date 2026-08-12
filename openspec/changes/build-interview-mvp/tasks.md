@@ -67,17 +67,24 @@
 - [x] 7.4 Add the Operation SSE endpoint with operation IDs, monotonic event sequence numbers, text deltas, terminal status events, and disconnect-safe processing.
 - [x] 7.5 Wire the existing domain/persistence supplement window through Operation handlers and API responses so the next main question is not revealed until the user continues.
 - [x] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
-- [ ] 7.7 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.
-- [ ] 7.8 Add API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, and SSE disconnect recovery.
+- [x] 7.7 Reconcile the implemented Operation, assessment, and report scope with the design and remaining task boundaries before further feature work.
+- [ ] 7.8 Separate durable model/report Operation acceptance from execution so command endpoints return `202` with the canonical Operation before provider completion.
+- [ ] 7.9 Add server-owned detached execution lifecycle handling plus real command-to-SSE integration tests proving disconnect-safe completion and canonical recovery.
+- [ ] 7.10 Reject the Faux Provider in production configuration while retaining it for development, CI, and automated tests.
+- [ ] 7.11 Complete deletion-route TypeBox parameter/error contracts and make account/interview Operation-event erasure explicit, immediate, and non-silent.
+- [ ] 7.12 Consolidate shared API error envelopes, validation handling, owner/session access checks, and lazy-expiry retry helpers without changing public behavior.
+- [ ] 7.13 Decompose Operation orchestration into acceptance, model execution, report execution, retry, and finalization services while preserving transaction boundaries.
+- [ ] 7.14 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.
+- [ ] 7.15 Add full API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, command-to-SSE flow, and SSE disconnect recovery.
 
 ## 8. Assessment and Reports
 
-- [ ] 8.1 Connect schema-constrained evaluation adapters and Operation handlers to the existing structured evaluation persistence, Rubric evidence, points, follow-up eligibility, and zero-reason validation.
-- [ ] 8.2 Implement complete-report analysis/generation and store it through the existing immutable versioned report persistence, including a valid zero-score complete report.
-- [ ] 8.3 Implement incomplete-report analysis/generation after early ending and store it through the existing immutable report persistence without an overall score.
-- [ ] 8.4 Apply the existing evidence and report validators to generated feedback, including tailored unknown, skipped, irrelevant, and incorrect zero-point feedback without complete reference answers.
-- [ ] 8.5 Complete private report application/API access and unsupported-action rejection using the existing immutable persistence and recorded model/prompt/Schema/question-version validation.
-- [ ] 8.6 Complete the remaining model/Operation integration coverage for report failure/retry while retaining the existing domain and persistence tests for complete/incomplete reports, unassessed domains, all-zero completion, and historical immutability.
+- [x] 8.1 Connect schema-constrained evaluation adapters and Operation handlers to structured evaluation persistence, Rubric evidence, points, follow-up eligibility, and zero-reason validation.
+- [x] 8.2 Implement complete-report analysis/generation and store it through immutable versioned report persistence, including a valid zero-score complete report.
+- [x] 8.3 Implement incomplete-report analysis/generation after early ending and store it without an overall score.
+- [ ] 8.4 Complete the remaining feedback-quality acceptance for tailored unknown, skipped, irrelevant, and incorrect zero-point guidance without exposing complete reference answers.
+- [x] 8.5 Complete private owner-scoped report API access and unsupported-action rejection using immutable persistence and recorded model/prompt/Schema/question versions; Web rendering remains in 9.7.
+- [x] 8.6 Complete model/Operation integration coverage for report failure/retry, complete/incomplete reports, unassessed domains, all-zero completion, and historical immutability.
 
 ## 9. Web Application
 
@@ -97,7 +104,7 @@
 - [ ] 10.2 Add OpenTelemetry instrumentation for HTTP, PostgreSQL, Operations, and model calls with optional OTLP export.
 - [ ] 10.3 Add endpoint-specific rate limits, security headers, same-origin checks, payload size limits, and tests for unauthorized or cross-origin requests.
 - [ ] 10.4 Add Playwright critical-path tests for authentication substitutes, normal completion, all-zero completion, early ending, resume, report retry, history, and deletion.
-- [ ] 10.5 Run the full evaluation fixture suite and document known model-quality limitations and the configured development model used for manual acceptance.
+- [ ] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
 - [ ] 10.6 Run a production-container smoke test against clean PostgreSQL and Mailpit dependencies.
 - [ ] 10.7 Update README setup commands and add repository development instructions only after all verified scripts and workflows exist.
 - [ ] 10.8 Verify every OpenSpec scenario has automated coverage or a documented manual acceptance step and validate the change in strict mode.

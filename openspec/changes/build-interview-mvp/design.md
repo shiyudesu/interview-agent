@@ -151,7 +151,12 @@ and restores the previous business phase while retaining the accepted version an
 Duplicate keys return the existing Operation and result. Competing commands fail with a version
 conflict instead of both advancing the interview.
 
-Operations are executed inline for the MVP, but handlers accept persisted Operation IDs and do not depend on an HTTP request. A future PostgreSQL-backed worker can call the same OperationRunner.
+Operation acceptance is inline, but model and report execution are server-owned and must not keep the
+originating HTTP response open. After the acceptance transaction commits, the command endpoint
+returns the canonical pending or processing Operation with `202`. The server then executes the
+claimed Operation independently of the request connection. Immediate non-model commands may still
+complete synchronously. A future PostgreSQL-backed worker can call the same accepted-Operation
+executor without changing command or persistence semantics.
 
 The persisted `OperationRunner` owns creation, answer, supplement, question clarification, unknown,
 skip, continue, early-end, abandon, and explicit retry handlers. Creation serializes on the account,
@@ -166,11 +171,23 @@ input. Retry and target claims share one database-generated lease deadline; stal
 commands can be reclaimed, while retry-command rows are terminal and never recursively retryable.
 Original answer/clarification event times always equal the target Operation's immutable creation
 time; later retry acceptance only refreshes pending technical activity. Report-pending generation
-remains delegated to the dedicated report retry/generation tasks.
+uses the same persisted target/retry Operation rules while reusing stored evaluations rather than
+re-running answer analysis.
 
 ### 5. Separate command responses from SSE event delivery
 
-Mutating endpoints return an Operation ID. The browser subscribes to the Operation event endpoint using SSE for presentation deltas and completion status. Every event contains `operationId` and a monotonic in-memory sequence number.
+Mutating endpoints return the persisted Operation projection as soon as durable acceptance
+completes. Model-assisted answer, supplement, clarification, report generation, and retry commands
+therefore return `202` with the Operation ID before waiting for model output. The browser can
+subscribe immediately to the Operation event endpoint using SSE for presentation deltas and
+completion status. Every event contains `operationId` and a monotonic in-memory sequence number.
+
+The server owns every scheduled execution promise and records sanitized failures. Closing the
+command response or SSE connection never aborts provider work or database finalization. A duplicate
+Idempotency Key returns the same canonical Operation whether it is still processing or already
+terminal. The API integration suite must prove the real sequence
+`POST command -> 202 Operation -> SSE -> canonical terminal state` against PostgreSQL and the Faux
+Provider rather than publishing broker events directly in place of command execution.
 
 Text deltas are not durable facts. Only the final validated text is stored atomically when an Operation succeeds. If the stream disconnects, processing continues and the browser reloads the canonical interview or Operation resource through JSON GET endpoints. The server does not permanently replay text deltas.
 
@@ -345,6 +362,10 @@ semantics. OTP expiry, attempt count, keyed storage, and resend rotation are con
 
 Node loads environment files natively and the server validates configuration through TypeBox before listening. Missing database, authentication, or selected model configuration fails startup. Real provider credentials are optional only for workflows and tests using the Faux Provider.
 
+The Faux Provider is a development, CI, and automated-test facility. Startup MUST reject
+`NODE_ENV=production` with `MODEL_PROVIDER=faux` so a deterministic test provider cannot silently
+serve production traffic.
+
 Production uses same-origin secure cookies, Origin/CSRF validation, security headers, and endpoint-specific rate limits. The application does not expose permissive CORS. OpenAPI and Swagger UI are enabled only for local and test environments.
 
 Fastify mounts Better Auth under `/api/auth/*`, preserves JSON and URL-encoded request bodies, and
@@ -368,6 +389,12 @@ version and possible status/phase combination, while inaccessible or deletion-ma
 hidden behind `404`. Request validation and content parsing failures use a stable `400` envelope,
 and internal exception details, provider messages, idempotency keys, and repository identifiers are
 never exposed.
+
+Deletion routes use the same TypeBox-owned parameter and stable error-envelope contracts as the
+other `/api/v1` routes, including explicit `400`, `401`, `404`, `202`, and `500` responses.
+Successful account or interview deletion synchronously erases matching in-memory Operation-event
+history and closes streams. This erasure path is total and non-throwing by construction; unexpected
+auxiliary publication failures are logged with fixed redacted fields rather than silently ignored.
 
 Canonical authenticated reads expose the current account, active interview, interview detail,
 Operation status, reverse-chronological history, and immutable report detail under `/api/v1`.
@@ -449,7 +476,8 @@ clarification phases without new business facts.
 
 - **Model scores can vary despite a fixed Rubric** → Build a versioned evaluation fixture set, assert structural and scoring invariants, record model/prompt versions, and calibrate before treating scores as reliable.
 - **A full 90-question bank is a large content dependency** → Implement and validate the schema first, allow representative fixtures during development, and make the release gate enforce the final per-domain minimum.
-- **Inline Operations can outlive an HTTP connection** → Persist Operation state before provider calls, continue processing after disconnect, and expose explicit retry and canonical status endpoints.
+- **In-process Operations can outlive their originating HTTP connection** → Persist Operation state before provider calls, continue processing after disconnect, and expose explicit retry and canonical status endpoints.
+- **Detached in-process execution can be lost on process termination** → Persist acceptance and leases before scheduling, expose explicit retry/stale reclaim, and keep the executor replaceable by a future PostgreSQL worker.
 - **A process crash can leave an Operation in processing state** → Record leases/timestamps and allow stale processing Operations to be reclaimed by an explicit retry without duplicating state transitions.
 - **Report generation can fail after all questions are answered** → Keep the interview in `report_pending`, preserve evaluations, and retry only report generation.
 - **Seven-day delayed purge temporarily retains inaccessible content** → Revoke access immediately, encrypt infrastructure backups, restrict purge tables, and monitor overdue deletion requests.

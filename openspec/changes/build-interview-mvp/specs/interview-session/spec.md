@@ -133,6 +133,31 @@ The system SHALL stream model text through SSE without treating text deltas as d
 - **THEN** server-side processing continues
 - **AND** the browser can retrieve the canonical Operation and interview state through JSON endpoints
 
+### Requirement: Model-assisted commands return durable acceptance before completion
+The system SHALL return the canonical pending or processing Operation after durable command
+acceptance without waiting for model or report execution to finish. Execution SHALL continue under
+server ownership independently of the originating HTTP and SSE connections.
+
+#### Scenario: Accepted model command returns before provider completion
+- **WHEN** a valid model-assisted command has committed its Operation and processing metadata while the provider call remains incomplete
+- **THEN** the command endpoint returns `202` with that Operation ID
+- **AND** no model-produced business facts have been persisted yet
+
+#### Scenario: Browser subscribes after command acceptance
+- **WHEN** the browser receives the processing Operation from the command endpoint
+- **THEN** it can subscribe to that Operation's SSE endpoint before model completion
+- **AND** receives validated presentation events followed by one terminal status
+
+#### Scenario: Originating request disconnects
+- **WHEN** the command HTTP connection closes after durable acceptance
+- **THEN** server-owned execution continues
+- **AND** finalization commits or records a retryable failure independently of that connection
+
+#### Scenario: Accepted execution is interrupted by process termination
+- **WHEN** the server terminates after durable acceptance but before finalization
+- **THEN** PostgreSQL retains the canonical pending or processing Operation
+- **AND** stale reclaim or explicit retry can resume without duplicating interview facts
+
 ### Requirement: Active interviews are recoverable
 The system SHALL allow the owner to resume an active interview from another page load or device using PostgreSQL state.
 
