@@ -2,10 +2,12 @@ import {
   ConfirmDeletionRequestSchema,
   DeletionAcceptedResponseSchema,
   DeletionFailureResponseSchema,
+  ErrorEnvelopeSchema,
 } from "@interview-agent/contracts";
 import { type InterviewId, parseInterviewId } from "@interview-agent/domain";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { Type } from "typebox";
 
 import type { AuthenticatedRequestContext, Authentication } from "./auth.js";
 import {
@@ -14,6 +16,7 @@ import {
 } from "./command-routes.js";
 import type { ServerConfig } from "./config.js";
 import { type DeletionOrchestrationService, DeletionTargetNotFoundError } from "./deletion.js";
+import { type CanonicalReadRouteDependencies, registerCanonicalReadRoutes } from "./read-routes.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -26,6 +29,7 @@ export interface RegisterApplicationInput {
   readonly config: Pick<ServerConfig, "auth">;
   readonly deletion: DeletionOrchestrationService;
   readonly interviewCommands: InterviewCommandRouteDependencies;
+  readonly canonicalReads: CanonicalReadRouteDependencies;
 }
 
 export async function registerApplication(
@@ -42,9 +46,19 @@ export async function registerApplication(
     if (!isProtectedApiRequest(request.routeOptions.url)) {
       return;
     }
-    const session = await input.authentication.getSession(authenticationHeaders(request));
-    request.authContext = session.context;
-    forwardSetCookies(session.headers, reply);
+    try {
+      const session = await input.authentication.getSession(authenticationHeaders(request));
+      request.authContext = session.context;
+      forwardSetCookies(session.headers, reply);
+    } catch {
+      request.log.error({ event: "authentication_session_failed" }, "Authentication failed");
+      return reply.code(500).send({
+        error: {
+          code: "internal_error",
+          message: "An unexpected error occurred.",
+        },
+      });
+    }
   });
 
   app.route({
@@ -80,6 +94,7 @@ export async function registerApplication(
     },
   });
 
+  await registerCanonicalReadRoutes(app, input.canonicalReads);
   await registerInterviewCommandRoutes(app, input.interviewCommands);
 
   app.delete<{
@@ -92,7 +107,7 @@ export async function registerApplication(
         body: ConfirmDeletionRequestSchema,
         response: {
           202: DeletionAcceptedResponseSchema,
-          500: DeletionFailureResponseSchema,
+          500: Type.Union([DeletionFailureResponseSchema, ErrorEnvelopeSchema]),
         },
       },
     },
@@ -135,7 +150,7 @@ export async function registerApplication(
         body: ConfirmDeletionRequestSchema,
         response: {
           202: DeletionAcceptedResponseSchema,
-          500: DeletionFailureResponseSchema,
+          500: Type.Union([DeletionFailureResponseSchema, ErrorEnvelopeSchema]),
         },
       },
     },

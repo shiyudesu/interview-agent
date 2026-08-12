@@ -17,6 +17,7 @@ import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
 import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
+import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
 const accountId = parseAccountId("command-route-owner");
@@ -48,6 +49,20 @@ function deletion() {
     markInterviewDeleting: async () => null,
     markAccountDeleting: async () => null,
   });
+}
+
+function canonicalReads(): CanonicalReadRouteDependencies {
+  const unavailable = async () => {
+    throw new Error("Canonical read was not configured for this test");
+  };
+  return {
+    currentAccount: unavailable,
+    activeInterview: unavailable,
+    interviewDetail: unavailable,
+    operationStatus: unavailable,
+    interviewHistory: unavailable,
+    reportDetail: unavailable,
+  };
 }
 
 function operation(
@@ -139,6 +154,7 @@ async function createApp(
     config,
     deletion: deletion(),
     interviewCommands: dependencies,
+    canonicalReads: canonicalReads(),
   });
   return instance;
 }

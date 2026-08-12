@@ -16,6 +16,7 @@ import { createNodemailerEmailSender } from "./email-sender.js";
 import { PiAgentInterviewerTextModel } from "./interviewer-text-model.js";
 import { createModelRuntime, type ModelRuntime } from "./model-runtime.js";
 import { InterviewOperationHandlers, OperationRunner } from "./operation-runner.js";
+import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { installGracefulShutdown } from "./shutdown.js";
 
 const config = loadServerConfig();
@@ -57,12 +58,14 @@ const interviewCommands = createInterviewCommandRouteDependencies(interviewOpera
         };
   },
 });
+const canonicalReads = createCanonicalReadRouteDependencies(unitOfWork);
 
 await registerApplication(app, {
   authentication,
   config,
   deletion,
   interviewCommands,
+  canonicalReads,
 });
 app.addHook("onClose", async () => databaseClient.close());
 installGracefulShutdown(app);

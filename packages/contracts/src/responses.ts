@@ -23,12 +23,26 @@ export const LinkedIdentitySchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AccountSessionSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    expiresAt: IsoTimestampSchema,
+    createdAt: IsoTimestampSchema,
+    updatedAt: IsoTimestampSchema,
+    ipAddress: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    userAgent: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    current: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 export const AccountResponseSchema = Type.Object(
   {
     id: AccountIdSchema,
     email: Type.String({ format: "email" }),
     displayName: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     linkedIdentities: Type.Array(LinkedIdentitySchema),
+    sessions: Type.Array(AccountSessionSchema),
     createdAt: IsoTimestampSchema,
   },
   { additionalProperties: false },
@@ -213,6 +227,15 @@ export const AwaitingResponseInterviewResponseSchema = Type.Union([
     {
       ...activeInterviewProperties,
       phase: Type.Literal("awaiting_response"),
+      operation: CurrentOperationReferenceSchema,
+      availableActions: NoActionsSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...activeInterviewProperties,
+      phase: Type.Literal("awaiting_response"),
       availableActions: AwaitingResponseActionsSchema,
     },
     { additionalProperties: false },
@@ -295,6 +318,13 @@ const reportPendingProperties = {
 } as const;
 
 export const ReportPendingInterviewResponseSchema = Type.Union([
+  Type.Object(
+    {
+      ...reportPendingProperties,
+      availableActions: NoActionsSchema,
+    },
+    { additionalProperties: false },
+  ),
   Type.Object(
     {
       ...reportPendingProperties,
@@ -427,6 +457,13 @@ export const OperationResultReferenceSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ReportOperationResultReferenceSchema = Type.Object(
+  {
+    reportId: ReportIdSchema,
+  },
+  { additionalProperties: false },
+);
+
 const operationStatusProperties = {
   operationId: OperationIdSchema,
   createdAt: IsoTimestampSchema,
@@ -452,7 +489,7 @@ export const OperationStatusResponseSchema = Type.Union([
     {
       ...operationStatusProperties,
       status: Type.Literal("succeeded"),
-      result: OperationResultReferenceSchema,
+      result: Type.Union([OperationResultReferenceSchema, ReportOperationResultReferenceSchema]),
     },
     { additionalProperties: false },
   ),
@@ -467,6 +504,7 @@ export const OperationStatusResponseSchema = Type.Union([
 ]);
 
 export type LinkedIdentityDto = Static<typeof LinkedIdentitySchema>;
+export type AccountSessionDto = Static<typeof AccountSessionSchema>;
 export type AccountResponseDto = Static<typeof AccountResponseSchema>;
 export type InterviewMessageDto = Static<typeof InterviewMessageSchema>;
 export type ActiveInterviewActionDto = Static<typeof ActiveInterviewActionSchema>;
@@ -493,4 +531,5 @@ export type InterviewDetailResponseDto = Static<typeof InterviewDetailResponseSc
 export type InterviewHistoryItemDto = Static<typeof InterviewHistoryItemSchema>;
 export type InterviewHistoryResponseDto = Static<typeof InterviewHistoryResponseSchema>;
 export type OperationResultReferenceDto = Static<typeof OperationResultReferenceSchema>;
+export type ReportOperationResultReferenceDto = Static<typeof ReportOperationResultReferenceSchema>;
 export type OperationStatusResponseDto = Static<typeof OperationStatusResponseSchema>;

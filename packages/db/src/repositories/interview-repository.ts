@@ -21,7 +21,7 @@ import {
   InvalidBlueprintCoverageError,
   validateInterviewBlueprintCoverage,
 } from "@interview-agent/domain";
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import type { Database } from "../client.js";
 import {
@@ -46,9 +46,11 @@ import { validateInterviewSave } from "./transition-validation.js";
 import type {
   EvaluationPersistence,
   InterviewDetail,
+  InterviewHistoryCursor,
   InterviewHistoryEntry,
   InterviewSave,
   ReportPersistence,
+  TranscriptMessage,
 } from "./types.js";
 import {
   assertReportMatchesInterview,
@@ -275,17 +277,29 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
     });
   }
 
-  listHistory(accountId: AccountId, limit = 50): Promise<readonly InterviewHistoryEntry[]> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      throw new RangeError("History limit must be an integer from 1 through 100");
+  listHistory(
+    accountId: AccountId,
+    limit = 50,
+    before?: InterviewHistoryCursor,
+  ): Promise<readonly InterviewHistoryEntry[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 101) {
+      throw new RangeError("History limit must be an integer from 1 through 101");
+    }
+    if (before !== undefined && Number.isNaN(before.endedAt.getTime())) {
+      throw new RangeError("History cursor timestamp must be valid");
     }
     return runRepositoryTransaction(
       this.execution,
       async (transaction) => {
+        const historyEndedAt =
+          sql`date_trunc('milliseconds', ${interviewSessions.endedAt})`.mapWith(
+            interviewSessions.endedAt,
+          );
         const rows = await transaction
           .select({
             session: interviewSessions,
             report: reports,
+            historyEndedAt,
           })
           .from(interviewSessions)
           .innerJoin(user, eq(user.id, interviewSessions.ownerUserId))
@@ -297,9 +311,18 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
               isNull(interviewSessions.deletionRequestedAt),
               isNull(user.deletionRequestedAt),
               inaccessibleInterview,
+              before === undefined
+                ? sql`true`
+                : or(
+                    lt(historyEndedAt, before.endedAt),
+                    and(
+                      eq(historyEndedAt, before.endedAt),
+                      lt(interviewSessions.id, before.interviewId),
+                    ),
+                  ),
             ),
           )
-          .orderBy(desc(interviewSessions.endedAt), desc(interviewSessions.id))
+          .orderBy(desc(historyEndedAt), desc(interviewSessions.id))
           .limit(limit);
         if (rows.length === 0) {
           return [];
@@ -418,7 +441,7 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
           history.push({
             interviewId: decodeInterviewId(session.id, "interview history", session.id),
             createdAt: validDate(session.createdAt, session.id, "createdAt"),
-            endedAt: validDate(session.endedAt, session.id, "endedAt"),
+            endedAt: validDate(row.historyEndedAt, session.id, "endedAt"),
             direction: session.direction,
             questionCount: decodeQuestionCount(session.selectedQuestionCount, session.id),
             status: session.status,
@@ -449,6 +472,14 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
           .from(interviewSessions)
           .where(eq(interviewSessions.id, interviewId))
           .limit(1);
+        const snapshotLifecycleRows = await transaction
+          .select({
+            position: sessionQuestionSnapshots.position,
+            frozenAt: sessionQuestionSnapshots.frozenAt,
+          })
+          .from(sessionQuestionSnapshots)
+          .where(eq(sessionQuestionSnapshots.interviewId, interviewId))
+          .orderBy(asc(sessionQuestionSnapshots.position));
         const messageRows = await transaction
           .select()
           .from(interviewMessages)
@@ -459,11 +490,10 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
           number,
           InterviewDetail["questions"][number]["messages"][number][]
         >();
+        const projectedMessages: TranscriptMessage[] = [];
         for (const message of messageRows) {
-          if (message.kind === "main_question") {
-            continue;
-          }
           if (
+            message.kind !== "main_question" &&
             message.kind !== "main_answer" &&
             message.kind !== "follow_up_answer" &&
             message.kind !== "supplement" &&
@@ -496,6 +526,10 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             content: message.content,
             createdAt: validDate(message.createdAt, interview.id, "message createdAt"),
           };
+          projectedMessages.push(projected);
+          if (message.kind === "main_question") {
+            continue;
+          }
           const existing = byPosition.get(position) ?? [];
           existing.push(projected);
           byPosition.set(position, existing);
@@ -516,9 +550,11 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
             questions: revealedQuestionStates,
           },
           endedAt: endedAt === null ? null : validDate(endedAt, interview.id, "interview endedAt"),
+          messages: projectedMessages,
           questions: revealedBlueprintQuestions.map((item) => ({
             position: item.position,
             displayedQuestion: item.question.displayedWording,
+            revealedAt: questionRevealedAt(interview, item.position, snapshotLifecycleRows),
             messages: byPosition.get(item.position) ?? [],
           })),
         };
@@ -1810,6 +1846,28 @@ function terminalEventTime(events: readonly InterviewEvent[]): Date | null {
     }
   }
   return null;
+}
+
+function questionRevealedAt(
+  interview: Interview,
+  position: number,
+  lifecycle: readonly {
+    readonly position: number;
+    readonly frozenAt: Date | null;
+  }[],
+): Date {
+  if (position === 1) {
+    return new Date(interview.createdAt);
+  }
+  const previous = lifecycle[position - 2];
+  if (previous === undefined || previous.position !== position - 1 || previous.frozenAt === null) {
+    throw new RepositoryCorruptionError(
+      "interview detail",
+      interview.id,
+      `question ${position} has no reveal timestamp`,
+    );
+  }
+  return validDate(previous.frozenAt, interview.id, `question ${position} revealedAt`);
 }
 
 function eventQuestionPosition(event: InterviewEvent): number {

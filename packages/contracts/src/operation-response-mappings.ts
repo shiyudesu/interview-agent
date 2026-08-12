@@ -10,6 +10,7 @@ import { type OperationStatusResponseDto, OperationStatusResponseSchema } from "
 
 export interface PersistedOperationProjection {
   readonly id: OperationId;
+  readonly type: string;
   readonly status: "pending" | "processing" | "succeeded" | "failed";
   readonly retryable: boolean;
   readonly result:
@@ -57,6 +58,19 @@ export function mapOperationToStatusResponse(
   const result = operation.result;
   if (result === null) {
     throw invalidOperation("Succeeded Operation has no result");
+  }
+  if (operation.type === "generate_report") {
+    return parseMappedDto(
+      OperationStatusResponseSchema,
+      {
+        ...base,
+        status: "succeeded",
+        result: {
+          reportId: result.reportId,
+        },
+      },
+      "Operation status response",
+    );
   }
   return parseMappedDto(
     OperationStatusResponseSchema,

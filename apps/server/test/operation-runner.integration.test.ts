@@ -37,6 +37,7 @@ import {
   OperationRunner,
   ServerOwnedOperationExecution,
 } from "../src/operation-runner.js";
+import { createCanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const OWNER_ID = parseAccountId("operation-runner-owner");
 const SECOND_OWNER_ID = parseAccountId("operation-runner-second-owner");
@@ -226,6 +227,17 @@ describe.sequential("persisted OperationRunner", () => {
     expect(pending).toMatchObject({ status: "pending", type: "create_interview" });
     expect(await interviewRepository.findById(interviewId, OWNER_ID)).not.toBeNull();
     await expect(
+      createCanonicalReadRouteDependencies(unitOfWork).activeInterview(OWNER_ID),
+    ).resolves.toMatchObject({
+      id: interviewId,
+      phase: "awaiting_response",
+      operation: {
+        operationId: pending?.id,
+        status: "pending",
+      },
+      availableActions: [],
+    });
+    await expect(
       handlers.submitAnswer({
         ...commandInput(
           OWNER_ID,
@@ -398,6 +410,69 @@ describe.sequential("persisted OperationRunner", () => {
         ),
       }),
     ).rejects.toThrow();
+  });
+
+  it("keeps a retryable model failure visible after a newer rejected command", async () => {
+    const interviewId = await createInterview("runner-readable-model-failure");
+    evaluator.implementation = async () => {
+      throw new AnswerEvaluationModelError("transient_provider_failure", [], MODEL_METADATA);
+    };
+    const failed = await handlers.submitAnswer({
+      ...commandInput(
+        OWNER_ID,
+        interviewId,
+        "readable-model-failure",
+        "readable-model-failure-key",
+        1,
+      ),
+      text: "这个回答会触发模型失败。",
+    });
+    await handlers.skip({
+      ...commandInput(
+        OWNER_ID,
+        interviewId,
+        "newer-version-conflict",
+        "newer-version-conflict-key",
+        1,
+      ),
+    });
+
+    await expect(
+      createCanonicalReadRouteDependencies(unitOfWork).interviewDetail(OWNER_ID, interviewId),
+    ).resolves.toMatchObject({
+      operation: {
+        operationId: failed.id,
+        status: "failed",
+        failure: {
+          retryable: true,
+        },
+      },
+      availableActions: expect.arrayContaining(["retry"]),
+    });
+  });
+
+  it("returns canonical post-expiry reads on the first request", async () => {
+    const interviewId = await createInterview("runner-canonical-expiry");
+    await testDatabase.pool.query(
+      `update interview_sessions
+          set created_at = statement_timestamp() - interval '26 hours',
+              last_effective_activity_at = statement_timestamp() - interval '25 hours'
+        where id = $1`,
+      [interviewId],
+    );
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+
+    await expect(reads.activeInterview(OWNER_ID)).resolves.toBeNull();
+    await expect(reads.interviewDetail(OWNER_ID, interviewId)).resolves.toMatchObject({
+      id: interviewId,
+      status: "abandoned",
+      messages: [
+        expect.objectContaining({
+          kind: "main_question",
+          role: "interviewer",
+        }),
+      ],
+    });
   });
 
   it("classifies stale retry versions as canonical version conflicts", async () => {
@@ -598,6 +673,18 @@ describe.sequential("persisted OperationRunner", () => {
       status: "failed",
       retryable: true,
       error: { retryable: true },
+    });
+    await expect(
+      createCanonicalReadRouteDependencies(unitOfWork).interviewDetail(OWNER_ID, interviewId),
+    ).resolves.toMatchObject({
+      operation: {
+        operationId: target.id,
+        status: "failed",
+        failure: {
+          retryable: true,
+        },
+      },
+      availableActions: expect.arrayContaining(["retry"]),
     });
   });
 

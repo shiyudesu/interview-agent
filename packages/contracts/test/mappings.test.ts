@@ -24,6 +24,7 @@ import {
   InternalQuestionSnapshotSchema,
   InterviewDetailResponseSchema,
   mapAbandonInterviewCommand,
+  mapAccountAccessToResponse,
   mapCompleteInterviewScoreToDto,
   mapContinueInterviewCommand,
   mapCreateInterviewCommand,
@@ -31,6 +32,7 @@ import {
   mapEndInterviewEarlyCommand,
   mapInternalQuestionSnapshotDtoToDomain,
   mapInternalReportSnapshotToPublic,
+  mapInterviewHistoryToResponse,
   mapInterviewToResponse,
   mapMarkQuestionUnknownCommand,
   mapOperationToStatusResponse,
@@ -516,6 +518,7 @@ describe("interview response mappings", () => {
       operation: { operationId: "operation-1", status: "processing" },
       availableActions: [],
     });
+
     expect(() =>
       mapInterviewToResponse(
         makeInterview({
@@ -574,6 +577,21 @@ describe("interview response mappings", () => {
     expect(reportPending).toMatchObject({
       status: "report_pending",
       reportKind: "complete",
+      availableActions: [],
+    });
+    expect(
+      mapInterviewToResponse(
+        makeInterview({
+          status: "report_pending",
+          phase: null,
+          pendingReportKind: "incomplete",
+          reportRequestedAt: later,
+        }),
+        responseContext,
+      ),
+    ).toMatchObject({
+      status: "report_pending",
+      reportKind: "incomplete",
       availableActions: [],
     });
 
@@ -735,6 +753,127 @@ describe("interview response mappings", () => {
         ],
       }),
     ).toThrow(ContractMappingError);
+  });
+});
+
+describe("account and history response mappings", () => {
+  it("maps only the public account identity fields", () => {
+    const response = mapAccountAccessToResponse({
+      profile: {
+        accountId: parseAccountId("account-1"),
+        name: null,
+        email: "candidate@example.test",
+        createdAt: new Date(occurredAt),
+      },
+      linkedIdentities: [
+        {
+          providerId: "email-otp",
+          providerAccountId: "candidate@example.test",
+          linkedAt: new Date(occurredAt),
+        },
+        {
+          providerId: "github",
+          providerAccountId: "github-user-1",
+          linkedAt: later,
+        },
+      ],
+      sessions: [
+        {
+          sessionId: "session-current",
+          expiresAt: later,
+          createdAt: new Date(occurredAt),
+          updatedAt: later,
+          ipAddress: "127.0.0.1",
+          userAgent: null,
+          current: true,
+        },
+      ],
+    });
+
+    expect(response).toEqual({
+      id: "account-1",
+      email: "candidate@example.test",
+      displayName: null,
+      linkedIdentities: [
+        {
+          provider: "email_otp",
+          providerAccountId: "candidate@example.test",
+          linkedAt: occurredAt,
+        },
+        {
+          provider: "github",
+          providerAccountId: "github-user-1",
+          linkedAt: later.toISOString(),
+        },
+      ],
+      sessions: [
+        {
+          id: "session-current",
+          expiresAt: later.toISOString(),
+          createdAt: occurredAt,
+          updatedAt: later.toISOString(),
+          ipAddress: "127.0.0.1",
+          userAgent: null,
+          current: true,
+        },
+      ],
+      createdAt: occurredAt,
+    });
+    expect(JSON.stringify(response)).not.toContain("token");
+  });
+
+  it("preserves status-specific history report and score fields", () => {
+    const response = mapInterviewHistoryToResponse(
+      [
+        {
+          interviewId: parseInterviewId("history-completed"),
+          createdAt: new Date(occurredAt),
+          endedAt: later,
+          direction: "go_backend",
+          questionCount: 5,
+          status: "completed",
+          overallScore: 0,
+          reportId: parseReportId("report-complete"),
+        },
+        {
+          interviewId: parseInterviewId("history-early"),
+          createdAt: new Date(occurredAt),
+          endedAt: later,
+          direction: "go_backend",
+          questionCount: 10,
+          status: "early_ended",
+          overallScore: null,
+          reportId: parseReportId("report-incomplete"),
+        },
+        {
+          interviewId: parseInterviewId("history-abandoned"),
+          createdAt: new Date(occurredAt),
+          endedAt: later,
+          direction: "go_backend",
+          questionCount: 15,
+          status: "abandoned",
+          overallScore: null,
+          reportId: null,
+        },
+      ],
+      { nextCursor: "next-page", hasMore: true },
+    );
+
+    expect(response.items).toEqual([
+      expect.objectContaining({
+        status: "completed",
+        overallScore: 0,
+        reportId: "report-complete",
+      }),
+      expect.objectContaining({
+        status: "early_ended",
+        reportId: "report-incomplete",
+      }),
+      expect.objectContaining({ status: "abandoned" }),
+    ]);
+    expect(response.items[1]).not.toHaveProperty("overallScore");
+    expect(response.items[2]).not.toHaveProperty("reportId");
+    expect(response.pageInfo).toEqual({ nextCursor: "next-page", hasMore: true });
   });
 });
 
@@ -971,6 +1110,7 @@ describe("error mappings", () => {
   describe("Operation response mappings", () => {
     const base = {
       id: parseOperationId("operation-1"),
+      type: "submit_answer",
       retryable: false,
       result: null,
       error: null,
@@ -1024,6 +1164,27 @@ describe("error mappings", () => {
         },
       });
       expect(JSON.stringify(mapped)).not.toContain("secret");
+    });
+
+    it("maps successful report Operations without inventing an interview version", () => {
+      expect(
+        mapOperationToStatusResponse({
+          ...base,
+          type: "generate_report",
+          status: "succeeded",
+          result: {
+            reportId: "report-1",
+          },
+        }),
+      ).toEqual({
+        operationId: "operation-1",
+        status: "succeeded",
+        createdAt: occurredAt,
+        updatedAt: later.toISOString(),
+        result: {
+          reportId: "report-1",
+        },
+      });
     });
   });
 

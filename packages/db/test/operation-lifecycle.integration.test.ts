@@ -662,6 +662,17 @@ describe.sequential("PostgreSQL Operation lifecycle", () => {
       error: { code: "provider_unavailable" },
       retryable: true,
     });
+    const failed = await repository.findById(retryableId, OWNER_ID);
+    if (failed === null) {
+      throw new Error("Expected failed Operation");
+    }
+    await expect(
+      repository.findLatestIncompleteByInterviewId(INTERVIEW_ID, OWNER_ID),
+    ).resolves.toMatchObject({
+      id: retryableId,
+      status: "failed",
+      lastAttemptAt: failed.lastAttemptAt,
+    });
     await expect(
       repository.retryFailedAndClaim({
         ...claim(retryableId, "worker-b"),

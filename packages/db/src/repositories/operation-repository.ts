@@ -256,6 +256,62 @@ export class PgOperationRepository {
     });
   }
 
+  async findLatestIncompleteByInterviewId(
+    interviewId: InterviewId,
+    accountId: AccountId,
+  ): Promise<StoredOperation | null> {
+    return runRepositoryTransaction(this.execution, async (executor) => {
+      await expireInterviewOrSignal(executor, { interviewId, accountId });
+      const rows = await executor
+        .select({ operation: operations })
+        .from(operations)
+        .innerJoin(interviewSessions, eq(interviewSessions.id, operations.interviewId))
+        .innerJoin(user, eq(user.id, operations.ownerUserId))
+        .where(
+          and(
+            eq(operations.interviewId, interviewId),
+            eq(operations.ownerUserId, accountId),
+            inArray(operations.status, ["pending", "processing", "failed"]),
+            ne(operations.type, "retry_operation"),
+            or(
+              and(
+                eq(interviewSessions.status, "active"),
+                eq(operations.type, "create_interview"),
+                inArray(operations.status, ["pending", "processing"]),
+              ),
+              and(
+                eq(interviewSessions.status, "active"),
+                eq(interviewSessions.activePhase, "processing"),
+                eq(operations.id, interviewSessions.pendingOperationId),
+                inArray(operations.status, ["pending", "processing"]),
+              ),
+              and(
+                eq(interviewSessions.status, "active"),
+                inArray(interviewSessions.activePhase, ["awaiting_response", "awaiting_continue"]),
+                eq(operations.status, "failed"),
+                or(
+                  sql`date_trunc('milliseconds', ${operations.createdAt}) = date_trunc('milliseconds', ${interviewSessions.lastEffectiveActivityAt})`,
+                  sql`date_trunc('milliseconds', ${operations.lastAttemptAt}) = date_trunc('milliseconds', ${interviewSessions.lastEffectiveActivityAt})`,
+                ),
+                sql`${operations.error} ->> 'classification' is null`,
+              ),
+              and(
+                eq(interviewSessions.status, "report_pending"),
+                eq(operations.type, "generate_report"),
+              ),
+            ),
+            ne(interviewSessions.status, "deleting"),
+            isNull(interviewSessions.deletionRequestedAt),
+            isNull(user.deletionRequestedAt),
+            accessibleOperation,
+          ),
+        )
+        .orderBy(sql`${operations.updatedAt} desc`, sql`${operations.id} desc`)
+        .limit(1);
+      return rows[0] === undefined ? null : decodeOperation(rows[0]);
+    });
+  }
+
   private async findAccessibleById(
     executor: DatabaseExecutor,
     operationId: OperationId,

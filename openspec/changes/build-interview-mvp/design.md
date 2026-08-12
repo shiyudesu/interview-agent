@@ -344,6 +344,26 @@ hidden behind `404`. Request validation and content parsing failures use a stabl
 and internal exception details, provider messages, idempotency keys, and repository identifiers are
 never exposed.
 
+Canonical authenticated reads expose the current account, active interview, interview detail,
+Operation status, reverse-chronological history, and immutable report detail under `/api/v1`.
+Account responses include primary and linked identities plus only unexpired token-free session
+metadata, including which session is current. Interview projections are assembled in one
+repeatable-read transaction so aggregate and Operation state cannot tear across concurrent
+completion. Lazy expiry is persisted and then transparently re-read: the active resource
+disappears, while detail and Operation reads return their post-expiry canonical state on the first
+request. Transcripts synthesize a stable main-question message for every revealed snapshot using
+the interview creation time or the previous question's frozen time, and never expose unrevealed
+questions or assessment metadata.
+
+History uses a bounded opaque Base64URL keyset cursor over a PostgreSQL millisecond-normalized
+`ended_at` value plus interview ID, matching JavaScript timestamp precision without gaps or
+duplicates. Read endpoints apply owner-scoped repositories and the same not-found response to
+missing, non-owned, deletion-marked, and account-deleting resources. Canonical interview reads
+surface only the lifecycle-relevant pending or retryable failed Operation; newer rejected commands
+cannot hide retry actions, and a durable pending creation Operation suppresses interview actions
+until finalization. Successful report Operations use a report-only result projection rather than
+inventing an interview version.
+
 ### 12. Establish tests and CI with the scaffold
 
 The first implementation slice creates:

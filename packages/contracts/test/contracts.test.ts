@@ -304,6 +304,17 @@ describe("API command and error schemas", () => {
         updatedAt: "2026-08-12T03:00:00.000Z",
       }),
     ).toBe(true);
+    expect(
+      Check(OperationStatusResponseSchema, {
+        operationId: "operation-report",
+        status: "succeeded",
+        createdAt: now,
+        updatedAt: now,
+        result: {
+          reportId: "report-1",
+        },
+      }),
+    ).toBe(true);
   });
 
   it("validates the stable version-conflict error envelope", () => {

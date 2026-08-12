@@ -202,11 +202,15 @@ function mapActiveInterview(interview: Interview, context: InterviewResponseCont
     };
   }
 
-  if (context.operation !== null && context.operation.status !== "failed") {
-    return invalidInterviewState("Only failed Operations may remain on an actionable phase");
-  }
-
   if (interview.phase === "awaiting_response") {
+    if (context.operation !== null && context.operation.status !== "failed") {
+      return {
+        ...base,
+        phase: "awaiting_response",
+        operation: mapOperation(context.operation),
+        availableActions: [],
+      };
+    }
     const availableActions = awaitingResponseActions(interview);
     if (context.operation === null) {
       return {
@@ -224,6 +228,10 @@ function mapActiveInterview(interview: Interview, context: InterviewResponseCont
         ...(context.operation.failure.retryable ? ["retry"] : []),
       ],
     };
+  }
+
+  if (context.operation !== null && context.operation.status !== "failed") {
+    return invalidInterviewState("Only failed Operations may remain on an actionable phase");
   }
 
   const availableActions = ["submit_supplement", "continue", "end_early", "abandon"];
@@ -249,14 +257,15 @@ function mapReportPendingInterview(interview: Interview, context: InterviewRespo
   if (interview.pendingReportKind === null) {
     return invalidInterviewState("Report-pending interviews require a report kind");
   }
-  if (context.operation === null) {
-    return invalidInterviewState("Report-pending interviews require an Operation reference");
-  }
-  if (context.operation.status === "failed" && !context.operation.failure.retryable) {
+  if (
+    context.operation !== null &&
+    context.operation.status === "failed" &&
+    !context.operation.failure.retryable
+  ) {
     return invalidInterviewState("Report-pending failures must remain retryable");
   }
   assertChronology(interview, context.messages);
-  return {
+  const base = {
     id: String(interview.id),
     status: "report_pending",
     reportKind: interview.pendingReportKind,
@@ -269,6 +278,15 @@ function mapReportPendingInterview(interview: Interview, context: InterviewRespo
       "lastEffectiveActivityAt",
     ),
     expiresAt: serializeIsoTimestamp(getInterviewExpiresAt(interview), "expiresAt"),
+  };
+  if (context.operation === null) {
+    return {
+      ...base,
+      availableActions: [],
+    };
+  }
+  return {
+    ...base,
     operation: mapOperation(context.operation),
     availableActions: context.operation.status === "failed" ? ["retry"] : [],
   };

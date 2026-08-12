@@ -7,6 +7,7 @@ import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
 import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
+import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
 const config = {
@@ -65,6 +66,20 @@ function interviewCommands(): InterviewCommandRouteDependencies {
   };
 }
 
+function canonicalReads(): CanonicalReadRouteDependencies {
+  const unavailable = async () => {
+    throw new Error("Canonical read was not configured for this test");
+  };
+  return {
+    currentAccount: unavailable,
+    activeInterview: unavailable,
+    interviewDetail: unavailable,
+    operationStatus: unavailable,
+    interviewHistory: unavailable,
+    reportDetail: unavailable,
+  };
+}
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((instance) => instance.close()));
 });
@@ -85,6 +100,7 @@ describe("registerApplication", () => {
       config,
       deletion: deletion(),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
 
     const response = await instance.inject({
@@ -130,6 +146,7 @@ describe("registerApplication", () => {
       config,
       deletion: deletion(),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
 
     const response = await instance.inject({
@@ -164,6 +181,7 @@ describe("registerApplication", () => {
       config,
       deletion: deletion(),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
     instance.get("/api/v1/context", async (request) => request.authContext);
     instance.get("/health", async (request) => request.authContext);
@@ -200,6 +218,7 @@ describe("registerApplication", () => {
       config,
       deletion: deletion(),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
 
     const response = await instance.inject({
@@ -217,6 +236,35 @@ describe("registerApplication", () => {
     });
     expect(response.body).not.toContain("candidate@example.test");
     expect(response.body).not.toContain("123456");
+  });
+
+  it("returns a stable internal envelope when protected-session loading fails", async () => {
+    const instance = app();
+    await registerApplication(instance, {
+      authentication: authentication({
+        getSession: async () => {
+          throw new Error("database password=secret");
+        },
+      }),
+      config,
+      deletion: deletion(),
+      interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
+    });
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/api/v1/account",
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      error: {
+        code: "internal_error",
+        message: "An unexpected error occurred.",
+      },
+    });
+    expect(response.body).not.toContain("secret");
   });
 
   it("requires confirmation and owner context for deletion routes", async () => {
@@ -263,6 +311,7 @@ describe("registerApplication", () => {
         markAccountDeleting,
       }),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
 
     const missingConfirmation = await instance.inject({
@@ -318,6 +367,7 @@ describe("registerApplication", () => {
         },
       }),
       interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
     });
 
     const response = await instance.inject({

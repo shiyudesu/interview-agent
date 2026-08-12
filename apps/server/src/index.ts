@@ -9,6 +9,7 @@ export * from "./interviewer-text-model.js";
 export * from "./model-contract-registry.js";
 export * from "./model-runtime.js";
 export * from "./operation-runner.js";
+export * from "./read-routes.js";
 export * from "./report-analysis-model.js";
 export * from "./resource-access.js";
 export * from "./shutdown.js";

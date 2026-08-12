@@ -930,12 +930,19 @@ describe.sequential("PostgreSQL repositories", () => {
     const detail = required(
       await interviewRepository.findDetailByOwner(interview.id, interview.accountId),
     );
+    expect(detail.messages.map((message) => message.kind)).toEqual([
+      "main_answer",
+      "supplement",
+      "system_follow_up",
+      "follow_up_answer",
+    ]);
     expect(detail.questions[0]?.messages.map((message) => message.kind)).toEqual([
       "main_answer",
       "supplement",
       "system_follow_up",
       "follow_up_answer",
     ]);
+    expect(detail.questions[0]?.revealedAt).toEqual(STARTED_AT);
     expect(detail.questions[0]?.messages.slice(1, 3).map((message) => message.createdAt)).toEqual([
       new Date(STARTED_AT.getTime() + 4_000),
       new Date(STARTED_AT.getTime() + 4_000),
@@ -2408,6 +2415,13 @@ describe.sequential("PostgreSQL repositories", () => {
       ["early_ended", null],
       ["completed", 0],
     ]);
+    const firstPage = await interviewRepository.listHistory(accountId, 2);
+    const secondPage = await interviewRepository.listHistory(accountId, 2, {
+      endedAt: required(firstPage.at(-1)).endedAt,
+      interviewId: required(firstPage.at(-1)).interviewId,
+    });
+    expect(firstPage.map((entry) => entry.interviewId)).toEqual([abandoned.id, early.id]);
+    expect(secondPage.map((entry) => entry.interviewId)).toEqual([completed.id]);
     const completedDetail = required(
       await interviewRepository.findDetailByOwner(completed.id, accountId),
     );

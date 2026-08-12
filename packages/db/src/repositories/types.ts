@@ -68,11 +68,17 @@ export interface InterviewHistoryEntry {
   readonly reportId: ReportId | null;
 }
 
+export interface InterviewHistoryCursor {
+  readonly endedAt: Date;
+  readonly interviewId: InterviewId;
+}
+
 export interface TranscriptMessage {
   readonly id: string;
   readonly operationId: OperationId | null;
   readonly role: "user" | "assistant" | "system";
   readonly kind:
+    | "main_question"
     | "main_answer"
     | "follow_up_answer"
     | "supplement"
@@ -86,6 +92,7 @@ export interface TranscriptMessage {
 export interface InterviewTranscriptQuestion {
   readonly position: number;
   readonly displayedQuestion: string;
+  readonly revealedAt: Date;
   readonly messages: readonly TranscriptMessage[];
 }
 
@@ -97,6 +104,7 @@ export interface InterviewDetail {
     readonly questions: Interview["questions"];
   };
   readonly endedAt: Date | null;
+  readonly messages: readonly TranscriptMessage[];
   readonly questions: readonly InterviewTranscriptQuestion[];
 }
 
