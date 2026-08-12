@@ -190,7 +190,7 @@ type ImmediatelyHandledCommand =
   | ExpireInterviewCommand
   | RecordReportCommand;
 
-type PlannedCommand =
+export type PlannedCommand =
   | SubmitAnswerCommand
   | SubmitSupplementCommand
   | RequestQuestionClarificationCommand;
@@ -314,6 +314,84 @@ export function cancelInterviewOperation(
   };
 }
 
+export function retryInterviewOperation(
+  interview: Interview,
+  command: PlannedCommand,
+  acceptedAt: Date,
+): InterviewOperationPlan {
+  assertCommandIdentityAndDate(interview, command);
+  assertValidDate(acceptedAt, "retry acceptance time");
+  if (interview.version !== command.expectedVersion + 1) {
+    throw new InterviewVersionConflictError(command.expectedVersion + 1, interview.version);
+  }
+  assertCommandTimeNotBeforeActivity(interview, acceptedAt);
+  if (interview.pendingOperation !== null) {
+    throw new InvalidInterviewCommandError("Interview already has a pending Operation");
+  }
+
+  if (command.type === "request_question_clarification") {
+    assertActive(interview);
+    assertPhase(interview, "awaiting_response");
+    return questionClarificationPlan(
+      interview,
+      command,
+      acceptRetriedOperation(
+        interview,
+        command.operationId,
+        "question_clarification",
+        acceptedAt,
+        "awaiting_response",
+      ),
+      acceptedAt,
+    );
+  }
+
+  assertActive(interview);
+  const previousPhase =
+    command.type === "submit_answer" ? "awaiting_response" : "awaiting_continue";
+  assertPhase(interview, previousPhase);
+  assertNonEmptyText(command.text, command.type);
+  const question = getCurrentQuestionState(interview);
+  if (question.answerMaterial.some((material) => material.id === command.answerMaterialId)) {
+    throw new InvalidInterviewCommandError("Answer material ID is already used");
+  }
+  return answerAnalysisPlan(
+    interview,
+    command,
+    acceptRetriedOperation(
+      interview,
+      command.operationId,
+      "answer_analysis",
+      acceptedAt,
+      previousPhase,
+    ),
+    acceptedAt,
+  );
+}
+
+export function refreshInterviewOperation(
+  interview: Interview,
+  operationId: OperationId,
+  acceptedAt: Date,
+): Interview {
+  assertActive(interview);
+  assertPhase(interview, "processing");
+  assertValidDate(acceptedAt, "retry acceptance time");
+  assertCommandTimeNotBeforeActivity(interview, acceptedAt);
+  const pending = requiredPendingOperation(interview);
+  if (pending.operationId !== operationId) {
+    throw new InvalidInterviewCommandError("Retry Operation does not match the pending Operation");
+  }
+  return {
+    ...interview,
+    pendingOperation: {
+      ...pending,
+      acceptedAt: cloneDate(acceptedAt),
+    },
+    lastEffectiveActivityAt: cloneDate(acceptedAt),
+  };
+}
+
 export function getInterviewProgress(interview: Interview): {
   readonly current: number;
   readonly total: InterviewQuestionCount;
@@ -406,12 +484,6 @@ function planAnswerAnalysis(
     throw new InvalidInterviewCommandError("Answer material ID is already used");
   }
 
-  const materialKind =
-    command.type === "submit_supplement"
-      ? "supplement"
-      : hasUnansweredSystemFollowUp(question)
-        ? "follow_up_answer"
-        : "main_answer";
   const acceptedAt = cloneDate(command.occurredAt);
   const acceptedInterview = acceptOperation(
     interview,
@@ -421,6 +493,22 @@ function planAnswerAnalysis(
     expectedPhase,
   );
 
+  return answerAnalysisPlan(interview, command, acceptedInterview, acceptedAt);
+}
+
+function answerAnalysisPlan(
+  interview: Interview,
+  command: SubmitAnswerCommand | SubmitSupplementCommand,
+  acceptedInterview: Interview,
+  acceptedAt: Date,
+): AnswerAnalysisPlan {
+  const question = getCurrentQuestionState(interview);
+  const materialKind =
+    command.type === "submit_supplement"
+      ? "supplement"
+      : hasUnansweredSystemFollowUp(question)
+        ? "follow_up_answer"
+        : "main_answer";
   return {
     kind: "operation_plan",
     operation: "answer_analysis",
@@ -434,7 +522,7 @@ function planAnswerAnalysis(
       id: command.answerMaterialId,
       kind: materialKind,
       text: command.text,
-      submittedAt: cloneDate(acceptedAt),
+      submittedAt: cloneDate(command.occurredAt),
     },
   };
 }
@@ -448,6 +536,26 @@ function planQuestionClarification(
   assertValidDate(command.occurredAt, "clarification request time");
   const acceptedAt = cloneDate(command.occurredAt);
 
+  return questionClarificationPlan(
+    interview,
+    command,
+    acceptOperation(
+      interview,
+      command.operationId,
+      "question_clarification",
+      acceptedAt,
+      "awaiting_response",
+    ),
+    acceptedAt,
+  );
+}
+
+function questionClarificationPlan(
+  interview: Interview,
+  command: RequestQuestionClarificationCommand,
+  acceptedInterview: Interview,
+  acceptedAt: Date,
+): QuestionClarificationPlan {
   return {
     kind: "operation_plan",
     operation: "question_clarification",
@@ -455,13 +563,7 @@ function planQuestionClarification(
     operationId: command.operationId,
     questionPosition: interview.currentQuestionPosition,
     acceptedAt,
-    interview: acceptOperation(
-      interview,
-      command.operationId,
-      "question_clarification",
-      acceptedAt,
-      "awaiting_response",
-    ),
+    interview: acceptedInterview,
     command,
   };
 }
@@ -487,6 +589,27 @@ function acceptOperation(
   });
 }
 
+function acceptRetriedOperation(
+  interview: Interview,
+  operationId: OperationId,
+  operation: PendingInterviewOperation["operation"],
+  acceptedAt: Date,
+  previousPhase: PendingInterviewOperation["previousPhase"],
+): Interview {
+  return {
+    ...interview,
+    phase: "processing",
+    pendingOperation: {
+      operationId,
+      operation,
+      questionPosition: interview.currentQuestionPosition,
+      acceptedAt: cloneDate(acceptedAt),
+      previousPhase,
+    },
+    lastEffectiveActivityAt: cloneDate(acceptedAt),
+  };
+}
+
 function completeQuestionClarification(
   interview: Interview,
   plan: QuestionClarificationPlan,
@@ -505,7 +628,7 @@ function completeQuestionClarification(
       {
         messageId: completion.messageId,
         text: completion.text,
-        requestedAt: cloneDate(plan.acceptedAt),
+        requestedAt: cloneDate(plan.command.occurredAt),
         recordedAt: cloneDate(completion.occurredAt),
       },
     ],
@@ -520,7 +643,7 @@ function completeQuestionClarification(
       type: "question_clarification_requested",
       interviewId: interview.id,
       operationId: plan.operationId,
-      occurredAt: cloneDate(plan.acceptedAt),
+      occurredAt: cloneDate(plan.command.occurredAt),
       questionPosition: plan.questionPosition,
     },
     {
@@ -1221,7 +1344,7 @@ function answerMaterialEvent(interview: Interview, plan: AnswerAnalysisPlan): In
     type: "answer_material_submitted",
     interviewId: interview.id,
     operationId: plan.operationId,
-    occurredAt: cloneDate(plan.acceptedAt),
+    occurredAt: cloneDate(plan.material.submittedAt),
     answerMaterialId: plan.material.id,
     materialKind: plan.material.kind,
     questionPosition: plan.questionPosition,

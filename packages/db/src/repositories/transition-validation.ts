@@ -84,7 +84,10 @@ export function validateInterviewSave(change: InterviewSave): void {
 function validateEventlessTransition(previous: Interview, current: Interview): void {
   if (previous.pendingOperation === null && current.pendingOperation !== null) {
     const pending = current.pendingOperation;
+    const isInitialAcceptance = current.version === previous.version + 1;
+    const isRetryAcceptance = current.version === previous.version;
     if (
+      (!isInitialAcceptance && !isRetryAcceptance) ||
       previous.status !== "active" ||
       previous.phase !== pending.previousPhase ||
       (pending.previousPhase !== "awaiting_response" &&
@@ -102,12 +105,38 @@ function validateEventlessTransition(previous: Interview, current: Interview): v
       current,
       {
         ...previous,
-        version: previous.version + 1,
+        version: isInitialAcceptance ? previous.version + 1 : previous.version,
         phase: "processing",
         pendingOperation: clonePending(pending),
         lastEffectiveActivityAt: cloneDate(pending.acceptedAt),
       },
       "accepted pending Operation",
+    );
+    return;
+  }
+
+  if (previous.pendingOperation !== null && current.pendingOperation !== null) {
+    const previousPending = previous.pendingOperation;
+    const currentPending = current.pendingOperation;
+    if (
+      previous.status !== "active" ||
+      previous.phase !== "processing" ||
+      currentPending.operationId !== previousPending.operationId ||
+      currentPending.operation !== previousPending.operation ||
+      currentPending.questionPosition !== previousPending.questionPosition ||
+      currentPending.previousPhase !== previousPending.previousPhase ||
+      currentPending.acceptedAt.getTime() < previousPending.acceptedAt.getTime()
+    ) {
+      reject(previous.id, "refreshed pending Operation does not match the active lease");
+    }
+    assertAggregateEquals(
+      current,
+      {
+        ...previous,
+        pendingOperation: clonePending(currentPending),
+        lastEffectiveActivityAt: cloneDate(currentPending.acceptedAt),
+      },
+      "refreshed pending Operation",
     );
     return;
   }
@@ -146,7 +175,7 @@ function validateClarificationCompletion(
   if (
     request.questionPosition !== pending.questionPosition ||
     recorded.questionPosition !== pending.questionPosition ||
-    request.occurredAt.getTime() !== pending.acceptedAt.getTime() ||
+    request.occurredAt.getTime() > pending.acceptedAt.getTime() ||
     recorded.occurredAt.getTime() < request.occurredAt.getTime()
   ) {
     reject(previous.id, "clarification event timing or question position is mismatched");
@@ -558,7 +587,7 @@ function assertAnswerEvent(
   if (
     event.questionPosition !== pending.questionPosition ||
     event.materialKind !== expectedKind ||
-    event.occurredAt.getTime() !== pending.acceptedAt.getTime() ||
+    event.occurredAt.getTime() > pending.acceptedAt.getTime() ||
     event.text.trim().length === 0
   ) {
     reject(interview.id, "answer-material event does not match the accepted Operation");

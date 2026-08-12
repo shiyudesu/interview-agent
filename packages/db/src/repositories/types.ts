@@ -164,6 +164,7 @@ export interface ClaimOperation {
   readonly accountId: AccountId;
   readonly leaseOwner: string;
   readonly leaseDurationMs: number;
+  readonly leaseExpiresAt?: Date;
 }
 
 export interface RetryOperation extends ClaimOperation {

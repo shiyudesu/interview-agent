@@ -216,14 +216,17 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
         transaction,
         change.current.pendingOperation ?? change.previous.pendingOperation,
         change.previous,
-        change.current.pendingOperation === null
-          ? change.previous.version - 1
-          : change.previous.version,
+        change.current.pendingOperation !== null &&
+          change.previous.pendingOperation === null &&
+          change.current.version === change.previous.version + 1
+          ? change.previous.version
+          : change.previous.version - 1,
         change.current.pendingOperation !== null
           ? "processing"
           : change.events.length === 0 || change.current.status === "abandoned"
             ? "failed"
             : "succeeded",
+        change.events,
       );
       const terminalAt = terminalEventTime(change.events);
       const updated = await transaction
@@ -549,6 +552,7 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
     previous: Interview,
     expectedVersion: number,
     expectedStatus: OperationRow["status"],
+    events: readonly InterviewEvent[],
   ): Promise<void> {
     if (pendingOperation === null) {
       return;
@@ -580,6 +584,7 @@ export class PgInterviewRepository implements InterviewRepository<Interview, Int
         "pending Operation metadata does not match its persisted Operation",
       );
     }
+    assertOriginalOperationEventTime(previous.id, operation, events);
   }
 
   private async persistEvents(
@@ -1116,6 +1121,29 @@ function reconstructInterview(
   return interview;
 }
 
+function assertOriginalOperationEventTime(
+  interviewId: InterviewId,
+  operation: OperationRow,
+  events: readonly InterviewEvent[],
+): void {
+  const requestEvents = events.filter(
+    (event) =>
+      (event.type === "answer_material_submitted" ||
+        event.type === "question_clarification_requested") &&
+      event.operationId === operation.id,
+  );
+  if (
+    requestEvents.length > 1 ||
+    requestEvents.some((event) => event.occurredAt.getTime() !== operation.createdAt.getTime())
+  ) {
+    throw new RepositoryCorruptionError(
+      "interview save",
+      interviewId,
+      "request event time does not match the persisted Operation creation time",
+    );
+  }
+}
+
 function reconstructQuestion(
   interviewId: string,
   snapshot: SnapshotRow,
@@ -1416,7 +1444,8 @@ function pendingOperationMatchesRow(
     operation.ownerUserId === interview.accountId &&
     operation.type === expectedType &&
     operation.expectedVersion === interview.version &&
-    operation.createdAt.getTime() === pending.acceptedAt.getTime() &&
+    (operation.createdAt.getTime() === pending.acceptedAt.getTime() ||
+      operation.lastAttemptAt?.getTime() === pending.acceptedAt.getTime()) &&
     operation.status === expectedStatus &&
     isRecord(operation.input) &&
     operation.input["questionPosition"] === pending.questionPosition

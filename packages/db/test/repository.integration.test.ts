@@ -663,6 +663,20 @@ describe.sequential("PostgreSQL repositories", () => {
       messageId: parseMessageId("legacy-snapshot-clarification-message"),
       text: "Clarified wording",
     });
+    await expect(
+      saveSuccessfulCompletion({
+        previous: accepted,
+        current: completed.interview,
+        events: completed.events.map((event) =>
+          event.type === "question_clarification_requested"
+            ? {
+                ...event,
+                occurredAt: new Date(acceptedAt.getTime() - 1_000),
+              }
+            : event,
+        ),
+      }),
+    ).rejects.toBeInstanceOf(RepositoryCorruptionError);
     await saveSuccessfulCompletion({
       previous: accepted,
       current: completed.interview,

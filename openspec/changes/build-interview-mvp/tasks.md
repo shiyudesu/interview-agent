@@ -61,7 +61,7 @@
 
 ## 7. Operation Execution and API
 
-- [ ] 7.1 Implement the persisted OperationRunner and handlers for interview creation, answer submission, supplements, question clarification, unknown, skip, continue, early end, abandon, and retry.
+- [x] 7.1 Implement the persisted OperationRunner and handlers for interview creation, answer submission, supplements, question clarification, unknown, skip, continue, early end, abandon, and retry.
 - [ ] 7.2 Add `/api/v1` command endpoints requiring Idempotency Keys and expected interview versions, with stable conflict and retryable-error responses.
 - [ ] 7.3 Add canonical JSON endpoints for the current account, active interview, interview detail, Operation status, history, and report detail.
 - [ ] 7.4 Add the Operation SSE endpoint with operation IDs, monotonic event sequence numbers, text deltas, terminal status events, and disconnect-safe processing.

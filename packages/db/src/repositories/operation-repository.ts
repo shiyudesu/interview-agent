@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { AccountId, OperationId } from "@interview-agent/domain";
+import type { AccountId, InterviewId, OperationId } from "@interview-agent/domain";
 import type { SQL } from "drizzle-orm";
 import { and, eq, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 
@@ -58,6 +58,20 @@ export class PgOperationRepository {
     execution: RepositoryExecution = new RepositoryExecution(database),
   ) {
     this.execution = execution;
+  }
+
+  async lockAccountForCreation(accountId: AccountId): Promise<void> {
+    await runRepositoryTransaction(this.execution, async (executor) => {
+      const rows = await executor
+        .select({ deletionRequestedAt: user.deletionRequestedAt })
+        .from(user)
+        .where(eq(user.id, accountId))
+        .limit(1)
+        .for("update");
+      if (rows[0] === undefined || rows[0].deletionRequestedAt !== null) {
+        throw new RepositoryNotFoundError("account", accountId);
+      }
+    });
   }
 
   async create(operation: CreateOperation): Promise<StoredOperation> {
@@ -290,6 +304,7 @@ export class PgOperationRepository {
           accountId,
         });
       }
+
       const rows = await executor
         .select({ operation: operations })
         .from(operations)
@@ -304,6 +319,27 @@ export class PgOperationRepository {
             isNull(interviewSessions.deletionRequestedAt),
             isNull(user.deletionRequestedAt),
             accessibleOperation,
+          ),
+        )
+        .limit(1);
+      return rows[0] === undefined ? null : decodeOperation(rows[0]);
+    });
+  }
+
+  async findOpenCreationByInterview(
+    interviewId: InterviewId,
+    accountId: AccountId,
+  ): Promise<StoredOperation | null> {
+    return runRepositoryTransaction(this.execution, async (executor) => {
+      const rows = await executor
+        .select({ operation: operations })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.interviewId, interviewId),
+            eq(operations.ownerUserId, accountId),
+            eq(operations.type, "create_interview"),
+            inArray(operations.status, ["pending", "processing"]),
           ),
         )
         .limit(1);
@@ -339,6 +375,7 @@ export class PgOperationRepository {
             eq(operations.id, claim.operationId),
             eq(operations.ownerUserId, claim.accountId),
             eq(operations.status, "pending"),
+            sql`${lease.expiry} > ${databaseStatementTime}`,
           ),
         )
         .returning();
@@ -386,6 +423,7 @@ export class PgOperationRepository {
             eq(operations.status, "failed"),
             eq(operations.retryable, true),
             eq(operations.input, input.value),
+            sql`${lease.expiry} > ${databaseStatementTime}`,
           ),
         )
         .returning();
@@ -430,6 +468,7 @@ export class PgOperationRepository {
             eq(operations.status, "processing"),
             eq(operations.input, input.value),
             lt(operations.leaseExpiresAt, databaseStatementTime),
+            sql`${lease.expiry} > ${databaseStatementTime}`,
           ),
         )
         .returning();
@@ -532,6 +571,63 @@ export class PgOperationRepository {
       throw completion;
     }
     return completion;
+  }
+
+  async failPendingRetryCommand(input: {
+    readonly operationId: OperationId;
+    readonly accountId: AccountId;
+    readonly error: import("../schema/interview.js").JsonObject;
+  }): Promise<StoredOperation> {
+    const error = validateOperationPayload(input.error, "error");
+    const completionIdentity = createLease({
+      operationId: input.operationId,
+      accountId: input.accountId,
+      leaseOwner: "terminal-retry-rejection",
+      leaseDurationMs: 1,
+    });
+    return runRepositoryTransaction(this.execution, async (executor) => {
+      const rows = await executor
+        .update(operations)
+        .set({
+          status: "failed",
+          attemptCount: sql`${operations.attemptCount} + 1`,
+          lastAttemptAt: databaseStatementTime,
+          result: null,
+          error: error.value,
+          leaseAcquiredAt: null,
+          leaseExpiresAt: null,
+          leaseOwner: null,
+          leaseTokenHash: null,
+          completedLeaseOwner: completionIdentity.owner,
+          completedLeaseTokenHash: completionIdentity.tokenHash,
+          retryable: false,
+          completedAt: databaseStatementTime,
+          updatedAt: databaseStatementTime,
+        })
+        .where(
+          and(
+            eq(operations.id, input.operationId),
+            eq(operations.ownerUserId, input.accountId),
+            eq(operations.type, "retry_operation"),
+            eq(operations.status, "pending"),
+          ),
+        )
+        .returning();
+      if (rows[0] !== undefined) {
+        return decodeOperation(rows[0]);
+      }
+      const existing = await this.findAccessibleById(executor, input.operationId, input.accountId);
+      if (
+        existing !== null &&
+        existing.type === "retry_operation" &&
+        existing.status === "failed" &&
+        payloadsEqual(existing.error, error) &&
+        !existing.retryable
+      ) {
+        return existing;
+      }
+      throw new RepositoryOperationRetryConflictError(input.operationId);
+    });
   }
 
   private async resolveDuplicateCompletion(
@@ -823,7 +919,7 @@ function createLease(claim: ClaimOperation): {
   readonly owner: string;
   readonly token: string;
   readonly tokenHash: string;
-  readonly expiry: SQL<Date>;
+  readonly expiry: Date | SQL<Date>;
 } {
   if (
     !Number.isSafeInteger(claim.leaseDurationMs) ||
@@ -836,12 +932,17 @@ function createLease(claim: ClaimOperation): {
   if (owner.length === 0 || owner.length > 256) {
     throw new RepositoryOperationLeaseConflictError(claim.operationId);
   }
+  if (claim.leaseExpiresAt !== undefined && !Number.isFinite(claim.leaseExpiresAt.getTime())) {
+    throw new RepositoryOperationLeaseConflictError(claim.operationId);
+  }
   const token = randomBytes(32).toString("base64url");
   return {
     owner,
     token,
     tokenHash: hashLeaseToken(token),
-    expiry: sql<Date>`statement_timestamp() + ${claim.leaseDurationMs} * interval '1 millisecond'`,
+    expiry:
+      claim.leaseExpiresAt ??
+      sql<Date>`statement_timestamp() + ${claim.leaseDurationMs} * interval '1 millisecond'`,
   };
 }
 

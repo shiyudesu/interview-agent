@@ -128,6 +128,21 @@ conflict instead of both advancing the interview.
 
 Operations are executed inline for the MVP, but handlers accept persisted Operation IDs and do not depend on an HTTP request. A future PostgreSQL-backed worker can call the same OperationRunner.
 
+The persisted `OperationRunner` owns creation, answer, supplement, question clarification, unknown,
+skip, continue, early-end, abandon, and explicit retry handlers. Creation serializes on the account,
+retries PostgreSQL serialization failures, commits the frozen interview/snapshots with a pending
+creation Operation, blocks progress until finalization, and records an immutable version-1 result.
+Model-assisted commands commit only the claimed Operation lease and accepted technical processing
+state before calling adapters outside a transaction. Success or failure then commits the target
+Operation, aggregate events/evaluation, and any retry-command Operation in one unit of work.
+
+Explicit retry is itself an idempotent persisted `retry_operation` referencing immutable target
+input. Retry and target claims share one database-generated lease deadline; stale target or retry
+commands can be reclaimed, while retry-command rows are terminal and never recursively retryable.
+Original answer/clarification event times always equal the target Operation's immutable creation
+time; later retry acceptance only refreshes pending technical activity. Report-pending generation
+remains delegated to the dedicated report retry/generation tasks.
+
 ### 5. Separate command responses from SSE event delivery
 
 Mutating endpoints return an Operation ID. The browser subscribes to the Operation event endpoint using SSE for presentation deltas and completion status. Every event contains `operationId` and a monotonic in-memory sequence number.
