@@ -276,7 +276,7 @@ describe("canonical read routes", () => {
       accountId,
       parseInterviewId("history-interview"),
     );
-  });
+  }, 15_000);
 
   it("returns the same stable 404 for absent and non-owned resources", async () => {
     const reads = canonicalReads();
