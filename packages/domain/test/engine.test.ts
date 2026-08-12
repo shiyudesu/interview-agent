@@ -5,6 +5,7 @@ import {
   cancelInterviewOperation,
   completeInterviewOperation,
   getCurrentQuestion,
+  getInterviewExpiresAt,
   getInterviewProgress,
   handleInterviewCommand,
   type Interview,
@@ -31,6 +32,7 @@ import {
   type QuestionEvaluation,
   type RecordQuestionEvaluationCommand,
   type RecordSystemFollowUpCommand,
+  refreshReportRetryActivity,
 } from "../src/index.js";
 
 const STARTED_AT = new Date("2026-08-01T00:00:00.000Z");
@@ -915,6 +917,55 @@ describe("completion and terminal paths", () => {
     ).interview;
     expect(interview.status).toBe("early_ended");
     expect(interview.reportRequestedAt).toEqual(earlyEnd.occurredAt);
+  });
+
+  it("refreshes report retry activity without changing assessment or report-request facts", () => {
+    const created = createInterview();
+    const answerPlan = submitAnswerPlan(created);
+    let interview = completeEvaluation(created, answerPlan, 50);
+    const earlyEndAt = new Date(interview.lastEffectiveActivityAt.getTime() + 1_000);
+    interview = expectTransition(
+      handleInterviewCommand(interview, {
+        type: "end_interview_early",
+        interviewId: interview.id,
+        operationId: nextOperationId(),
+        expectedVersion: interview.version,
+        occurredAt: earlyEndAt,
+      }),
+    ).interview;
+    const previousExpiry = getInterviewExpiresAt(interview);
+    const acceptedAt = new Date(interview.lastEffectiveActivityAt.getTime() + 60_000);
+
+    const refreshed = refreshReportRetryActivity(interview, acceptedAt);
+
+    expect(refreshed).toEqual({
+      ...interview,
+      lastEffectiveActivityAt: acceptedAt,
+    });
+    expect(refreshed.version).toBe(interview.version);
+    expect(refreshed.questions).toEqual(interview.questions);
+    expect(refreshed.questions[0]?.evaluation).not.toBeNull();
+    expect(refreshed.questions[0]?.outcome).toEqual(interview.questions[0]?.outcome);
+    expect(refreshed.pendingReportKind).toBe("incomplete");
+    expect(refreshed.reportRequestedAt).toEqual(earlyEndAt);
+    expect(getInterviewExpiresAt(refreshed).getTime()).toBeGreaterThan(previousExpiry.getTime());
+    expect(() =>
+      handleInterviewCommand(refreshed, {
+        type: "record_report",
+        interviewId: refreshed.id,
+        operationId: nextOperationId(),
+        expectedVersion: refreshed.version,
+        occurredAt: new Date(acceptedAt.getTime() - 1),
+        reportId: parseReportId("too-early-report"),
+        reportKind: "incomplete",
+      }),
+    ).toThrow(/cannot precede the last effective activity/);
+    expect(() => refreshReportRetryActivity(interview, interview.lastEffectiveActivityAt)).toThrow(
+      /must advance effective activity/,
+    );
+    expect(() => refreshReportRetryActivity(created, acceptedAt)).toThrow(
+      /not awaiting a report retry/,
+    );
   });
 
   it("abandons directly without requesting a report", () => {

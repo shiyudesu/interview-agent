@@ -14,6 +14,7 @@ import {
   type AnswerEvaluationModel,
   type AnswerEvaluationRequest,
   type AnswerEvaluationResult,
+  getInterviewExpiresAt,
   type InterviewerTextEvent,
   type InterviewerTextModel,
   type InterviewerTextRequest,
@@ -22,6 +23,9 @@ import {
   parseAccountId,
   parseInterviewId,
   parseOperationId,
+  type ReportAnalysisModel,
+  type ReportAnalysisRequest,
+  type ReportAnalysisResult,
 } from "@interview-agent/domain";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -39,6 +43,7 @@ import {
   ServerOwnedOperationExecution,
 } from "../src/operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { ReportAnalysisModelError } from "../src/report-analysis-model.js";
 
 const OWNER_ID = parseAccountId("operation-runner-owner");
 const SECOND_OWNER_ID = parseAccountId("operation-runner-second-owner");
@@ -61,16 +66,19 @@ let interviewRepository: PgInterviewRepository;
 let operationRepository: PgOperationRepository;
 let evaluator: FauxAnswerEvaluationModel;
 let interviewer: FauxInterviewerTextModel;
+let reportAnalyzer: FauxReportAnalysisModel;
 let handlers: InterviewOperationHandlers;
 let operationEvents: OperationEventBroker;
-let sequence = 0;
+let commandClock = 0;
 
 class FauxAnswerEvaluationModel implements AnswerEvaluationModel {
+  readonly requests: AnswerEvaluationRequest[] = [];
   implementation: (request: AnswerEvaluationRequest) => Promise<AnswerEvaluationResult> = async (
     request,
   ) => fullEvaluation(request);
 
   evaluate(request: AnswerEvaluationRequest): Promise<AnswerEvaluationResult> {
+    this.requests.push(request);
     return this.implementation(request);
   }
 }
@@ -99,6 +107,18 @@ class FauxInterviewerTextModel implements InterviewerTextModel {
   }
 }
 
+class FauxReportAnalysisModel implements ReportAnalysisModel {
+  readonly requests: ReportAnalysisRequest[] = [];
+  implementation: (request: ReportAnalysisRequest) => Promise<ReportAnalysisResult> = async (
+    request,
+  ) => fullReportAnalysis(request);
+
+  analyze(request: ReportAnalysisRequest): Promise<ReportAnalysisResult> {
+    this.requests.push(request);
+    return this.implementation(request);
+  }
+}
+
 describe.sequential("persisted OperationRunner", () => {
   beforeAll(async () => {
     harness = await PostgresTestHarness.start();
@@ -109,7 +129,7 @@ describe.sequential("persisted OperationRunner", () => {
   }, 120_000);
 
   beforeEach(async () => {
-    sequence = 0;
+    commandClock = Date.now();
     await testDatabase.pool.query(
       `truncate table "user", question_bank_versions restart identity cascade`,
     );
@@ -128,6 +148,7 @@ describe.sequential("persisted OperationRunner", () => {
     await seedQuestionBank();
     evaluator = new FauxAnswerEvaluationModel();
     interviewer = new FauxInterviewerTextModel();
+    reportAnalyzer = new FauxReportAnalysisModel();
     operationEvents = new OperationEventBroker();
     handlers = createHandlers(evaluator, interviewer, "operation-runner-worker", operationEvents);
   });
@@ -1149,11 +1170,15 @@ describe.sequential("persisted OperationRunner", () => {
     const earlyEnd = await handlers.endEarly(
       commandInput(OWNER_ID, interviewId, "early-end", "early-end-key", 4),
     );
-    expect(earlyEnd).toMatchObject({ status: "succeeded" });
+    expect(earlyEnd).toMatchObject({
+      status: "succeeded",
+      type: "generate_report",
+      result: { reportId: expect.any(String) },
+    });
     expect(await requiredInterview(interviewId, OWNER_ID)).toMatchObject({
-      version: 5,
-      status: "report_pending",
-      pendingReportKind: "incomplete",
+      version: 6,
+      status: "early_ended",
+      pendingReportKind: null,
     });
 
     const abandonedInterviewId = await createInterview("runner-abandon", SECOND_OWNER_ID);
@@ -1224,25 +1249,390 @@ describe.sequential("persisted OperationRunner", () => {
         version,
       ),
     );
-    version += 1;
+    version += 2;
     expect(continued).toMatchObject({
       status: "succeeded",
+      type: "generate_report",
       result: {
-        interviewId,
-        interviewVersion: version,
-        reportId: null,
+        reportId: expect.any(String),
       },
     });
-    const reportPending = await reads.interviewDetail(OWNER_ID, interviewId);
-    expect(reportPending).toMatchObject({
-      status: "report_pending",
-      reportKind: "complete",
+    const completed = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(completed).toMatchObject({
+      status: "completed",
       version,
-      progress: { current: 5, total: 5 },
-      availableActions: [],
+      questionCount: 5,
+      reportId: expect.any(String),
     });
-    expect(mainQuestionTexts(reportPending)).toHaveLength(5);
-    expect(reportPending).not.toHaveProperty("currentWording");
+    expect(mainQuestionTexts(completed)).toHaveLength(5);
+    expect(completed).not.toHaveProperty("currentWording");
+  });
+
+  it("generates and exposes a complete report after normal final completion", async () => {
+    const interviewId = await createInterview("runner-complete-report");
+    const completion = await completeFiveQuestionInterview(
+      interviewId,
+      "runner-complete-report",
+      "answer",
+    );
+
+    expect(completion.operation).toMatchObject({
+      type: "generate_report",
+      status: "succeeded",
+      result: { reportId: expect.any(String) },
+    });
+    expect(operationEvents.history(completion.operation)).toEqual([
+      expect.objectContaining({
+        operationId: completion.operation.id,
+        type: "succeeded",
+      }),
+    ]);
+    expect(await requiredInterview(interviewId, OWNER_ID)).toMatchObject({
+      status: "completed",
+      version: completion.version,
+      reportId: expect.any(String),
+    });
+    expect(evaluator.requests).toHaveLength(5);
+    expect(reportAnalyzer.requests).toHaveLength(1);
+    expect(reportAnalyzer.requests[0]).toMatchObject({
+      reportKind: "complete",
+      questions: expect.arrayContaining([
+        expect.objectContaining({ evaluation: expect.any(Object) }),
+      ]),
+    });
+
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    expect(await reads.operationStatus(OWNER_ID, completion.operation.id)).toMatchObject({
+      operationId: completion.operation.id,
+      status: "succeeded",
+      result: { reportId: completion.operation.result?.["reportId"] },
+    });
+    const report = await reads.reportDetail(OWNER_ID, interviewId);
+    expect(report).toMatchObject({
+      kind: "complete",
+      overallScore: 100,
+      questions: expect.arrayContaining([
+        expect.objectContaining({ outcome: "scored", score: 100 }),
+      ]),
+    });
+    expect(report?.questions).toHaveLength(5);
+    const history = await reads.interviewHistory(OWNER_ID, { limit: 20 });
+    expect(history.items[0]).toMatchObject({
+      id: interviewId,
+      status: "completed",
+      overallScore: 100,
+      reportId: completion.operation.result?.["reportId"],
+    });
+  });
+
+  it("stores a valid all-zero complete report", async () => {
+    const interviewId = await createInterview("runner-zero-report");
+    await completeFiveQuestionInterview(interviewId, "runner-zero-report", "unknown");
+
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const report = await reads.reportDetail(OWNER_ID, interviewId);
+    expect(report).toMatchObject({
+      kind: "complete",
+      overallScore: 0,
+    });
+    expect(report?.questions).toHaveLength(5);
+    expect(report?.questions.every((question) => question.score === 0)).toBe(true);
+    expect(evaluator.requests).toHaveLength(0);
+  });
+
+  it("stores an incomplete report after early ending", async () => {
+    const interviewId = await createInterview("runner-incomplete-report");
+    await handlers.markUnknown(
+      commandInput(OWNER_ID, interviewId, "incomplete-unknown", "incomplete-unknown-key", 1),
+    );
+    const completed = await handlers.endEarly(
+      commandInput(OWNER_ID, interviewId, "incomplete-end", "incomplete-end-key", 2),
+    );
+
+    expect(completed).toMatchObject({
+      type: "generate_report",
+      status: "succeeded",
+      result: { reportId: expect.any(String) },
+    });
+    expect(await requiredInterview(interviewId, OWNER_ID)).toMatchObject({
+      status: "early_ended",
+      version: 4,
+    });
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const report = await reads.reportDetail(OWNER_ID, interviewId);
+    expect(report).toMatchObject({
+      kind: "incomplete",
+      questions: [expect.objectContaining({ outcome: "unknown", score: 0 })],
+    });
+    expect(report).not.toHaveProperty("overallScore");
+    const history = await reads.interviewHistory(OWNER_ID, { limit: 20 });
+    expect(history.items[0]).toMatchObject({
+      id: interviewId,
+      status: "early_ended",
+      reportId: completed.result?.["reportId"],
+    });
+    expect(history.items[0]).not.toHaveProperty("overallScore");
+  });
+
+  it("retries only report analysis and preserves the stored question evaluation", async () => {
+    const interviewId = await createInterview("runner-report-retry");
+    await handlers.submitAnswer({
+      ...commandInput(OWNER_ID, interviewId, "report-retry-answer", "report-retry-answer-key", 1),
+      text: "Context 会沿调用链传递取消信号，并在下游及时停止工作。",
+    });
+    const beforeFailure = await requiredInterview(interviewId, OWNER_ID);
+    const persistedEvaluation = beforeFailure.questions[0]?.evaluation;
+    expect(persistedEvaluation).not.toBeNull();
+    reportAnalyzer.implementation = async () => {
+      throw new ReportAnalysisModelError("transient_provider_failure");
+    };
+
+    const failed = await handlers.endEarly(
+      commandInput(OWNER_ID, interviewId, "report-retry-end", "report-retry-end-key", 2),
+    );
+    expect(failed).toMatchObject({
+      type: "generate_report",
+      status: "failed",
+      retryable: true,
+      error: {
+        code: "model_failure",
+        message: "Report analysis failed",
+        retryable: true,
+      },
+    });
+    expect(operationEvents.history(failed)).toEqual([
+      expect.objectContaining({
+        operationId: failed.id,
+        type: "failed",
+        failure: expect.objectContaining({ code: "model_failure", retryable: true }),
+      }),
+    ]);
+    const pending = await requiredInterview(interviewId, OWNER_ID);
+    expect(pending).toMatchObject({
+      status: "report_pending",
+      pendingReportKind: "incomplete",
+      version: 3,
+    });
+    expect(pending.questions[0]?.evaluation).toEqual(persistedEvaluation);
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    expect(await reads.interviewDetail(OWNER_ID, interviewId)).toMatchObject({
+      status: "report_pending",
+      operation: {
+        operationId: failed.id,
+        status: "failed",
+        failure: { code: "model_failure", retryable: true },
+      },
+      availableActions: ["retry"],
+    });
+
+    const previousExpiry = getInterviewExpiresAt(pending);
+    const staleCompletionTime = pending.reportRequestedAt;
+    if (staleCompletionTime === null) {
+      throw new Error("Report-pending interview is missing its request time");
+    }
+    const currentDatabaseTime = await databaseNow(testDatabase);
+    const waitMs = pending.lastEffectiveActivityAt.getTime() - currentDatabaseTime.getTime() + 2;
+    if (waitMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+    }
+
+    let completeRetry: (() => void) | undefined;
+    const retryAnalyzer = new FauxReportAnalysisModel();
+    retryAnalyzer.implementation = (request) =>
+      new Promise<ReportAnalysisResult>((resolve) => {
+        completeRetry = () => resolve(fullReportAnalysis(request));
+      });
+    const retryHandlers = createHandlers(
+      evaluator,
+      interviewer,
+      "report-retry-refresh-worker",
+      undefined,
+      retryAnalyzer,
+      5 * 60_000,
+      () => new Date(staleCompletionTime.getTime()),
+    );
+    const retryExecution = retryHandlers
+      .retry(
+        retryInput(
+          OWNER_ID,
+          interviewId,
+          "report-retry-command",
+          "report-retry-command-key",
+          failed.id,
+          3,
+        ),
+      )
+      .catch((error: unknown) => error);
+    const processing = await waitForLatestReportOperation(interviewId, "processing");
+    if (processing.lastAttemptAt === null) {
+      throw new Error("Claimed report retry is missing its attempt time");
+    }
+    const refreshed = await requiredInterview(interviewId, OWNER_ID);
+    expect(refreshed).toMatchObject({
+      status: "report_pending",
+      pendingReportKind: "incomplete",
+      reportRequestedAt: pending.reportRequestedAt,
+      version: pending.version,
+    });
+    expect(refreshed.lastEffectiveActivityAt).toEqual(processing.lastAttemptAt);
+    expect(refreshed.lastEffectiveActivityAt.getTime()).toBeGreaterThan(
+      pending.lastEffectiveActivityAt.getTime(),
+    );
+    expect(getInterviewExpiresAt(refreshed).getTime()).toBeGreaterThan(previousExpiry.getTime());
+    expect(refreshed.questions).toEqual(pending.questions);
+    expect(evaluator.requests).toHaveLength(1);
+
+    completeRetry?.();
+    const retried = await retryExecution;
+    if (retried instanceof Error) {
+      throw retried;
+    }
+    expect(retried).toMatchObject({
+      type: "retry_operation",
+      status: "succeeded",
+      result: {
+        targetOperationId: failed.id,
+        targetOperationStatus: "succeeded",
+        reportId: expect.any(String),
+      },
+    });
+    const completed = await requiredInterview(interviewId, OWNER_ID);
+    expect(completed).toMatchObject({ status: "early_ended", version: 4 });
+    expect(completed.lastEffectiveActivityAt).toEqual(processing.lastAttemptAt);
+    expect(completed.questions[0]?.evaluation).toEqual(persistedEvaluation);
+    expect(evaluator.requests).toHaveLength(1);
+    expect(reportAnalyzer.requests).toHaveLength(1);
+    expect(retryAnalyzer.requests).toHaveLength(1);
+    const report = await reads.reportDetail(OWNER_ID, interviewId);
+    expect(report).not.toBeNull();
+    if (report === null) {
+      throw new Error("Report retry did not persist a report");
+    }
+    expect(new Date(report.generatedAt).getTime()).toBeGreaterThanOrEqual(
+      processing.lastAttemptAt.getTime(),
+    );
+    expect(await operationRepository.findById(failed.id, OWNER_ID)).toMatchObject({
+      status: "succeeded",
+      result: { reportId: expect.any(String) },
+    });
+  }, 15_000);
+
+  it("returns the same report Operation for an idempotent final continue replay", async () => {
+    const interviewId = await createInterview("runner-report-idempotency");
+    let version = 1;
+    for (let position = 1; position <= 5; position += 1) {
+      await handlers.markUnknown(
+        commandInput(
+          OWNER_ID,
+          interviewId,
+          `report-idempotency-unknown-${position}`,
+          `report-idempotency-unknown-key-${position}`,
+          version,
+        ),
+      );
+      version += 1;
+      if (position < 5) {
+        await handlers.continueInterview(
+          commandInput(
+            OWNER_ID,
+            interviewId,
+            `report-idempotency-continue-${position}`,
+            `report-idempotency-continue-key-${position}`,
+            version,
+          ),
+        );
+        version += 1;
+      }
+    }
+
+    const first = await handlers.continueInterview(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        "report-idempotency-final",
+        "report-idempotency-final-key",
+        version,
+      ),
+    );
+    const replay = await handlers.continueInterview(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        "report-idempotency-final-replay",
+        "report-idempotency-final-key",
+        version,
+      ),
+    );
+    expect(replay).toEqual(first);
+    expect(first).toMatchObject({ type: "generate_report", status: "succeeded" });
+    expect(reportAnalyzer.requests).toHaveLength(1);
+  });
+
+  it("reclaims a stale report lease after restart without evaluating answers", async () => {
+    const interviewId = await createInterview("runner-report-restart");
+    await handlers.markUnknown(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        "report-restart-unknown",
+        "report-restart-unknown-key",
+        1,
+      ),
+    );
+    let rejectBlocked: ((reason: unknown) => void) | undefined;
+    const blockedAnalyzer = new FauxReportAnalysisModel();
+    blockedAnalyzer.implementation = () =>
+      new Promise<ReportAnalysisResult>((_resolve, reject) => {
+        rejectBlocked = reject;
+      });
+    const crashedHandlers = createHandlers(
+      evaluator,
+      interviewer,
+      "report-restart-old-worker",
+      undefined,
+      blockedAnalyzer,
+      20,
+    );
+    const abandonedExecution = crashedHandlers
+      .endEarly(
+        commandInput(OWNER_ID, interviewId, "report-restart-end", "report-restart-end-key", 2),
+      )
+      .catch((error: unknown) => error);
+    const processing = await waitForLatestReportOperation(interviewId, "processing");
+    await new Promise<void>((resolve) => setTimeout(resolve, 40));
+
+    const restartedAnalyzer = new FauxReportAnalysisModel();
+    const restartedHandlers = createHandlers(
+      evaluator,
+      interviewer,
+      "report-restart-new-worker",
+      undefined,
+      restartedAnalyzer,
+    );
+    const recovered = await restartedHandlers.retry(
+      retryInput(
+        OWNER_ID,
+        interviewId,
+        "report-restart-retry",
+        "report-restart-retry-key",
+        processing.id,
+        3,
+      ),
+    );
+    expect(recovered).toMatchObject({
+      status: "succeeded",
+      type: "retry_operation",
+      result: { targetOperationStatus: "succeeded", reportId: expect.any(String) },
+    });
+    expect(await requiredInterview(interviewId, OWNER_ID)).toMatchObject({
+      status: "early_ended",
+      version: 4,
+    });
+    expect(restartedAnalyzer.requests).toHaveLength(1);
+    expect(evaluator.requests).toHaveLength(0);
+
+    rejectBlocked?.(new ReportAnalysisModelError("transient_provider_failure"));
+    await abandonedExecution;
   });
 });
 
@@ -1251,12 +1641,16 @@ function createHandlers(
   textModel: InterviewerTextModel,
   leaseOwner: string,
   events?: OperationEventPublisher,
+  reportModel: ReportAnalysisModel = reportAnalyzer,
+  leaseDurationMs = 5 * 60_000,
+  now?: () => Date,
 ): InterviewOperationHandlers {
   return new InterviewOperationHandlers(
-    new OperationRunner(unitOfWork, textModel, answerModel, {
+    new OperationRunner(unitOfWork, textModel, answerModel, reportModel, {
       leaseOwner,
-      leaseDurationMs: 5 * 60_000,
+      leaseDurationMs,
       ...(events === undefined ? {} : { events }),
+      ...(now === undefined ? {} : { now }),
     }),
   );
 }
@@ -1274,6 +1668,54 @@ async function createInterview(
   return interviewId;
 }
 
+async function completeFiveQuestionInterview(
+  interviewId: ReturnType<typeof parseInterviewId>,
+  suffix: string,
+  outcome: "answer" | "unknown",
+): Promise<{ readonly operation: StoredOperation; readonly version: number }> {
+  let version = 1;
+  let reportOperation: StoredOperation | null = null;
+  for (let position = 1; position <= 5; position += 1) {
+    if (outcome === "answer") {
+      await handlers.submitAnswer({
+        ...commandInput(
+          OWNER_ID,
+          interviewId,
+          `${suffix}-answer-${position}`,
+          `${suffix}-answer-key-${position}`,
+          version,
+        ),
+        text: `第 ${position} 题回答说明了核心机制、适用边界和调用链影响。`,
+      });
+    } else {
+      await handlers.markUnknown(
+        commandInput(
+          OWNER_ID,
+          interviewId,
+          `${suffix}-unknown-${position}`,
+          `${suffix}-unknown-key-${position}`,
+          version,
+        ),
+      );
+    }
+    version += 1;
+    reportOperation = await handlers.continueInterview(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        `${suffix}-continue-${position}`,
+        `${suffix}-continue-key-${position}`,
+        version,
+      ),
+    );
+    version += position === 5 ? 2 : 1;
+  }
+  if (reportOperation === null) {
+    throw new Error("Complete interview did not produce a report Operation");
+  }
+  return { operation: reportOperation, version };
+}
+
 function commandInput(
   accountId: AccountId,
   interviewId: ReturnType<typeof parseInterviewId>,
@@ -1281,14 +1723,14 @@ function commandInput(
   idempotencyKey: string,
   expectedVersion: number,
 ) {
-  sequence += 1;
+  commandClock = Math.max(Date.now(), commandClock + 1);
   return {
     accountId,
     interviewId,
     operationId: parseOperationId(operation),
     idempotencyKey,
     expectedVersion,
-    occurredAt: new Date(Date.now() + sequence),
+    occurredAt: new Date(commandClock),
   };
 }
 
@@ -1300,7 +1742,7 @@ function retryInput(
   targetOperationId: ReturnType<typeof parseOperationId>,
   expectedVersion: number,
 ) {
-  sequence += 1;
+  commandClock = Math.max(Date.now(), commandClock + 1);
   return {
     accountId,
     interviewId,
@@ -1308,7 +1750,7 @@ function retryInput(
     targetOperationId,
     idempotencyKey,
     expectedVersion,
-    occurredAt: new Date(Date.now() + sequence),
+    occurredAt: new Date(commandClock),
   };
 }
 
@@ -1326,6 +1768,33 @@ function fullEvaluation(request: AnswerEvaluationRequest): AnswerEvaluationResul
     metadata: {
       ...MODEL_METADATA,
       questionVersion: request.question.questionVersion,
+    },
+  };
+}
+
+function fullReportAnalysis(request: ReportAnalysisRequest): ReportAnalysisResult {
+  return {
+    overallExplanation: "本次回答体现了已完成题目的知识掌握情况。",
+    strengths: ["能够围绕问题说明核心机制。"],
+    weaknesses: ["部分知识点仍需要进一步巩固。"],
+    priorities: ["优先复习未掌握或未作答的知识点。"],
+    learningSuggestions: ["结合实际场景复盘相关机制。"],
+    perQuestion: request.questions.map(({ question, evaluation }) => ({
+      questionId: question.questionId,
+      answerSummary:
+        evaluation === null ? "该题没有可用于评分的作答。" : "回答覆盖了已记录的知识点。",
+      scoreRationale:
+        evaluation === null ? "该题按已记录的未作答结果处理。" : "结论依据已保存的结构化评估结果。",
+      improvementSuggestions: ["针对缺失知识点进行复习并结合场景练习。"],
+      evidenceMaterialIds:
+        evaluation === null
+          ? []
+          : [...new Set(evaluation.rubricItems.flatMap((item) => item.evidenceMaterialIds))],
+    })),
+    metadata: {
+      ...MODEL_METADATA,
+      purpose: "report_analysis",
+      questionVersion: null,
     },
   };
 }
@@ -1371,6 +1840,23 @@ async function waitForOperation(
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Operation ${operationId} did not reach ${status}`);
+}
+
+async function waitForLatestReportOperation(
+  interviewId: ReturnType<typeof parseInterviewId>,
+  status: StoredOperation["status"],
+): Promise<StoredOperation> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const operation = await operationRepository.findLatestIncompleteByInterviewId(
+      interviewId,
+      OWNER_ID,
+    );
+    if (operation?.type === "generate_report" && operation.status === status) {
+      return operation;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Report Operation for ${interviewId} did not reach ${status}`);
 }
 
 async function seedQuestionBank(): Promise<void> {

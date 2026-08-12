@@ -17,11 +17,14 @@ import {
   type AnswerEvaluationModel,
   type AnswerEvaluationResult,
   type AnswerMaterialId,
+  aggregateCompleteInterviewScore,
+  aggregateDomainScores,
   type ContinueInterviewCommand,
   cancelInterviewOperation,
   completeInterviewOperation,
   getCurrentQuestion,
   handleInterviewCommand,
+  type ImmutableReportSnapshot,
   type Interview,
   type InterviewCommandResult,
   InterviewDomainError,
@@ -29,14 +32,25 @@ import {
   type InterviewId,
   type InterviewOperationPlan,
   InterviewVersionConflictError,
+  KNOWLEDGE_DOMAINS,
   type MarkQuestionUnknownCommand,
   type ModelCallMetadata,
   type OperationId,
   parseAnswerMaterialId,
   parseEvaluationId,
+  parseImmutableReportSnapshot,
   parseMessageId,
+  parseOperationId,
+  parseReportId,
+  type ReportAnalysisModel,
+  type ReportAnalysisRequest,
+  type ReportAnalysisResult,
+  type ReportId,
+  type ReportKind,
+  type ReportQuestionInput,
   type RequestQuestionClarificationCommand,
   refreshInterviewOperation,
+  refreshReportRetryActivity,
   retryInterviewOperation,
   type SkipQuestionCommand,
   type SubmitAnswerCommand,
@@ -52,8 +66,10 @@ import {
   type InterviewerTextModelErrorCode,
 } from "./interviewer-text-model.js";
 import type { OperationEventPublisher } from "./operation-events.js";
+import { ReportAnalysisModelError } from "./report-analysis-model.js";
 
 export const INTERVIEW_COMMAND_IDEMPOTENCY_SCOPE = "interview-command";
+export const REPORT_GENERATION_IDEMPOTENCY_SCOPE = "report-generation";
 const DEFAULT_OPERATION_LEASE_MS = 5 * 60 * 1_000;
 
 export interface OperationCommandInput {
@@ -122,9 +138,15 @@ interface ClaimedModelOperation {
   readonly retryCommand?: ClaimedOperation;
 }
 
+interface ClaimedReportOperation {
+  readonly claimed: ClaimedOperation;
+  readonly retryCommand?: ClaimedOperation;
+}
+
 type PreparedOperation =
   | { readonly kind: "canonical"; readonly operation: StoredOperation }
-  | { readonly kind: "model"; readonly execution: ClaimedModelOperation };
+  | { readonly kind: "model"; readonly execution: ClaimedModelOperation }
+  | { readonly kind: "report"; readonly execution: ClaimedReportOperation };
 
 type ModelCompletion =
   | {
@@ -160,6 +182,7 @@ export class OperationRunner {
     private readonly unitOfWork: PgRepositoryUnitOfWork,
     private readonly interviewer: InterviewerTextModel,
     private readonly evaluator: AnswerEvaluationModel,
+    private readonly reportAnalyzer: ReportAnalysisModel,
     private readonly options: OperationRunnerOptions,
   ) {
     this.creationService = new InterviewCreationService(unitOfWork);
@@ -250,7 +273,9 @@ export class OperationRunner {
     if (prepared.kind === "canonical") {
       return prepared.operation;
     }
-    return this.executeModelOperation(prepared.execution);
+    return prepared.kind === "model"
+      ? this.executeModelOperation(prepared.execution)
+      : this.executeReportOperation(prepared.execution);
   }
 
   async retry(input: RetryInterviewOperationInput): Promise<StoredOperation> {
@@ -316,7 +341,8 @@ export class OperationRunner {
           target.interviewId !== input.interviewId ||
           (target.type !== "submit_answer" &&
             target.type !== "submit_supplement" &&
-            target.type !== "request_question_clarification")
+            target.type !== "request_question_clarification" &&
+            target.type !== "generate_report")
         ) {
           throw new RepositoryOperationRetryConflictError(input.targetOperationId);
         }
@@ -353,6 +379,26 @@ export class OperationRunner {
           throw new RepositoryOperationRetryConflictError(input.targetOperationId);
         }
 
+        if (target.type === "generate_report") {
+          assertReportOperationMatchesInterview(interview, claimed.operation);
+          const acceptedInterview = refreshReportRetryActivity(
+            interview,
+            requiredDate(claimed.operation.lastAttemptAt, "report retry attempt time"),
+          );
+          await repositories.interviews.save({
+            previous: interview,
+            current: acceptedInterview,
+            events: [],
+          });
+          return {
+            kind: "report",
+            execution: {
+              claimed,
+              retryCommand,
+            },
+          };
+        }
+
         const acceptedAt = requiredDate(claimed.operation.lastAttemptAt, "retry attempt time");
         const acceptedInterview =
           target.status === "failed"
@@ -385,7 +431,9 @@ export class OperationRunner {
     if (prepared.kind === "canonical") {
       return prepared.operation;
     }
-    return this.executeModelOperation(prepared.execution);
+    return prepared.kind === "model"
+      ? this.executeModelOperation(prepared.execution)
+      : this.executeReportOperation(prepared.execution);
   }
 
   private failRetryCommand(
@@ -496,7 +544,17 @@ export class OperationRunner {
         createdAt: request.occurredAt,
       });
       if (created.operation.status !== "pending") {
-        return { kind: "canonical", operation: created.operation };
+        const linkedReportId = linkedReportOperationId(created.operation);
+        return {
+          kind: "canonical",
+          operation:
+            linkedReportId === null
+              ? created.operation
+              : requiredOperation(
+                  await repositories.operations.findById(linkedReportId, request.accountId),
+                  linkedReportId,
+                ),
+        };
       }
       const openCreation = await repositories.operations.findOpenCreationByInterview(
         request.interviewId,
@@ -584,17 +642,53 @@ export class OperationRunner {
         };
       }
 
+      const reportRequest = result.events.find((event) => event.type === "report_requested");
+      const reportOperationId =
+        reportRequest === undefined ? null : reportOperationIdFor(claimed.operation.id);
       const completed = await repositories.operations.completeSuccess({
         ...completionLease(claimed),
         operationId: claimed.operation.id,
         accountId: request.accountId,
-        result: operationResult(result.interview),
+        result: operationResult(result.interview, reportOperationId),
       });
       await repositories.interviews.save({
         previous: currentInterview,
         current: result.interview,
         events: result.events,
       });
+      if (reportRequest !== undefined && reportOperationId !== null) {
+        const reportOperation = await repositories.operations.createOrLoad({
+          id: reportOperationId,
+          accountId: request.accountId,
+          interviewId: request.interviewId,
+          idempotencyScope: REPORT_GENERATION_IDEMPOTENCY_SCOPE,
+          type: "generate_report",
+          idempotencyKey: String(request.interviewId),
+          expectedVersion: result.interview.version,
+          input: reportOperationInput(reportRequest.reportKind, reportRequest.occurredAt),
+          createdAt: reportRequest.occurredAt,
+        });
+        if (reportOperation.operation.status !== "pending") {
+          return { kind: "canonical", operation: reportOperation.operation };
+        }
+        const reportClaim = await repositories.operations.claimPending(
+          this.claimInput(reportOperation.operation),
+        );
+        if (reportClaim === null) {
+          return {
+            kind: "canonical",
+            operation: requiredOperation(
+              await repositories.operations.findById(reportOperationId, request.accountId),
+              reportOperationId,
+            ),
+          };
+        }
+        assertReportOperationMatchesInterview(result.interview, reportClaim.operation);
+        return {
+          kind: "report",
+          execution: { claimed: reportClaim },
+        };
+      }
       return { kind: "canonical", operation: completed };
     });
   }
@@ -807,6 +901,176 @@ export class OperationRunner {
     });
     if (finalized.responseOperation.id !== finalized.failedOperation.id) {
       publishOperationEvent(() => this.events.publishTerminal(finalized.failedOperation));
+    }
+    return finalized.responseOperation;
+  }
+
+  private async executeReportOperation(
+    execution: ClaimedReportOperation,
+  ): Promise<StoredOperation> {
+    publishOperationEvent(() => this.events.beginAttempt(execution.claimed.operation));
+    let request: ReportAnalysisRequest;
+    try {
+      request = await this.unitOfWork.run(async (repositories) => {
+        const operation = requiredOperation(
+          await repositories.operations.findById(
+            execution.claimed.operation.id,
+            execution.claimed.operation.accountId,
+          ),
+          execution.claimed.operation.id,
+        );
+        const interview = requiredInterview(
+          await repositories.interviews.findById(operation.interviewId, operation.accountId),
+          operation.interviewId,
+        );
+        assertReportOperationMatchesInterview(interview, operation);
+        return createReportAnalysisRequest(interview);
+      });
+    } catch (error) {
+      const failure = classifyReportFailure(error);
+      if (failure === null) {
+        throw error;
+      }
+      return this.failReportOperation(execution, failure);
+    }
+
+    let analysis: ReportAnalysisResult;
+    try {
+      analysis = await this.reportAnalyzer.analyze(request);
+    } catch (error) {
+      const failure = classifyReportFailure(error);
+      if (failure === null) {
+        throw error;
+      }
+      return this.failReportOperation(execution, failure);
+    }
+
+    try {
+      return await this.completeReportOperation(execution, analysis);
+    } catch (error) {
+      const failure = classifyReportFailure(error);
+      if (failure === null) {
+        throw error;
+      }
+      return this.failReportOperation(execution, failure);
+    }
+  }
+
+  private async completeReportOperation(
+    execution: ClaimedReportOperation,
+    analysis: ReportAnalysisResult,
+  ): Promise<StoredOperation> {
+    const finalized = await this.unitOfWork.run(async (repositories) => {
+      const operation = requiredOperation(
+        await repositories.operations.findById(
+          execution.claimed.operation.id,
+          execution.claimed.operation.accountId,
+        ),
+        execution.claimed.operation.id,
+      );
+      const interview = requiredInterview(
+        await repositories.interviews.findById(operation.interviewId, operation.accountId),
+        operation.interviewId,
+      );
+      assertReportOperationMatchesInterview(interview, operation);
+      const reportKind = requiredReportKind(operation);
+      const completedAt = notBefore(
+        notBefore(this.now(), interview.reportRequestedAt ?? operation.createdAt),
+        interview.lastEffectiveActivityAt,
+      );
+      const reportId = reportIdFor(operation.id);
+      const report = createReportPersistence(
+        interview,
+        reportKind,
+        reportId,
+        completedAt,
+        analysis,
+      );
+      const transition = handleInterviewCommand(interview, {
+        type: "record_report",
+        interviewId: interview.id,
+        operationId: operation.id,
+        expectedVersion: interview.version,
+        occurredAt: completedAt,
+        reportId,
+        reportKind,
+      });
+      if (transition.kind !== "transition") {
+        throw new OperationRunnerError("Report completion did not produce a transition");
+      }
+
+      const completedOperation = await repositories.operations.completeSuccess({
+        ...completionLease(execution.claimed),
+        operationId: operation.id,
+        accountId: operation.accountId,
+        result: { reportId: String(reportId) },
+      });
+      await repositories.interviews.save({
+        previous: interview,
+        current: transition.interview,
+        events: transition.events,
+        report,
+      });
+
+      if (execution.retryCommand === undefined) {
+        return {
+          responseOperation: completedOperation,
+          completedOperation,
+        };
+      }
+      const responseOperation = await repositories.operations.completeSuccess({
+        ...completionLease(execution.retryCommand),
+        operationId: execution.retryCommand.operation.id,
+        accountId: execution.retryCommand.operation.accountId,
+        result: retryOperationResult(completedOperation, transition.interview),
+      });
+      return {
+        responseOperation,
+        completedOperation,
+      };
+    });
+
+    publishOperationEvent(() => this.events.publishTerminal(finalized.completedOperation));
+    if (finalized.responseOperation.id !== finalized.completedOperation.id) {
+      publishOperationEvent(() => this.events.publishTerminal(finalized.responseOperation));
+    }
+    return finalized.responseOperation;
+  }
+
+  private async failReportOperation(
+    execution: ClaimedReportOperation,
+    failure: OperationFailure,
+  ): Promise<StoredOperation> {
+    const finalized = await this.unitOfWork.run(async (repositories) => {
+      const failedOperation = await repositories.operations.completeFailure({
+        ...completionLease(execution.claimed),
+        operationId: execution.claimed.operation.id,
+        accountId: execution.claimed.operation.accountId,
+        error: failure,
+        retryable: true,
+      });
+      if (execution.retryCommand === undefined) {
+        return {
+          responseOperation: failedOperation,
+          failedOperation,
+        };
+      }
+      const responseOperation = await repositories.operations.completeFailure({
+        ...completionLease(execution.retryCommand),
+        operationId: execution.retryCommand.operation.id,
+        accountId: execution.retryCommand.operation.accountId,
+        error: { ...failure, retryable: false },
+        retryable: false,
+      });
+      return {
+        responseOperation,
+        failedOperation,
+      };
+    });
+
+    publishOperationEvent(() => this.events.publishTerminal(finalized.failedOperation));
+    if (finalized.responseOperation.id !== finalized.failedOperation.id) {
+      publishOperationEvent(() => this.events.publishTerminal(finalized.responseOperation));
     }
     return finalized.responseOperation;
   }
@@ -1096,6 +1360,13 @@ function creationOperationInput(interview: Interview): JsonObject {
   };
 }
 
+function reportOperationInput(reportKind: ReportKind, requestedAt: Date): JsonObject {
+  return {
+    reportKind,
+    reportRequestedAt: requestedAt.toISOString(),
+  };
+}
+
 function assertExistingCreationMatches(
   existing: StoredOperation,
   input: CreateInterviewOperationInput,
@@ -1122,11 +1393,15 @@ function commandBase(operation: StoredOperation) {
   };
 }
 
-function operationResult(interview: Interview): JsonObject {
+function operationResult(
+  interview: Interview,
+  reportOperationId: OperationId | null = null,
+): JsonObject {
   return {
     interviewId: String(interview.id),
     interviewVersion: interview.version,
     reportId: interview.reportId === null ? null : String(interview.reportId),
+    ...(reportOperationId === null ? {} : { reportOperationId: String(reportOperationId) }),
   };
 }
 
@@ -1149,6 +1424,319 @@ function retryOperationResult(target: StoredOperation, interview: Interview): Js
   };
 }
 
+function linkedReportOperationId(operation: StoredOperation): OperationId | null {
+  const value = operation.result?.["reportOperationId"];
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    throw new OperationRunnerError(`Operation ${operation.id} has an invalid report link`);
+  }
+  return parseOperationId(value);
+}
+
+function reportOperationIdFor(operationId: OperationId): OperationId {
+  return parseOperationId(derivedIdentifier("report-operation", operationId));
+}
+
+function reportIdFor(operationId: OperationId): ReportId {
+  return parseReportId(derivedIdentifier("report", operationId));
+}
+
+function requiredReportKind(operation: StoredOperation): ReportKind {
+  const value = operation.input["reportKind"];
+  if (value !== "complete" && value !== "incomplete") {
+    throw new OperationRunnerError(`Operation ${operation.id} has an invalid report kind`);
+  }
+  return value;
+}
+
+function assertReportOperationMatchesInterview(
+  interview: Interview,
+  operation: StoredOperation,
+): void {
+  if (
+    operation.type !== "generate_report" ||
+    operation.interviewId !== interview.id ||
+    operation.accountId !== interview.accountId ||
+    interview.status !== "report_pending" ||
+    interview.pendingReportKind === null ||
+    interview.pendingReportKind !== requiredReportKind(operation) ||
+    operation.expectedVersion !== interview.version ||
+    interview.reportRequestedAt === null ||
+    operation.input["reportRequestedAt"] !== interview.reportRequestedAt.toISOString()
+  ) {
+    throw new OperationRunnerError(
+      `Operation ${operation.id} does not match report-pending interview ${interview.id}`,
+    );
+  }
+}
+
+function createReportAnalysisRequest(interview: Interview): ReportAnalysisRequest {
+  if (interview.status !== "report_pending" || interview.pendingReportKind === null) {
+    throw new OperationRunnerError(`Interview ${interview.id} is not awaiting a report`);
+  }
+  const selectedQuestions = interview.questions.filter((question) => question.outcome !== null);
+  if (
+    selectedQuestions.length === 0 ||
+    (interview.pendingReportKind === "complete" &&
+      selectedQuestions.length !== interview.questionCount)
+  ) {
+    throw new OperationRunnerError(`Interview ${interview.id} has invalid report coverage`);
+  }
+
+  const questions: ReportQuestionInput[] = selectedQuestions.map((questionState) => {
+    const question = requiredBlueprintQuestion(interview, questionState.position);
+    const outcome = questionState.outcome;
+    if (outcome === null) {
+      throw new OperationRunnerError(`Interview ${interview.id} report question has no outcome`);
+    }
+    if (questionState.evaluation === null) {
+      if (outcome.kind !== "unknown" && outcome.kind !== "skipped") {
+        throw new OperationRunnerError(
+          `Interview ${interview.id} report question has no structured evaluation`,
+        );
+      }
+      return {
+        question,
+        answerMaterial: [],
+        evaluation: null,
+        outcome,
+      };
+    }
+    return {
+      question,
+      answerMaterial: questionState.answerMaterial,
+      evaluation: questionState.evaluation,
+    };
+  });
+  const assessedDomains = KNOWLEDGE_DOMAINS.filter((domain) =>
+    questions.some((question) => question.question.domain === domain),
+  );
+  return {
+    reportKind: interview.pendingReportKind,
+    questions,
+    assessedDomains,
+  };
+}
+
+function createReportPersistence(
+  interview: Interview,
+  reportKind: ReportKind,
+  reportId: ReportId,
+  createdAt: Date,
+  analysis: ReportAnalysisResult,
+) {
+  const request = createReportAnalysisRequest(interview);
+  if (
+    request.reportKind !== reportKind ||
+    analysis.perQuestion.length !== request.questions.length
+  ) {
+    throw new OperationRunnerError("Report analysis coverage does not match the interview");
+  }
+
+  const selectedQuestionStates = interview.questions.filter(
+    (question) => question.outcome !== null,
+  );
+  const reportQuestions = selectedQuestionStates.map((questionState, index) => {
+    const questionAnalysis = analysis.perQuestion[index];
+    if (questionAnalysis === undefined) {
+      throw new OperationRunnerError("Report analysis is missing question feedback");
+    }
+    return createReportQuestionFeedback(interview, questionState, questionAnalysis);
+  });
+  const selectedScores = selectedQuestionStates.map((questionState) => {
+    const outcome = questionState.outcome;
+    if (outcome === null) {
+      throw new OperationRunnerError("Report question has no deterministic outcome");
+    }
+    return {
+      domain: requiredBlueprintQuestion(interview, questionState.position).domain,
+      outcome,
+    };
+  });
+  const domains = aggregateDomainScores(selectedScores);
+  const common = {
+    reportId,
+    interviewId: interview.id,
+    accountId: interview.accountId,
+    generatedAt: createdAt.toISOString(),
+    overallExplanation: analysis.overallExplanation,
+    strengths: analysis.strengths,
+    weaknesses: analysis.weaknesses,
+    priorities: analysis.priorities,
+    learningSuggestions: analysis.learningSuggestions,
+    schemaVersion: analysis.metadata.schemaVersion,
+    modelMetadata: {
+      provider: analysis.metadata.provider,
+      modelId: analysis.metadata.modelId,
+      promptVersion: analysis.metadata.promptVersion,
+      schemaVersion: analysis.metadata.schemaVersion,
+      questionVersion: analysis.metadata.questionVersion,
+      purpose: analysis.metadata.purpose,
+      latencyMs: analysis.metadata.latencyMs,
+      tokens: {
+        inputTokens: analysis.metadata.inputTokens,
+        outputTokens: analysis.metadata.outputTokens,
+      },
+    },
+    questionVersions: reportQuestions.map((question) => ({
+      questionId: question.questionId,
+      questionVersion: question.questionVersion,
+    })),
+    domains,
+    questions: reportQuestions,
+  };
+  const snapshotValue =
+    reportKind === "complete"
+      ? {
+          kind: "complete" as const,
+          ...common,
+          overallScore: aggregateCompleteInterviewScore(selectedScores, interview.questionCount)
+            .overallScore,
+        }
+      : {
+          kind: "incomplete" as const,
+          ...common,
+        };
+  let snapshot: ImmutableReportSnapshot;
+  try {
+    snapshot = parseImmutableReportSnapshot(snapshotValue);
+  } catch {
+    throw new OperationRunnerError("Generated report snapshot is invalid");
+  }
+  return {
+    id: reportId,
+    kind: reportKind,
+    schemaVersion: snapshot.schemaVersion,
+    snapshot,
+    modelMetadata: analysis.metadata,
+    createdAt,
+  };
+}
+
+function createReportQuestionFeedback(
+  interview: Interview,
+  questionState: Interview["questions"][number],
+  analysis: ReportAnalysisResult["perQuestion"][number],
+): ImmutableReportSnapshot["questions"][number] {
+  const question = requiredBlueprintQuestion(interview, questionState.position);
+  const outcome = questionState.outcome;
+  if (outcome === null || analysis.questionId !== question.questionId) {
+    throw new OperationRunnerError("Report question analysis order is invalid");
+  }
+  const questionReference = {
+    source: "question_snapshot" as const,
+    questionId: question.questionId,
+  };
+  const evaluationEvidenceIds = new Set(
+    questionState.evaluation?.rubricItems.flatMap((item) => item.evidenceMaterialIds) ?? [],
+  );
+  const analysisEvidence = analysis.evidenceMaterialIds
+    .filter((id) => evaluationEvidenceIds.has(id))
+    .map((answerMaterialId) => ({
+      source: "answer_material" as const,
+      answerMaterialId,
+    }));
+  const matchedKnowledgePoints =
+    questionState.evaluation?.rubricItems
+      .filter((item) => item.awardedPoints > 0)
+      .map((item) => ({
+        rubricItemId: item.rubricItemId,
+        summary: "回答中已体现该知识点。",
+        awardedPoints: item.awardedPoints,
+        evidence: item.evidenceMaterialIds.map((answerMaterialId) => ({
+          source: "answer_material" as const,
+          answerMaterialId,
+        })),
+      })) ?? [];
+  const missingOrIncorrectPoints =
+    questionState.evaluation === null
+      ? [
+          {
+            rubricItemId: requiredRubricItemId(question, interview.id),
+            summary:
+              outcome.kind === "unknown"
+                ? "该题涉及的知识点尚未掌握。"
+                : "该题涉及的知识点尚未作答。",
+            evidence: [questionReference],
+          },
+        ]
+      : questionState.evaluation.rubricItems.flatMap((item) =>
+          item.missingOrIncorrectPoints.map((summary) => ({
+            rubricItemId: item.rubricItemId,
+            summary,
+            evidence: [questionReference],
+          })),
+        );
+  const evidence = dedupeReportEvidence([
+    questionReference,
+    ...analysisEvidence,
+    ...matchedKnowledgePoints.flatMap((point) => point.evidence),
+  ]);
+  const common = {
+    questionId: question.questionId,
+    questionVersion: question.questionVersion,
+    domain: question.domain,
+    position: questionState.position,
+    displayedQuestion: question.displayedWording,
+    answerSummary: analysis.answerSummary,
+    matchedKnowledgePoints,
+    missingOrIncorrectPoints,
+    scoreRationale: analysis.scoreRationale,
+    improvementSuggestions: analysis.improvementSuggestions,
+    evidence,
+  };
+  return outcome.kind === "scored"
+    ? {
+        ...common,
+        outcome: "scored",
+        score: outcome.score,
+      }
+    : {
+        ...common,
+        outcome: outcome.kind,
+        score: 0,
+        zeroScoreReason: outcome.zeroScoreReason,
+      };
+}
+
+function requiredBlueprintQuestion(interview: Interview, position: number) {
+  const item = interview.blueprint.questions[position - 1];
+  if (item === undefined || item.position !== position) {
+    throw new OperationRunnerError(`Interview ${interview.id} question snapshot is unavailable`);
+  }
+  return item.question;
+}
+
+function requiredRubricItemId(
+  question: Interview["blueprint"]["questions"][number]["question"],
+  interviewId: InterviewId,
+) {
+  const rubricItem = question.rubric[0];
+  if (rubricItem === undefined) {
+    throw new OperationRunnerError(`Interview ${interviewId} question Rubric is unavailable`);
+  }
+  return rubricItem.id;
+}
+
+function dedupeReportEvidence(
+  references: readonly ImmutableReportSnapshot["questions"][number]["evidence"][number][],
+): readonly ImmutableReportSnapshot["questions"][number]["evidence"][number][] {
+  const seen = new Set<string>();
+  return references.filter((reference) => {
+    const key =
+      reference.source === "answer_material"
+        ? `answer:${reference.answerMaterialId}`
+        : `question:${reference.questionId}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function operationFailure(
   message: string,
   retryable: boolean,
@@ -1168,6 +1756,24 @@ function classifyModelFailure(error: unknown): OperationFailure | null {
   }
   if (error instanceof InterviewerTextModelError) {
     return modelFailure(error.code, error.message);
+  }
+  return null;
+}
+
+function classifyReportFailure(error: unknown): OperationFailure | null {
+  if (error instanceof ReportAnalysisModelError) {
+    return {
+      code: "model_failure",
+      message: "Report analysis failed",
+      retryable: true,
+    };
+  }
+  if (error instanceof OperationRunnerError) {
+    return {
+      code: "operation_failed",
+      message: "Report generation failed",
+      retryable: true,
+    };
   }
   return null;
 }

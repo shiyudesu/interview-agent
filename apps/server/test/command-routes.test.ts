@@ -417,6 +417,61 @@ describe("interview command routes", () => {
     });
   });
 
+  it("returns canonical report Operation results and stable retryable failures", async () => {
+    const { dependencies, handlers } = commandDependencies();
+    handlers.continueInterview
+      .mockImplementationOnce(async (input) =>
+        operation(input, "generate_report", {
+          result: { reportId: "report-final" },
+        }),
+      )
+      .mockImplementationOnce(async (input) =>
+        operation(input, "generate_report", {
+          status: "failed",
+          retryable: true,
+          result: null,
+          error: {
+            code: "model_failure",
+            message: "provider internals",
+            retryable: true,
+          },
+        }),
+      );
+    const instance = await createApp(dependencies);
+
+    const succeeded = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews/interview-1/continue",
+      headers: { "idempotency-key": "report-success-key" },
+      payload: { expectedVersion: 3 },
+    });
+    expect(succeeded.statusCode).toBe(200);
+    expect(succeeded.json()).toMatchObject({
+      operationId: "server-operation-1",
+      status: "succeeded",
+      result: { reportId: "report-final" },
+    });
+
+    const failed = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews/interview-1/continue",
+      headers: { "idempotency-key": "report-failure-key" },
+      payload: { expectedVersion: 3 },
+    });
+    expect(failed.statusCode).toBe(503);
+    expect(failed.json()).toEqual({
+      error: {
+        code: "operation_failure",
+        operationId: "server-operation-2",
+        failure: {
+          code: "model_failure",
+          message: "Model processing failed.",
+          retryable: true,
+        },
+      },
+    });
+  });
+
   it("maps model failures, command rejection, and version conflicts without leaking details", async () => {
     const { dependencies, handlers } = commandDependencies();
     const instance = await createApp(dependencies);

@@ -66,7 +66,7 @@
 - [x] 7.3 Add canonical JSON endpoints for the current account, active interview, interview detail, Operation status, history, and report detail.
 - [x] 7.4 Add the Operation SSE endpoint with operation IDs, monotonic event sequence numbers, text deltas, terminal status events, and disconnect-safe processing.
 - [x] 7.5 Wire the existing domain/persistence supplement window through Operation handlers and API responses so the next main question is not revealed until the user continues.
-- [ ] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
+- [x] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
 - [ ] 7.7 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.
 - [ ] 7.8 Add API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, and SSE disconnect recovery.
 

@@ -392,6 +392,29 @@ export function refreshInterviewOperation(
   };
 }
 
+export function refreshReportRetryActivity(interview: Interview, acceptedAt: Date): Interview {
+  assertValidDate(acceptedAt, "report retry acceptance time");
+  if (
+    interview.status !== "report_pending" ||
+    interview.phase !== null ||
+    interview.pendingOperation !== null ||
+    interview.pendingReportKind === null ||
+    interview.reportRequestedAt === null ||
+    interview.reportId !== null
+  ) {
+    throw new InvalidInterviewCommandError("Interview is not awaiting a report retry");
+  }
+  if (acceptedAt.getTime() <= interview.lastEffectiveActivityAt.getTime()) {
+    throw new InvalidInterviewCommandError(
+      "Report retry acceptance time must advance effective activity",
+    );
+  }
+  return {
+    ...interview,
+    lastEffectiveActivityAt: cloneDate(acceptedAt),
+  };
+}
+
 export function getInterviewProgress(interview: Interview): {
   readonly current: number;
   readonly total: InterviewQuestionCount;

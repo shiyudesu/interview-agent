@@ -82,6 +82,29 @@ export function validateInterviewSave(change: InterviewSave): void {
 }
 
 function validateEventlessTransition(previous: Interview, current: Interview): void {
+  if (
+    previous.status === "report_pending" &&
+    current.status === "report_pending" &&
+    previous.phase === null &&
+    current.phase === null &&
+    previous.pendingOperation === null &&
+    current.pendingOperation === null &&
+    previous.pendingReportKind !== null &&
+    previous.reportRequestedAt !== null &&
+    previous.reportId === null &&
+    current.lastEffectiveActivityAt.getTime() > previous.lastEffectiveActivityAt.getTime()
+  ) {
+    assertAggregateEquals(
+      current,
+      {
+        ...previous,
+        lastEffectiveActivityAt: cloneDate(current.lastEffectiveActivityAt),
+      },
+      "report retry activity refresh",
+    );
+    return;
+  }
+
   if (previous.pendingOperation === null && current.pendingOperation !== null) {
     const pending = current.pendingOperation;
     const isInitialAcceptance = current.version === previous.version + 1;

@@ -97,6 +97,21 @@ After the final question is frozen, the interview enters `report_pending`. A suc
 
 Early ending enters a partial-report pending path and becomes `early_ended` only after the incomplete report is stored. Explicit abandonment and expiry move directly to `abandoned` without a report.
 
+Final continue and early end create a persisted `generate_report` Operation after the aggregate
+enters complete or incomplete `report_pending`. Report analysis consumes only immutable question
+snapshots plus already stored structured outcomes and evaluations; it never calls the answer
+evaluator or recomputes completed question scoring. Success stores the immutable report, completes
+the Operation, and transitions to `completed` or `early_ended` in one transaction. All-zero complete
+reports remain valid.
+
+A model or transient report failure completes only the report Operation as retryable and leaves the
+aggregate, evaluations, outcomes, and report request unchanged. Explicit retry and stale-lease
+recovery reclaim only that `generate_report` Operation. Retry acceptance refreshes effective
+activity from the database claim time without advancing the interview version, extending expiry
+while preserving every assessment fact; report completion cannot precede that refreshed activity.
+The retry command and target Operation terminate atomically, and canonical JSON/SSE continue to
+surface only the report retry action until the report is stored.
+
 ### 3. Use explicit commands rather than infer control intent from text
 
 The API will expose commands for:

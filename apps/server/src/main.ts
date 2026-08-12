@@ -18,6 +18,7 @@ import { createModelRuntime, type ModelRuntime } from "./model-runtime.js";
 import { createOperationEventRouteDependencies, OperationEventBroker } from "./operation-events.js";
 import { InterviewOperationHandlers, OperationRunner } from "./operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "./read-routes.js";
+import { PiReportAnalysisModel } from "./report-analysis-model.js";
 import { installGracefulShutdown } from "./shutdown.js";
 
 const config = loadServerConfig();
@@ -41,6 +42,7 @@ const interviewOperations = new InterviewOperationHandlers(
     unitOfWork,
     new PiAgentInterviewerTextModel(modelRuntime),
     new PiAnswerEvaluationModel(modelRuntime),
+    new PiReportAnalysisModel(modelRuntime),
     {
       leaseOwner: `server-${randomUUID()}`,
       events: operationEventBroker,
