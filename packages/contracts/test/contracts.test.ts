@@ -4,16 +4,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   AbandonInterviewRequestSchema,
+  AccountDeletionNotFoundResponseSchema,
   ActiveInterviewProgressSchema,
   ActiveInterviewResponseSchema,
   CompleteReportResponseSchema,
   ContinueInterviewRequestSchema,
   CreateInterviewRequestSchema,
+  DeletionAcceptedResponseSchema,
+  DeletionInternalFailureResponseSchema,
+  DeletionServerFailureResponseSchema,
+  DeletionUnauthorizedResponseSchema,
+  DeletionValidationErrorResponseSchema,
   EndInterviewEarlyRequestSchema,
   ErrorEnvelopeSchema,
   IncompleteReportResponseSchema,
   InternalCompleteReportSnapshotSchema,
   InternalIncompleteReportSnapshotSchema,
+  InterviewDeletionNotFoundResponseSchema,
+  InterviewDeletionParamsSchema,
   InterviewDetailResponseSchema,
   MarkQuestionUnknownRequestSchema,
   OperationEventSchema,
@@ -316,6 +324,105 @@ describe("API command and error schemas", () => {
         },
       }),
     ).toBe(true);
+  });
+
+  describe("deletion route schemas", () => {
+    const validationError = {
+      error: {
+        code: "validation_error",
+        message: "The request is invalid.",
+        issues: [
+          {
+            path: "/interviewId",
+            code: "pattern",
+            message: "Must match the InterviewId pattern",
+          },
+        ],
+      },
+    };
+    const accepted = {
+      status: "deleting",
+      requestedAt: now,
+      purgeDeadlineAt: "2026-08-16T12:00:00.000Z",
+    };
+
+    it("reuses the shared InterviewId constraints for deletion params", () => {
+      expect(Check(InterviewDeletionParamsSchema, { interviewId: "interview-1" })).toBe(true);
+      expect(Check(InterviewDeletionParamsSchema, { interviewId: "invalid interview" })).toBe(
+        false,
+      );
+      expect(
+        Check(InterviewDeletionParamsSchema, { interviewId: "interview-1", owner: "private" }),
+      ).toBe(false);
+    });
+
+    it("strictly validates every deletion response variant", () => {
+      expect(Check(DeletionValidationErrorResponseSchema, validationError)).toBe(true);
+      expect(
+        Check(DeletionUnauthorizedResponseSchema, {
+          error: {
+            code: "unauthorized",
+            message: "Authentication is required",
+          },
+        }),
+      ).toBe(true);
+      expect(
+        Check(InterviewDeletionNotFoundResponseSchema, {
+          error: {
+            code: "not_found",
+            message: "Resource was not found.",
+            resource: "interview",
+          },
+        }),
+      ).toBe(true);
+      expect(
+        Check(AccountDeletionNotFoundResponseSchema, {
+          error: {
+            code: "not_found",
+            message: "Resource was not found.",
+            resource: "account",
+          },
+        }),
+      ).toBe(true);
+      expect(Check(DeletionAcceptedResponseSchema, accepted)).toBe(true);
+      expect(
+        Check(DeletionServerFailureResponseSchema, {
+          error: {
+            code: "deletion_failure",
+            message: "Deletion request failed",
+          },
+        }),
+      ).toBe(true);
+      expect(
+        Check(DeletionInternalFailureResponseSchema, {
+          error: {
+            code: "internal_error",
+            message: "An unexpected error occurred.",
+          },
+        }),
+      ).toBe(true);
+    });
+
+    it("does not allow deletion not-found responses to disclose another resource", () => {
+      expect(
+        Check(InterviewDeletionNotFoundResponseSchema, {
+          error: {
+            code: "not_found",
+            message: "Resource was not found.",
+            resource: "account",
+          },
+        }),
+      ).toBe(false);
+      expect(
+        Check(AccountDeletionNotFoundResponseSchema, {
+          error: {
+            code: "not_found",
+            message: "Resource was not found.",
+            resource: "interview",
+          },
+        }),
+      ).toBe(false);
+    });
   });
 
   it("validates the stable version-conflict error envelope", () => {

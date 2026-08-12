@@ -71,7 +71,7 @@
 - [x] 7.8 Separate durable model/report Operation acceptance from execution so command endpoints return `202` with the canonical Operation before provider completion.
 - [x] 7.9 Add server-owned detached execution lifecycle handling plus real command-to-SSE integration tests proving disconnect-safe completion and canonical recovery.
 - [x] 7.10 Reject the Faux Provider in production configuration while retaining it for development, CI, and automated tests.
-- [ ] 7.11 Complete deletion-route TypeBox parameter/error contracts and make account/interview Operation-event erasure explicit, immediate, and non-silent.
+- [x] 7.11 Complete deletion-route TypeBox parameter/error contracts and make account/interview Operation-event erasure explicit, immediate, and non-silent.
 - [ ] 7.12 Consolidate shared API error envelopes, validation handling, owner/session access checks, and lazy-expiry retry helpers without changing public behavior.
 - [ ] 7.13 Decompose Operation orchestration into acceptance, model execution, report execution, retry, and finalization services while preserving transaction boundaries.
 - [ ] 7.14 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.

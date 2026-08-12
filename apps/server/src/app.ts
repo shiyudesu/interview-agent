@@ -1,13 +1,18 @@
 import {
+  AccountDeletionNotFoundResponseSchema,
+  type ConfirmDeletionRequestDto,
   ConfirmDeletionRequestSchema,
   DeletionAcceptedResponseSchema,
-  DeletionFailureResponseSchema,
-  ErrorEnvelopeSchema,
+  DeletionServerFailureResponseSchema,
+  DeletionUnauthorizedResponseSchema,
+  DeletionValidationErrorResponseSchema,
+  InterviewDeletionNotFoundResponseSchema,
+  type InterviewDeletionParamsDto,
+  InterviewDeletionParamsSchema,
 } from "@interview-agent/contracts";
-import { type InterviewId, parseInterviewId } from "@interview-agent/domain";
+import { parseInterviewId } from "@interview-agent/domain";
 import { fromNodeHeaders } from "better-auth/node";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { Type } from "typebox";
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { AuthenticatedRequestContext, Authentication } from "./auth.js";
 import {
@@ -104,44 +109,39 @@ export async function registerApplication(
   await registerInterviewCommandRoutes(app, input.interviewCommands);
 
   app.delete<{
-    Params: { readonly interviewId: string };
-    Body: { readonly confirmed: true };
+    Params: InterviewDeletionParamsDto;
+    Body: ConfirmDeletionRequestDto;
   }>(
     "/api/v1/interviews/:interviewId",
     {
       schema: {
+        params: InterviewDeletionParamsSchema,
         body: ConfirmDeletionRequestSchema,
         response: {
+          400: DeletionValidationErrorResponseSchema,
+          401: DeletionUnauthorizedResponseSchema,
+          404: InterviewDeletionNotFoundResponseSchema,
           202: DeletionAcceptedResponseSchema,
-          500: Type.Union([DeletionFailureResponseSchema, ErrorEnvelopeSchema]),
+          500: DeletionServerFailureResponseSchema,
         },
       },
+      errorHandler: deletionRouteErrorHandler,
     },
     async (request, reply) => {
       const context = request.authContext;
       if (context === null) {
         return reply.code(401).send(unauthorizedResponse());
       }
-      let interviewId: InterviewId;
-      try {
-        interviewId = parseInterviewId(request.params.interviewId);
-      } catch {
-        return reply.code(400).send({
-          error: {
-            code: "invalid_interview_id",
-            message: "Interview ID is invalid",
-          },
-        });
-      }
+      const interviewId = parseInterviewId(request.params.interviewId);
       try {
         const result = await input.deletion.deleteInterview(context.accountId, interviewId);
-        eraseOperationEvents(() =>
+        eraseDeletedOperationEvents(request, input.operationEvents.broker, () =>
           input.operationEvents.broker.eraseInterview(context.accountId, interviewId),
         );
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
-          return reply.code(404).send(notFoundResponse());
+          return reply.code(404).send(notFoundResponse("interview"));
         }
         request.log.error(
           { event: "deletion_request_failed", scope: "interview" },
@@ -152,16 +152,20 @@ export async function registerApplication(
     },
   );
 
-  app.delete<{ Body: { readonly confirmed: true } }>(
+  app.delete<{ Body: ConfirmDeletionRequestDto }>(
     "/api/v1/account",
     {
       schema: {
         body: ConfirmDeletionRequestSchema,
         response: {
+          400: DeletionValidationErrorResponseSchema,
+          401: DeletionUnauthorizedResponseSchema,
+          404: AccountDeletionNotFoundResponseSchema,
           202: DeletionAcceptedResponseSchema,
-          500: Type.Union([DeletionFailureResponseSchema, ErrorEnvelopeSchema]),
+          500: DeletionServerFailureResponseSchema,
         },
       },
+      errorHandler: deletionRouteErrorHandler,
     },
     async (request, reply) => {
       const context = request.authContext;
@@ -170,11 +174,13 @@ export async function registerApplication(
       }
       try {
         const result = await input.deletion.deleteAccount(context.accountId);
-        eraseOperationEvents(() => input.operationEvents.broker.eraseAccount(context.accountId));
+        eraseDeletedOperationEvents(request, input.operationEvents.broker, () =>
+          input.operationEvents.broker.eraseAccount(context.accountId),
+        );
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
-          return reply.code(404).send(notFoundResponse());
+          return reply.code(404).send(notFoundResponse("account"));
         }
         request.log.error(
           { event: "deletion_request_failed", scope: "account" },
@@ -186,11 +192,19 @@ export async function registerApplication(
   );
 }
 
-function eraseOperationEvents(erase: () => void): void {
+function eraseDeletedOperationEvents(
+  request: FastifyRequest,
+  broker: RegisterApplicationInput["operationEvents"]["broker"],
+  erase: () => void,
+): void {
   try {
     erase();
   } catch {
-    return;
+    request.log.error(
+      { event: "operation_event_erasure_failed" },
+      "Operation event erasure failed; closing broker",
+    );
+    broker.close();
   }
 }
 
@@ -245,11 +259,12 @@ function unauthorizedResponse() {
   };
 }
 
-function notFoundResponse() {
+function notFoundResponse(resource: "account" | "interview") {
   return {
     error: {
       code: "not_found",
-      message: "Resource was not found",
+      message: "Resource was not found.",
+      resource,
     },
   };
 }
@@ -261,4 +276,41 @@ function deletionFailureResponse() {
       message: "Deletion request failed",
     },
   };
+}
+
+function deletionRouteErrorHandler(
+  error: FastifyError,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (error.validation !== undefined) {
+    return reply.code(400).send({
+      error: {
+        code: "validation_error",
+        message: "The request is invalid.",
+        issues: error.validation.map((issue) => ({
+          path: issue.instancePath || `/${error.validationContext ?? "request"}`,
+          code: issue.keyword,
+          message: issue.message ?? "Request validation failed",
+        })),
+      },
+    });
+  }
+  if (typeof error.code === "string" && error.code.startsWith("FST_ERR_CTP_")) {
+    return reply.code(400).send({
+      error: {
+        code: "validation_error",
+        message: "The request is invalid.",
+        issues: [
+          {
+            path: "/body",
+            code: error.code,
+            message: "The request body is invalid.",
+          },
+        ],
+      },
+    });
+  }
+  request.log.error({ event: "deletion_route_failed" }, "Deletion route failed");
+  return reply.code(500).send(deletionFailureResponse());
 }
