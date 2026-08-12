@@ -17,6 +17,10 @@ import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
 import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
+import {
+  OperationEventBroker,
+  type OperationEventRouteDependencies,
+} from "../src/operation-events.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
@@ -62,6 +66,15 @@ function canonicalReads(): CanonicalReadRouteDependencies {
     operationStatus: unavailable,
     interviewHistory: unavailable,
     reportDetail: unavailable,
+  };
+}
+
+function operationEvents(): OperationEventRouteDependencies {
+  return {
+    broker: new OperationEventBroker(),
+    access: {
+      findAccessible: async () => null,
+    },
   };
 }
 
@@ -155,6 +168,7 @@ async function createApp(
     deletion: deletion(),
     interviewCommands: dependencies,
     canonicalReads: canonicalReads(),
+    operationEvents: operationEvents(),
   });
   return instance;
 }

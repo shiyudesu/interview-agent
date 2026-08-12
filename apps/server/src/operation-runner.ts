@@ -51,6 +51,7 @@ import {
   InterviewerTextModelError,
   type InterviewerTextModelErrorCode,
 } from "./interviewer-text-model.js";
+import type { OperationEventPublisher } from "./operation-events.js";
 
 export const INTERVIEW_COMMAND_IDEMPOTENCY_SCOPE = "interview-command";
 const DEFAULT_OPERATION_LEASE_MS = 5 * 60 * 1_000;
@@ -86,6 +87,7 @@ export interface OperationRunnerOptions {
   readonly leaseOwner: string;
   readonly leaseDurationMs?: number;
   readonly now?: () => Date;
+  readonly events?: OperationEventPublisher;
 }
 
 export interface OperationExecution {
@@ -152,6 +154,7 @@ export class OperationRunner {
   private readonly creationService: InterviewCreationService;
   private readonly leaseDurationMs: number;
   private readonly now: () => Date;
+  readonly events: OperationEventPublisher;
 
   constructor(
     private readonly unitOfWork: PgRepositoryUnitOfWork,
@@ -162,6 +165,7 @@ export class OperationRunner {
     this.creationService = new InterviewCreationService(unitOfWork);
     this.leaseDurationMs = options.leaseDurationMs ?? DEFAULT_OPERATION_LEASE_MS;
     this.now = options.now ?? (() => new Date());
+    this.events = options.events ?? NO_OPERATION_EVENTS;
   }
 
   async createInterview(input: CreateInterviewOperationInput): Promise<StoredOperation> {
@@ -596,6 +600,7 @@ export class OperationRunner {
   }
 
   private async executeModelOperation(execution: ClaimedModelOperation): Promise<StoredOperation> {
+    publishOperationEvent(() => this.events.beginAttempt(execution.claimed.operation));
     let completion: ModelCompletion;
     try {
       completion = await this.callModels(execution.plan);
@@ -663,7 +668,7 @@ export class OperationRunner {
     modelCompletion: ModelCompletion,
   ): Promise<StoredOperation> {
     const { claimed } = execution;
-    return this.unitOfWork.run(async (repositories) => {
+    const finalized = await this.unitOfWork.run(async (repositories) => {
       const operation = requiredOperation(
         await repositories.operations.findById(claimed.operation.id, claimed.operation.accountId),
         claimed.operation.id,
@@ -711,16 +716,46 @@ export class OperationRunner {
           : {}),
       });
       if (execution.retryCommand === undefined) {
-        return completedOperation;
+        return {
+          responseOperation: completedOperation,
+          completedOperation,
+          completedAt,
+        };
       }
       const retryCommand = execution.retryCommand;
-      return repositories.operations.completeSuccess({
+      const responseOperation = await repositories.operations.completeSuccess({
         ...completionLease(retryCommand),
         operationId: retryCommand.operation.id,
         accountId: retryCommand.operation.accountId,
         result: retryOperationResult(completedOperation, transition.interview),
       });
+      return {
+        responseOperation,
+        completedOperation,
+        completedAt,
+      };
     });
+    if (modelCompletion.kind === "clarification" || modelCompletion.kind === "follow_up") {
+      publishOperationEvent(() =>
+        this.events.publishTextAndTerminal(
+          finalized.completedOperation,
+          modelCompletion.text,
+          finalized.completedAt,
+        ),
+      );
+      if (finalized.responseOperation.id !== finalized.completedOperation.id) {
+        publishOperationEvent(() =>
+          this.events.publishTextAndTerminal(
+            finalized.responseOperation,
+            modelCompletion.text,
+            finalized.completedAt,
+          ),
+        );
+      }
+    } else if (finalized.responseOperation.id !== finalized.completedOperation.id) {
+      publishOperationEvent(() => this.events.publishTerminal(finalized.completedOperation));
+    }
+    return finalized.responseOperation;
   }
 
   private async failModelOperation(
@@ -728,7 +763,7 @@ export class OperationRunner {
     failure: OperationFailure,
   ): Promise<StoredOperation> {
     const { claimed } = execution;
-    return this.unitOfWork.run(async (repositories) => {
+    const finalized = await this.unitOfWork.run(async (repositories) => {
       const operation = requiredOperation(
         await repositories.operations.findById(claimed.operation.id, claimed.operation.accountId),
         claimed.operation.id,
@@ -753,16 +788,27 @@ export class OperationRunner {
       });
       const retryCommand = execution.retryCommand;
       if (retryCommand === undefined) {
-        return failed;
+        return {
+          responseOperation: failed,
+          failedOperation: failed,
+        };
       }
-      return repositories.operations.completeFailure({
+      const responseOperation = await repositories.operations.completeFailure({
         ...completionLease(retryCommand),
         operationId: retryCommand.operation.id,
         accountId: retryCommand.operation.accountId,
         error: { ...failure, retryable: false },
         retryable: false,
       });
+      return {
+        responseOperation,
+        failedOperation: failed,
+      };
     });
+    if (finalized.responseOperation.id !== finalized.failedOperation.id) {
+      publishOperationEvent(() => this.events.publishTerminal(finalized.failedOperation));
+    }
+    return finalized.responseOperation;
   }
 
   private claimInput(operation: StoredOperation, leaseExpiresAt?: Date) {
@@ -783,7 +829,7 @@ export class InterviewOperationHandlers {
   ) {}
 
   createInterview(input: CreateInterviewOperationInput): Promise<StoredOperation> {
-    return this.execution.execute(() => this.runner.createInterview(input));
+    return this.execute(() => this.runner.createInterview(input));
   }
 
   submitAnswer(input: TextInterviewOperationInput): Promise<StoredOperation> {
@@ -819,14 +865,14 @@ export class InterviewOperationHandlers {
   }
 
   retry(input: RetryInterviewOperationInput): Promise<StoredOperation> {
-    return this.execution.execute(() => this.runner.retry(input));
+    return this.execute(() => this.runner.retry(input));
   }
 
   private progress(
     type: ProgressOperationType,
     input: OperationCommandInput | TextInterviewOperationInput,
   ): Promise<StoredOperation> {
-    return this.execution.execute(() =>
+    return this.execute(() =>
       this.runner.run({
         type,
         ...input,
@@ -834,12 +880,31 @@ export class InterviewOperationHandlers {
       }),
     );
   }
+
+  private execute(operation: () => Promise<StoredOperation>): Promise<StoredOperation> {
+    return this.execution.execute(operation);
+  }
 }
 
 export class OperationRunnerError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "OperationRunnerError";
+  }
+}
+
+const NO_OPERATION_EVENTS: OperationEventPublisher = {
+  beginAttempt: () => undefined,
+  publishTextDelta: () => null,
+  publishTextAndTerminal: () => null,
+  publishTerminal: () => null,
+};
+
+function publishOperationEvent(publish: () => unknown): void {
+  try {
+    publish();
+  } catch {
+    return;
   }
 }
 

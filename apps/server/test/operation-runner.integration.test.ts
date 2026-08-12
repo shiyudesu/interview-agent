@@ -32,6 +32,7 @@ import {
 import { questionDefinitionFixture } from "../../../packages/db/test/support/question-definition-fixture.js";
 import { AnswerEvaluationModelError } from "../src/answer-evaluation-model.js";
 import { InterviewerTextModelError } from "../src/interviewer-text-model.js";
+import { OperationEventBroker, type OperationEventPublisher } from "../src/operation-events.js";
 import {
   InterviewOperationHandlers,
   OperationRunner,
@@ -61,6 +62,7 @@ let operationRepository: PgOperationRepository;
 let evaluator: FauxAnswerEvaluationModel;
 let interviewer: FauxInterviewerTextModel;
 let handlers: InterviewOperationHandlers;
+let operationEvents: OperationEventBroker;
 let sequence = 0;
 
 class FauxAnswerEvaluationModel implements AnswerEvaluationModel {
@@ -75,6 +77,7 @@ class FauxAnswerEvaluationModel implements AnswerEvaluationModel {
 
 class FauxInterviewerTextModel implements InterviewerTextModel {
   readonly requests: InterviewerTextRequest[] = [];
+  deltaText: string | undefined;
   implementation: (request: InterviewerTextRequest) => Promise<string> = async (request) =>
     request.purpose === "clarify_question"
       ? "请围绕当前问题说明它的适用边界。"
@@ -83,7 +86,7 @@ class FauxInterviewerTextModel implements InterviewerTextModel {
   async *stream(request: InterviewerTextRequest): AsyncIterable<InterviewerTextEvent> {
     this.requests.push(request);
     const text = await this.implementation(request);
-    yield { type: "delta", text };
+    yield { type: "delta", text: this.deltaText ?? text };
     yield {
       type: "completed",
       text,
@@ -125,7 +128,8 @@ describe.sequential("persisted OperationRunner", () => {
     await seedQuestionBank();
     evaluator = new FauxAnswerEvaluationModel();
     interviewer = new FauxInterviewerTextModel();
-    handlers = createHandlers(evaluator, interviewer, "operation-runner-worker");
+    operationEvents = new OperationEventBroker();
+    handlers = createHandlers(evaluator, interviewer, "operation-runner-worker", operationEvents);
   });
 
   afterAll(async () => {
@@ -541,6 +545,28 @@ describe.sequential("persisted OperationRunner", () => {
     });
 
     expect(retried).toMatchObject({ status: "succeeded", type: "retry_operation" });
+    expect(operationEvents.history(failed)).toMatchObject([
+      {
+        sequence: 1,
+        type: "text_delta",
+        text: "这个问题关注当前机制的适用边界。",
+      },
+      {
+        sequence: 2,
+        type: "succeeded",
+      },
+    ]);
+    expect(operationEvents.history(retried)).toMatchObject([
+      {
+        sequence: 1,
+        type: "text_delta",
+        text: "这个问题关注当前机制的适用边界。",
+      },
+      {
+        sequence: 2,
+        type: "succeeded",
+      },
+    ]);
     const interview = await requiredInterview(interviewId, OWNER_ID);
     expect(interview.questions[0]?.questionClarifications).toEqual([
       expect.objectContaining({
@@ -674,6 +700,14 @@ describe.sequential("persisted OperationRunner", () => {
       retryable: true,
       error: { retryable: true },
     });
+    expect(operationEvents.history(target)).toMatchObject([
+      {
+        sequence: 1,
+        type: "failed",
+        failure: { code: "model_failure", retryable: true },
+      },
+    ]);
+    expect(operationEvents.history(retry)).toEqual([]);
     await expect(
       createCanonicalReadRouteDependencies(unitOfWork).interviewDetail(OWNER_ID, interviewId),
     ).resolves.toMatchObject({
@@ -878,11 +912,25 @@ describe.sequential("persisted OperationRunner", () => {
 
   it("runs clarification, selected-goal follow-up, evaluation, supplement, and continue handlers", async () => {
     const interviewId = await createInterview("runner-model-flow");
-    await expect(
-      handlers.requestQuestionClarification(
-        commandInput(OWNER_ID, interviewId, "clarification", "clarification-key", 1),
-      ),
-    ).resolves.toMatchObject({ status: "succeeded" });
+    interviewer.deltaText = "不得在完整校验前释放的片段。";
+    const clarification = await handlers.requestQuestionClarification(
+      commandInput(OWNER_ID, interviewId, "clarification", "clarification-key", 1),
+    );
+    expect(clarification).toMatchObject({ status: "succeeded" });
+    expect(operationEvents.history(clarification)).toMatchObject([
+      {
+        sequence: 1,
+        type: "text_delta",
+        text: "请围绕当前问题说明它的适用边界。",
+      },
+      {
+        sequence: 2,
+        type: "succeeded",
+      },
+    ]);
+    expect(JSON.stringify(operationEvents.history(clarification))).not.toContain(
+      "不得在完整校验前释放",
+    );
 
     evaluator.implementation = async (request) => followUpEvaluation(request);
     await expect(
@@ -901,6 +949,7 @@ describe.sequential("persisted OperationRunner", () => {
       ...commandInput(OWNER_ID, interviewId, "follow-up-answer", "follow-up-answer-key", 3),
       text: "调用方监听 Done 并停止 goroutine。",
     });
+
     await handlers.submitSupplement({
       ...commandInput(OWNER_ID, interviewId, "supplement", "supplement-key", 4),
       text: "补充说明还需要释放相关资源。",
@@ -921,6 +970,42 @@ describe.sequential("persisted OperationRunner", () => {
       phase: "awaiting_response",
       currentQuestionPosition: 2,
     });
+  });
+
+  it("keeps committed commands successful when auxiliary event publication fails", async () => {
+    const interviewId = await createInterview("runner-event-publication-failure");
+    const fail = () => {
+      throw new Error("event broker unavailable");
+    };
+    const publishingHandlers = createHandlers(
+      evaluator,
+      interviewer,
+      "operation-runner-event-failure-worker",
+      {
+        beginAttempt: fail,
+        publishTextDelta: fail,
+        publishTextAndTerminal: fail,
+        publishTerminal: fail,
+      },
+    );
+
+    await expect(
+      publishingHandlers.requestQuestionClarification(
+        commandInput(
+          OWNER_ID,
+          interviewId,
+          "event-publication-failure",
+          "event-publication-failure-key",
+          1,
+        ),
+      ),
+    ).resolves.toMatchObject({ status: "succeeded" });
+    const persisted = await requiredInterview(interviewId, OWNER_ID);
+    expect(persisted).toMatchObject({
+      version: 2,
+      phase: "awaiting_response",
+    });
+    expect(persisted.questions[0]?.questionClarifications).toHaveLength(1);
   });
 
   it("persists unknown, skip, continue, early-end, and abandon transitions atomically", async () => {
@@ -957,11 +1042,13 @@ function createHandlers(
   answerModel: AnswerEvaluationModel,
   textModel: InterviewerTextModel,
   leaseOwner: string,
+  events?: OperationEventPublisher,
 ): InterviewOperationHandlers {
   return new InterviewOperationHandlers(
     new OperationRunner(unitOfWork, textModel, answerModel, {
       leaseOwner,
       leaseDurationMs: 5 * 60_000,
+      ...(events === undefined ? {} : { events }),
     }),
   );
 }

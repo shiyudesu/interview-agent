@@ -16,6 +16,10 @@ import {
 } from "./command-routes.js";
 import type { ServerConfig } from "./config.js";
 import { type DeletionOrchestrationService, DeletionTargetNotFoundError } from "./deletion.js";
+import {
+  type OperationEventRouteDependencies,
+  registerOperationEventRoutes,
+} from "./operation-events.js";
 import { type CanonicalReadRouteDependencies, registerCanonicalReadRoutes } from "./read-routes.js";
 
 declare module "fastify" {
@@ -30,6 +34,7 @@ export interface RegisterApplicationInput {
   readonly deletion: DeletionOrchestrationService;
   readonly interviewCommands: InterviewCommandRouteDependencies;
   readonly canonicalReads: CanonicalReadRouteDependencies;
+  readonly operationEvents: OperationEventRouteDependencies;
 }
 
 export async function registerApplication(
@@ -95,6 +100,7 @@ export async function registerApplication(
   });
 
   await registerCanonicalReadRoutes(app, input.canonicalReads);
+  await registerOperationEventRoutes(app, input.operationEvents);
   await registerInterviewCommandRoutes(app, input.interviewCommands);
 
   app.delete<{
@@ -129,6 +135,9 @@ export async function registerApplication(
       }
       try {
         const result = await input.deletion.deleteInterview(context.accountId, interviewId);
+        eraseOperationEvents(() =>
+          input.operationEvents.broker.eraseInterview(context.accountId, interviewId),
+        );
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
@@ -161,6 +170,7 @@ export async function registerApplication(
       }
       try {
         const result = await input.deletion.deleteAccount(context.accountId);
+        eraseOperationEvents(() => input.operationEvents.broker.eraseAccount(context.accountId));
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
@@ -174,6 +184,14 @@ export async function registerApplication(
       }
     },
   );
+}
+
+function eraseOperationEvents(erase: () => void): void {
+  try {
+    erase();
+  } catch {
+    return;
+  }
 }
 
 function isProtectedApiRequest(routeUrl: string | undefined): boolean {

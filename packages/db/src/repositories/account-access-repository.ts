@@ -156,6 +156,39 @@ export class PgAccountAccessRepository {
       { isolationLevel: "repeatable read", accessMode: "read only" },
     );
   }
+
+  isSessionActive(accountId: AccountId, sessionId: string): Promise<boolean> {
+    return this.execution.inTransaction(
+      async (executor) => {
+        const rows = await executor
+          .select({ id: session.id })
+          .from(session)
+          .innerJoin(user, eq(user.id, session.userId))
+          .where(
+            and(
+              eq(session.id, sessionId),
+              eq(session.userId, accountId),
+              gt(session.expiresAt, sql<Date>`timezone('UTC', statement_timestamp())`),
+              isNull(user.deletionRequestedAt),
+              notExists(
+                executor
+                  .select({ id: deletionRequests.id })
+                  .from(deletionRequests)
+                  .where(
+                    and(
+                      eq(deletionRequests.scope, "account"),
+                      eq(deletionRequests.ownerUserId, accountId),
+                    ),
+                  ),
+              ),
+            ),
+          )
+          .limit(1);
+        return rows.length !== 0;
+      },
+      { isolationLevel: "repeatable read", accessMode: "read only" },
+    );
+  }
 }
 
 function decodeAccountId(value: string): AccountId {

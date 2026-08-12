@@ -107,6 +107,15 @@ export const OperationFailureApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const OperationEventReplayUnavailableApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("operation_event_replay_unavailable"),
+    message: Type.String({ minLength: 1 }),
+    operationId: OperationIdSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const OperationFailedApiErrorSchema = OperationFailureApiErrorSchema;
 export const ModelFailureApiErrorSchema = OperationFailureApiErrorSchema;
 
@@ -125,6 +134,7 @@ export const ApiErrorSchema = Type.Union([
   VersionConflictApiErrorSchema,
   CommandRejectedApiErrorSchema,
   OperationFailureApiErrorSchema,
+  OperationEventReplayUnavailableApiErrorSchema,
   InternalApiErrorSchema,
 ]);
 
@@ -145,6 +155,9 @@ export type CommandRejectedApiErrorDto = Static<typeof CommandRejectedApiErrorSc
 export type OperationFailureCodeDto = Static<typeof OperationFailureCodeSchema>;
 export type OperationFailureDetailDto = Static<typeof OperationFailureDetailSchema>;
 export type OperationFailureApiErrorDto = Static<typeof OperationFailureApiErrorSchema>;
+export type OperationEventReplayUnavailableApiErrorDto = Static<
+  typeof OperationEventReplayUnavailableApiErrorSchema
+>;
 export type OperationFailedApiErrorDto = Static<typeof OperationFailedApiErrorSchema>;
 export type ModelFailureApiErrorDto = Static<typeof ModelFailureApiErrorSchema>;
 export type InternalApiErrorDto = Static<typeof InternalApiErrorSchema>;

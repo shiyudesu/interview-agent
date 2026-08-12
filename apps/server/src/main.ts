@@ -15,6 +15,7 @@ import { DeletionOrchestrationService } from "./deletion.js";
 import { createNodemailerEmailSender } from "./email-sender.js";
 import { PiAgentInterviewerTextModel } from "./interviewer-text-model.js";
 import { createModelRuntime, type ModelRuntime } from "./model-runtime.js";
+import { createOperationEventRouteDependencies, OperationEventBroker } from "./operation-events.js";
 import { InterviewOperationHandlers, OperationRunner } from "./operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { installGracefulShutdown } from "./shutdown.js";
@@ -34,6 +35,7 @@ const deletion = new DeletionOrchestrationService(
   new PgLifecycleRepository(databaseClient.database),
 );
 const unitOfWork = new PgRepositoryUnitOfWork(databaseClient.database);
+const operationEventBroker = new OperationEventBroker();
 const interviewOperations = new InterviewOperationHandlers(
   new OperationRunner(
     unitOfWork,
@@ -41,6 +43,7 @@ const interviewOperations = new InterviewOperationHandlers(
     new PiAnswerEvaluationModel(modelRuntime),
     {
       leaseOwner: `server-${randomUUID()}`,
+      events: operationEventBroker,
     },
   ),
 );
@@ -59,6 +62,7 @@ const interviewCommands = createInterviewCommandRouteDependencies(interviewOpera
   },
 });
 const canonicalReads = createCanonicalReadRouteDependencies(unitOfWork);
+const operationEvents = createOperationEventRouteDependencies(unitOfWork, operationEventBroker);
 
 await registerApplication(app, {
   authentication,
@@ -66,6 +70,7 @@ await registerApplication(app, {
   deletion,
   interviewCommands,
   canonicalReads,
+  operationEvents,
 });
 app.addHook("onClose", async () => databaseClient.close());
 installGracefulShutdown(app);

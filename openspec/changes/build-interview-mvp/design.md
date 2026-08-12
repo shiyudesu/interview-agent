@@ -364,6 +364,29 @@ cannot hide retry actions, and a durable pending creation Operation suppresses i
 until finalization. Successful report Operations use a report-only result projection rather than
 inventing an interview version.
 
+Operation events are exposed at `/api/v1/operations/{operationId}/events` as authenticated,
+owner-scoped SSE. Each event carries the Operation ID, an increasing process-local sequence,
+timestamp, and either validated final interviewer text or one sanitized terminal status. The model
+adapter still withholds raw deltas until the full response passes semantic validation; a text-bearing
+completion publishes its final text and terminal status as one synchronous broker batch after the
+database transaction commits. Canonical polling waits through a short post-commit grace period so
+it cannot overtake that batch. Broker publication is auxiliary and cannot turn a committed command
+into an apparent failure.
+
+The shared broker retains a bounded number of events and Operations for one minute, sends heartbeat
+comments, and closes listeners and timers on disconnect or Fastify `preClose`. It tracks attempt
+counts so retry targets discard stale terminal payloads while retaining increasing sequence numbers.
+`Last-Event-ID` replays only when continuity is provable; truncated history, process restart, or a
+canonical terminal rebuilt after history loss returns a stable replay-unavailable response for any
+nonzero event ID. The client then reloads canonical JSON state instead of accepting fabricated
+sequence continuity.
+
+Every delivery and status poll revalidates the original unexpired database session and owner-scoped
+Operation. Revoking one session closes only that stream, while interview or account deletion closes
+and erases every matching listener and replay buffer immediately. Short-lived account, interview,
+and Operation tombstones prevent in-flight publishers or polls from recreating erased text and are
+removed by scheduled expiry. Client disconnect never cancels the server-owned Operation execution.
+
 ### 12. Establish tests and CI with the scaffold
 
 The first implementation slice creates:

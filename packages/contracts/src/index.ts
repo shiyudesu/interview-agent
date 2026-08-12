@@ -10,6 +10,7 @@ export * from "./evaluation-mappings.js";
 export * from "./interview-response-mappings.js";
 export * from "./mapping-validation.js";
 export * from "./model-outputs.js";
+export * from "./operation-event-mappings.js";
 export * from "./operation-events.js";
 export * from "./operation-response-mappings.js";
 export * from "./question-bank.js";

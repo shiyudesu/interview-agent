@@ -35,7 +35,9 @@ import {
   mapInterviewHistoryToResponse,
   mapInterviewToResponse,
   mapMarkQuestionUnknownCommand,
+  mapOperationTextDeltaEvent,
   mapOperationToStatusResponse,
+  mapOperationToTerminalEvent,
   mapQuestionBankQuestionDtoToDefinition,
   mapQuestionDefinitionToQuestionBankDto,
   mapQuestionDefinitionToSnapshot,
@@ -1185,6 +1187,50 @@ describe("error mappings", () => {
           reportId: "report-1",
         },
       });
+    });
+
+    it("maps validated final text and one sanitized terminal event", () => {
+      expect(
+        mapOperationTextDeltaEvent(
+          parseOperationId("operation-1"),
+          1,
+          "这是完整校验后才释放的文本。",
+          later,
+        ),
+      ).toEqual({
+        operationId: "operation-1",
+        sequence: 1,
+        occurredAt: later.toISOString(),
+        type: "text_delta",
+        text: "这是完整校验后才释放的文本。",
+      });
+      expect(
+        mapOperationToTerminalEvent(
+          {
+            ...base,
+            status: "failed",
+            retryable: true,
+            completedAt: later,
+            error: {
+              code: "model_failure",
+              message: "provider token=secret",
+              retryable: true,
+            },
+          },
+          2,
+        ),
+      ).toEqual({
+        operationId: "operation-1",
+        sequence: 2,
+        occurredAt: later.toISOString(),
+        type: "failed",
+        failure: {
+          code: "model_failure",
+          message: "Model processing failed.",
+          retryable: true,
+        },
+      });
+      expect(mapOperationToTerminalEvent({ ...base, status: "processing" }, 2)).toBeNull();
     });
   });
 

@@ -27,6 +27,7 @@ export interface PersistedOperationProjection {
     | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly completedAt?: Date | null;
 }
 
 export function mapOperationToStatusResponse(

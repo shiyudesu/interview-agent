@@ -17,6 +17,7 @@ import {
   InterviewDetailResponseSchema,
   MarkQuestionUnknownRequestSchema,
   OperationEventSchema,
+  OperationEventStreamHeadersSchema,
   OperationResponseSchema,
   OperationStatusResponseSchema,
   PublicReportQuestionFeedbackSchema,
@@ -1069,6 +1070,13 @@ describe("question-bank schemas", () => {
         questions: [questionBankQuestion],
       }),
     ).toBe(false);
+  });
+
+  it("validates bounded Last-Event-ID headers", () => {
+    expect(Check(OperationEventStreamHeadersSchema, { "last-event-id": "0" })).toBe(true);
+    expect(Check(OperationEventStreamHeadersSchema, { "last-event-id": "42" })).toBe(true);
+    expect(Check(OperationEventStreamHeadersSchema, { "last-event-id": "-1" })).toBe(false);
+    expect(Check(OperationEventStreamHeadersSchema, { "last-event-id": "1.5" })).toBe(false);
   });
 });
 

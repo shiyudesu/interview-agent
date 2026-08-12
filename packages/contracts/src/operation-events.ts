@@ -3,9 +3,15 @@ import { type Static, Type } from "typebox";
 import { IsoTimestampSchema, OperationIdSchema } from "./common.js";
 import { OperationFailureDetailSchema } from "./errors.js";
 
+export const OperationEventSequenceSchema = Type.Integer({ minimum: 0 });
+export const LastOperationEventIdSchema = Type.String({
+  maxLength: 16,
+  pattern: "^(0|[1-9][0-9]*)$",
+});
+
 const operationEventCommon = {
   operationId: OperationIdSchema,
-  sequence: Type.Integer({ minimum: 0 }),
+  sequence: OperationEventSequenceSchema,
   occurredAt: IsoTimestampSchema,
 } as const;
 
@@ -35,13 +41,26 @@ export const OperationFailedEventSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const OperationEventSchema = Type.Union([
-  OperationTextDeltaEventSchema,
+export const OperationTerminalEventSchema = Type.Union([
   OperationSucceededEventSchema,
   OperationFailedEventSchema,
 ]);
 
+export const OperationEventSchema = Type.Union([
+  OperationTextDeltaEventSchema,
+  OperationTerminalEventSchema,
+]);
+
+export const OperationEventStreamHeadersSchema = Type.Object(
+  {
+    "last-event-id": Type.Optional(LastOperationEventIdSchema),
+  },
+  { additionalProperties: true },
+);
+
 export type OperationTextDeltaEventDto = Static<typeof OperationTextDeltaEventSchema>;
 export type OperationSucceededEventDto = Static<typeof OperationSucceededEventSchema>;
 export type OperationFailedEventDto = Static<typeof OperationFailedEventSchema>;
+export type OperationTerminalEventDto = Static<typeof OperationTerminalEventSchema>;
 export type OperationEventDto = Static<typeof OperationEventSchema>;
+export type OperationEventStreamHeadersDto = Static<typeof OperationEventStreamHeadersSchema>;

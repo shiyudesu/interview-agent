@@ -7,6 +7,10 @@ import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
 import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
+import {
+  OperationEventBroker,
+  type OperationEventRouteDependencies,
+} from "../src/operation-events.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
@@ -80,6 +84,15 @@ function canonicalReads(): CanonicalReadRouteDependencies {
   };
 }
 
+function operationEvents(): OperationEventRouteDependencies {
+  return {
+    broker: new OperationEventBroker(),
+    access: {
+      findAccessible: async () => null,
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((instance) => instance.close()));
 });
@@ -101,6 +114,7 @@ describe("registerApplication", () => {
       deletion: deletion(),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
 
     const response = await instance.inject({
@@ -147,6 +161,7 @@ describe("registerApplication", () => {
       deletion: deletion(),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
 
     const response = await instance.inject({
@@ -182,6 +197,7 @@ describe("registerApplication", () => {
       deletion: deletion(),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
     instance.get("/api/v1/context", async (request) => request.authContext);
     instance.get("/health", async (request) => request.authContext);
@@ -219,6 +235,7 @@ describe("registerApplication", () => {
       deletion: deletion(),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
 
     const response = await instance.inject({
@@ -250,6 +267,7 @@ describe("registerApplication", () => {
       deletion: deletion(),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
 
     const response = await instance.inject({
@@ -300,6 +318,9 @@ describe("registerApplication", () => {
       affectedInterviewCount: 1,
       cancelledOperationCount: 0,
     }));
+    const events = operationEvents();
+    const eraseInterview = vi.spyOn(events.broker, "eraseInterview");
+    const eraseAccount = vi.spyOn(events.broker, "eraseAccount");
     const instance = app();
     await registerApplication(instance, {
       authentication: authentication({
@@ -312,6 +333,7 @@ describe("registerApplication", () => {
       }),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: events,
     });
 
     const missingConfirmation = await instance.inject({
@@ -343,6 +365,8 @@ describe("registerApplication", () => {
       context.accountId,
     );
     expect(markAccountDeleting).toHaveBeenCalledWith(context.accountId);
+    expect(eraseInterview).toHaveBeenCalledWith(context.accountId, parseInterviewId("interview-1"));
+    expect(eraseAccount).toHaveBeenCalledWith(context.accountId);
   });
 
   it("sanitizes unexpected deletion failures", async () => {
@@ -368,6 +392,7 @@ describe("registerApplication", () => {
       }),
       interviewCommands: interviewCommands(),
       canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
     });
 
     const response = await instance.inject({

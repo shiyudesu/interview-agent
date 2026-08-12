@@ -17,6 +17,10 @@ import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js
 import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
 import {
+  OperationEventBroker,
+  type OperationEventRouteDependencies,
+} from "../src/operation-events.js";
+import {
   type CanonicalReadRouteDependencies,
   createCanonicalReadRouteDependencies,
   InvalidHistoryCursorError,
@@ -197,6 +201,15 @@ function canonicalReads(): CanonicalReadRouteDependencies {
   };
 }
 
+function operationEvents(): OperationEventRouteDependencies {
+  return {
+    broker: new OperationEventBroker(),
+    access: {
+      findAccessible: async () => null,
+    },
+  };
+}
+
 async function createApp(
   reads: CanonicalReadRouteDependencies,
   context: AuthenticatedRequestContext | null = authContext,
@@ -209,6 +222,7 @@ async function createApp(
     deletion: deletion(),
     interviewCommands: interviewCommands(),
     canonicalReads: reads,
+    operationEvents: operationEvents(),
   });
   return instance;
 }
