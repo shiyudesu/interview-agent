@@ -17,6 +17,7 @@ import { type InterviewDetailResponseDto, InterviewDetailResponseSchema } from "
 
 export interface InterviewMessageProjection {
   readonly id: MessageId;
+  readonly questionPosition: number;
   readonly role: "user" | "interviewer";
   readonly kind:
     | "main_question"
@@ -70,11 +71,47 @@ function mapMessages(messages: readonly InterviewMessageProjection[]) {
   }));
 }
 
+function assertMessageVisibility(
+  interview: Interview,
+  messages: readonly InterviewMessageProjection[],
+): void {
+  const mainQuestionPositions = new Set<number>();
+  for (const message of messages) {
+    if (
+      !Number.isInteger(message.questionPosition) ||
+      message.questionPosition < 1 ||
+      message.questionPosition > interview.currentQuestionPosition
+    ) {
+      invalidInterviewState("Messages cannot reveal a future question");
+    }
+    const blueprintItem = interview.blueprint.questions[message.questionPosition - 1];
+    if (blueprintItem === undefined || blueprintItem.position !== message.questionPosition) {
+      invalidInterviewState("Messages must reference a visible question snapshot");
+    }
+    if (message.kind !== "main_question") {
+      continue;
+    }
+    if (mainQuestionPositions.has(message.questionPosition)) {
+      invalidInterviewState("Each visible question requires exactly one main message");
+    }
+    if (message.text !== blueprintItem.question.displayedWording) {
+      invalidInterviewState("Main question messages must match the visible snapshot");
+    }
+    mainQuestionPositions.add(message.questionPosition);
+  }
+  for (let position = 1; position <= interview.currentQuestionPosition; position += 1) {
+    if (!mainQuestionPositions.has(position)) {
+      invalidInterviewState("Every visible question requires one main message");
+    }
+  }
+}
+
 function assertChronology(
   interview: Interview,
   messages: readonly InterviewMessageProjection[],
   endedAt: Date | null = null,
 ) {
+  assertMessageVisibility(interview, messages);
   const createdAtMs = interview.createdAt.getTime();
   const activityAtMs = interview.lastEffectiveActivityAt.getTime();
   const expiresAtMs = getInterviewExpiresAt(interview).getTime();

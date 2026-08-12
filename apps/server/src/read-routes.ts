@@ -295,6 +295,7 @@ function publicTranscriptMessages(detail: InterviewDetail) {
           .digest("hex")
           .slice(0, 32)}`,
       ),
+      questionPosition: question.position,
       role: "interviewer" as const,
       kind: "main_question" as const,
       text: question.displayedQuestion,
@@ -302,6 +303,7 @@ function publicTranscriptMessages(detail: InterviewDetail) {
     },
     ...question.messages.map((message) => ({
       id: parseMessageId(message.id),
+      questionPosition: question.position,
       role: message.role === "user" ? ("user" as const) : ("interviewer" as const),
       kind: publicMessageKind(message.kind),
       text: message.content,

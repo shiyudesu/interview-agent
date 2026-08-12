@@ -189,9 +189,10 @@ const responseContext = {
   messages: [
     {
       id: parseMessageId("message-1"),
+      questionPosition: 1,
       role: "interviewer",
       kind: "main_question",
-      text: "请解释 context.Context 的用途。",
+      text: "第 1 题：请解释 context.Context 的用途。",
       createdAt: new Date(occurredAt),
     },
   ],
@@ -558,7 +559,8 @@ describe("interview response mappings", () => {
     expect(awaitingContinue).toMatchObject({
       status: "active",
       phase: "awaiting_continue",
-      availableActions: expect.arrayContaining(["submit_supplement", "continue", "retry"]),
+      currentWording: "第 1 题：请解释 context.Context 的用途。",
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon", "retry"],
     });
 
     const reportPending = mapInterviewToResponse(
@@ -641,6 +643,82 @@ describe("interview response mappings", () => {
     }
   });
 
+  it("keeps future question wording out of the supplement window until continuation", () => {
+    const created = makeInterview();
+    const firstQuestion = created.blueprint.questions[0]?.question;
+    const secondQuestion = created.blueprint.questions[1]?.question;
+    if (firstQuestion === undefined || secondQuestion === undefined) {
+      throw new Error("Expected two fixture questions");
+    }
+    const assessedQuestions = created.questions.map((question, index) =>
+      index === 0 ? { ...question, outcome: createZeroQuestionOutcome("unknown") } : question,
+    );
+    const awaitingContinue = makeInterview({
+      phase: "awaiting_continue",
+      questions: assessedQuestions,
+    });
+
+    const supplementWindow = mapInterviewToResponse(awaitingContinue, responseContext);
+    expect(supplementWindow).toMatchObject({
+      phase: "awaiting_continue",
+      progress: { current: 1, total: 5 },
+      currentWording: firstQuestion.displayedWording,
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon"],
+    });
+    expect(JSON.stringify(supplementWindow)).not.toContain(secondQuestion.displayedWording);
+
+    expect(() =>
+      mapInterviewToResponse(awaitingContinue, {
+        ...responseContext,
+        messages: [
+          ...responseContext.messages,
+          {
+            id: parseMessageId("future-main-question"),
+            questionPosition: 2,
+            role: "interviewer",
+            kind: "main_question",
+            text: secondQuestion.displayedWording,
+            createdAt: later,
+          },
+        ],
+      }),
+    ).toThrow(ContractMappingError);
+
+    const continued = mapInterviewToResponse(
+      makeInterview({
+        currentQuestionPosition: 2,
+        questions: assessedQuestions.map((question, index) =>
+          index === 0 ? { ...question, frozen: true } : question,
+        ),
+      }),
+      {
+        ...responseContext,
+        messages: [
+          ...responseContext.messages,
+          {
+            id: parseMessageId("second-main-question"),
+            questionPosition: 2,
+            role: "interviewer",
+            kind: "main_question",
+            text: secondQuestion.displayedWording,
+            createdAt: later,
+          },
+        ],
+      },
+    );
+    expect(continued).toMatchObject({
+      phase: "awaiting_response",
+      progress: { current: 2, total: 5 },
+      currentWording: secondQuestion.displayedWording,
+    });
+    if (continued.status !== "active") {
+      throw new Error("Expected active continued interview");
+    }
+    expect(continued.messages.filter((message) => message.kind === "main_question")).toHaveLength(
+      2,
+    );
+  });
+
   it("rejects invalid lifecycle context and dates", () => {
     expect(() =>
       mapInterviewToResponse(
@@ -715,6 +793,7 @@ describe("interview response mappings", () => {
           ...responseContext.messages,
           {
             id: parseMessageId("message-answer-late"),
+            questionPosition: 1,
             role: "user",
             kind: "answer",
             text: "迟到的回答",
@@ -731,6 +810,7 @@ describe("interview response mappings", () => {
           ...responseContext.messages,
           {
             id: parseMessageId("message-follow-up-late"),
+            questionPosition: 1,
             role: "interviewer",
             kind: "follow_up",
             text: "系统追问",
@@ -747,6 +827,7 @@ describe("interview response mappings", () => {
           ...responseContext.messages,
           {
             id: parseMessageId("message-after-expiry"),
+            questionPosition: 1,
             role: "user",
             kind: "answer",
             text: "超过截止时间的回答",

@@ -416,6 +416,102 @@ describe.sequential("persisted OperationRunner", () => {
     ).rejects.toThrow();
   });
 
+  it("keeps a failed supplement on the assessed question and retries without revealing the next one", async () => {
+    const interviewId = await createInterview("runner-supplement-failure");
+    await handlers.submitAnswer({
+      ...commandInput(
+        OWNER_ID,
+        interviewId,
+        "supplement-failure-main",
+        "supplement-failure-main-key",
+        1,
+      ),
+      text: "主回答会先形成可继续前补充的暂定评估。",
+    });
+    const provisional = await requiredInterview(interviewId, OWNER_ID);
+    const firstWording = provisional.blueprint.questions[0]?.question.displayedWording;
+    const secondWording = provisional.blueprint.questions[1]?.question.displayedWording;
+    const provisionalEvaluationId = provisional.questions[0]?.evaluation?.id;
+    if (
+      firstWording === undefined ||
+      secondWording === undefined ||
+      provisionalEvaluationId === undefined
+    ) {
+      throw new Error("Expected assessed first question and hidden second question");
+    }
+
+    evaluator.implementation = async () => {
+      throw new AnswerEvaluationModelError("transient_provider_failure", [], MODEL_METADATA);
+    };
+    const supplementText = "失败的补充不能成为已接受的回答材料。";
+    const failed = await handlers.submitSupplement({
+      ...commandInput(
+        OWNER_ID,
+        interviewId,
+        "supplement-failure-target",
+        "supplement-failure-target-key",
+        2,
+      ),
+      text: supplementText,
+    });
+
+    expect(failed).toMatchObject({ status: "failed", retryable: true });
+    const cancelled = await requiredInterview(interviewId, OWNER_ID);
+    expect(cancelled).toMatchObject({
+      version: 3,
+      phase: "awaiting_continue",
+      currentQuestionPosition: 1,
+    });
+    expect(cancelled.questions[0]?.answerMaterial).toHaveLength(1);
+    expect(cancelled.questions[0]?.evaluation?.id).toBe(provisionalEvaluationId);
+
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const failedState = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(failedState).toMatchObject({
+      phase: "awaiting_continue",
+      progress: { current: 1, total: 5 },
+      currentWording: firstWording,
+      operation: {
+        operationId: failed.id,
+        status: "failed",
+        failure: { retryable: true },
+      },
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon", "retry"],
+    });
+    expect(JSON.stringify(failedState)).not.toContain(secondWording);
+    expect(JSON.stringify(failedState)).not.toContain(supplementText);
+
+    evaluator.implementation = async (request) => fullEvaluation(request);
+    await handlers.retry({
+      ...retryInput(
+        OWNER_ID,
+        interviewId,
+        "supplement-failure-retry",
+        "supplement-failure-retry-key",
+        failed.id,
+        3,
+      ),
+    });
+    const retried = await requiredInterview(interviewId, OWNER_ID);
+    expect(retried).toMatchObject({
+      version: 3,
+      phase: "awaiting_continue",
+      currentQuestionPosition: 1,
+    });
+    expect(retried.questions[0]?.answerMaterial.map((material) => material.kind)).toEqual([
+      "main_answer",
+      "supplement",
+    ]);
+    const retriedState = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(retriedState).toMatchObject({
+      phase: "awaiting_continue",
+      progress: { current: 1, total: 5 },
+      currentWording: firstWording,
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon"],
+    });
+    expect(JSON.stringify(retriedState)).not.toContain(secondWording);
+  });
+
   it("keeps a retryable model failure visible after a newer rejected command", async () => {
     const interviewId = await createInterview("runner-readable-model-failure");
     evaluator.implementation = async () => {
@@ -949,6 +1045,23 @@ describe.sequential("persisted OperationRunner", () => {
       ...commandInput(OWNER_ID, interviewId, "follow-up-answer", "follow-up-answer-key", 3),
       text: "调用方监听 Done 并停止 goroutine。",
     });
+    const assessed = await requiredInterview(interviewId, OWNER_ID);
+    const firstWording = assessed.blueprint.questions[0]?.question.displayedWording;
+    const secondWording = assessed.blueprint.questions[1]?.question.displayedWording;
+    const thirdWording = assessed.blueprint.questions[2]?.question.displayedWording;
+    if (firstWording === undefined || secondWording === undefined || thirdWording === undefined) {
+      throw new Error("Expected three fixture questions");
+    }
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const beforeSupplement = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(beforeSupplement).toMatchObject({
+      phase: "awaiting_continue",
+      progress: { current: 1, total: 5 },
+      currentWording: firstWording,
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon"],
+    });
+    expect(mainQuestionTexts(beforeSupplement)).toEqual([firstWording]);
+    expect(JSON.stringify(beforeSupplement)).not.toContain(secondWording);
 
     await handlers.submitSupplement({
       ...commandInput(OWNER_ID, interviewId, "supplement", "supplement-key", 4),
@@ -961,6 +1074,16 @@ describe.sequential("persisted OperationRunner", () => {
       "follow_up_answer",
       "supplement",
     ]);
+    const supplementedState = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(supplementedState).toMatchObject({
+      phase: "awaiting_continue",
+      progress: { current: 1, total: 5 },
+      currentWording: firstWording,
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon"],
+    });
+    expect(mainQuestionTexts(supplementedState)).toEqual([firstWording]);
+    expect(messageKinds(supplementedState)).toContain("supplement");
+    expect(JSON.stringify(supplementedState)).not.toContain(secondWording);
 
     await handlers.continueInterview(
       commandInput(OWNER_ID, interviewId, "continue", "continue-key", 5),
@@ -970,6 +1093,14 @@ describe.sequential("persisted OperationRunner", () => {
       phase: "awaiting_response",
       currentQuestionPosition: 2,
     });
+    const continuedState = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(continuedState).toMatchObject({
+      phase: "awaiting_response",
+      progress: { current: 2, total: 5 },
+      currentWording: secondWording,
+    });
+    expect(mainQuestionTexts(continuedState)).toEqual([firstWording, secondWording]);
+    expect(JSON.stringify(continuedState)).not.toContain(thirdWording);
   });
 
   it("keeps committed commands successful when auxiliary event publication fails", async () => {
@@ -1035,6 +1166,83 @@ describe.sequential("persisted OperationRunner", () => {
       status: "abandoned",
       phase: null,
     });
+  });
+
+  it("keeps the final question in the supplement window until continue starts complete reporting", async () => {
+    const interviewId = await createInterview("runner-final-supplement-window");
+    let version = 1;
+    for (let position = 1; position < 5; position += 1) {
+      await handlers.markUnknown(
+        commandInput(
+          OWNER_ID,
+          interviewId,
+          `final-window-unknown-${position}`,
+          `final-window-unknown-key-${position}`,
+          version,
+        ),
+      );
+      version += 1;
+      await handlers.continueInterview(
+        commandInput(
+          OWNER_ID,
+          interviewId,
+          `final-window-continue-${position}`,
+          `final-window-continue-key-${position}`,
+          version,
+        ),
+      );
+      version += 1;
+    }
+    await handlers.markUnknown(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        "final-window-unknown-5",
+        "final-window-unknown-key-5",
+        version,
+      ),
+    );
+    version += 1;
+
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const beforeFinalContinue = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(beforeFinalContinue).toMatchObject({
+      status: "active",
+      phase: "awaiting_continue",
+      version,
+      progress: { current: 5, total: 5 },
+      availableActions: ["submit_supplement", "continue", "end_early", "abandon"],
+    });
+    expect(mainQuestionTexts(beforeFinalContinue)).toHaveLength(5);
+
+    const continued = await handlers.continueInterview(
+      commandInput(
+        OWNER_ID,
+        interviewId,
+        "final-window-continue-5",
+        "final-window-continue-key-5",
+        version,
+      ),
+    );
+    version += 1;
+    expect(continued).toMatchObject({
+      status: "succeeded",
+      result: {
+        interviewId,
+        interviewVersion: version,
+        reportId: null,
+      },
+    });
+    const reportPending = await reads.interviewDetail(OWNER_ID, interviewId);
+    expect(reportPending).toMatchObject({
+      status: "report_pending",
+      reportKind: "complete",
+      version,
+      progress: { current: 5, total: 5 },
+      availableActions: [],
+    });
+    expect(mainQuestionTexts(reportPending)).toHaveLength(5);
+    expect(reportPending).not.toHaveProperty("currentWording");
   });
 });
 
@@ -1183,4 +1391,36 @@ async function seedQuestionBank(): Promise<void> {
     sourceVersion: 1,
     entries,
   });
+}
+
+function mainQuestionTexts(response: unknown): string[] {
+  return responseMessages(response)
+    .filter((message) => message.kind === "main_question")
+    .map((message) => message.text);
+}
+
+function messageKinds(response: unknown): string[] {
+  return responseMessages(response).map((message) => message.kind);
+}
+
+function responseMessages(
+  response: unknown,
+): readonly { readonly kind: string; readonly text: string }[] {
+  if (
+    typeof response !== "object" ||
+    response === null ||
+    !("messages" in response) ||
+    !Array.isArray(response.messages)
+  ) {
+    return [];
+  }
+  return response.messages.filter(
+    (message): message is { readonly kind: string; readonly text: string } =>
+      typeof message === "object" &&
+      message !== null &&
+      "kind" in message &&
+      typeof message.kind === "string" &&
+      "text" in message &&
+      typeof message.text === "string",
+  );
 }

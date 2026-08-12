@@ -83,6 +83,16 @@ awaiting_response
 
 `awaiting_continue` creates the explicit supplement window required by the product rules. The user can add a supplement while the current question remains selected, or explicitly continue to freeze the question and reveal the next main question. A supplement is evaluated through the same Operation path and can trigger a remaining bounded follow-up.
 
+Canonical transcript messages carry their question position. Response mapping requires exactly one
+snapshot-matching main-question message for every revealed position and rejects any message for a
+future position. While `awaiting_continue`, the response keeps the assessed question wording and
+progress unchanged and exposes only supplement, continue, early-end, abandon, and an applicable
+retry action. A failed supplement persists no new answer material or text, retains the provisional
+evaluation, and retries against the same immutable input. A successful supplement appends material
+and replaces the current question evaluation without advancing. Only a successful continue freezes
+the current question and reveals exactly the next main question; continuing the final question
+enters complete `report_pending` without a new question wording.
+
 After the final question is frozen, the interview enters `report_pending`. A successful report Operation moves it to `completed`. A failed report Operation leaves it retryable in `report_pending`; it does not expose a partially generated report.
 
 Early ending enters a partial-report pending path and becomes `early_ended` only after the incomplete report is stored. Explicit abandonment and expiry move directly to `abandoned` without a report.
