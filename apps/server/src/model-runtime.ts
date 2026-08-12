@@ -297,12 +297,18 @@ async function createRealRuntime(config: {
   };
 }
 
-export async function createModelRuntime(config: ServerConfig["model"]): Promise<ModelRuntime> {
+export async function createModelRuntime(
+  config: ServerConfig["model"],
+  environment: ServerConfig["environment"],
+): Promise<ModelRuntime> {
   requireNonBlank(config.provider, "MODEL_PROVIDER");
   requireNonBlank(config.id, "MODEL_ID");
   validateBaseUrl(config.baseUrl);
 
   if (config.provider === "faux") {
+    if (environment === "production") {
+      throw new ModelConfigurationError("the Faux Provider is not allowed in production");
+    }
     if ("apiKey" in config) {
       throw new ModelConfigurationError("the Faux Provider must not receive MODEL_API_KEY");
     }

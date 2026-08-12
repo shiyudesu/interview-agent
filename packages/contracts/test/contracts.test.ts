@@ -1594,6 +1594,13 @@ describe("startup configuration schema", () => {
         MODEL_API_KEY: "unused-secret",
       }),
     ).toBe(false);
+    expect(
+      Check(ServerEnvironmentSchema, {
+        ...commonEnvironment,
+        NODE_ENV: "production",
+        MODEL_PROVIDER: "faux",
+      }),
+    ).toBe(false);
   });
 
   it("requires a non-empty API key for every real provider", () => {

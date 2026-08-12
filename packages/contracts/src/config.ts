@@ -32,6 +32,7 @@ const environmentProperties = {
 export const FauxServerEnvironmentSchema = Type.Object(
   {
     ...environmentProperties,
+    NODE_ENV: Type.Optional(Type.Union([Type.Literal("development"), Type.Literal("test")])),
     MODEL_PROVIDER: Type.Literal("faux"),
   },
   { additionalProperties: false },

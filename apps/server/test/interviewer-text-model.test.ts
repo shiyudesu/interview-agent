@@ -96,10 +96,13 @@ const followUpRequest = {
 } as const satisfies InterviewerTextRequest;
 
 async function fauxRuntime(modelId = "interviewer-test-model"): Promise<FauxModelRuntime> {
-  const runtime = await createModelRuntime({
-    provider: "faux",
-    id: modelId,
-  });
+  const runtime = await createModelRuntime(
+    {
+      provider: "faux",
+      id: modelId,
+    },
+    "test",
+  );
   if (runtime.kind !== "faux") {
     throw new Error("Expected a Faux Provider runtime");
   }

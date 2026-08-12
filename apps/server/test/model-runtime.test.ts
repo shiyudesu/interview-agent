@@ -7,16 +7,31 @@ import {
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
-  createModelRuntime,
+  createModelRuntime as createConfiguredModelRuntime,
   ModelConfigurationError,
   type ModelRuntime,
 } from "../src/model-runtime.js";
+
+const createModelRuntime = (config: Parameters<typeof createConfiguredModelRuntime>[0]) =>
+  createConfiguredModelRuntime(config, "test");
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("createModelRuntime", () => {
+  it("rejects the Faux Provider in production even when called directly", async () => {
+    await expect(
+      createConfiguredModelRuntime(
+        {
+          provider: "faux",
+          id: "production-faux",
+        },
+        "production",
+      ),
+    ).rejects.toThrow("not allowed in production");
+  });
+
   it("constructs a deterministic Faux Provider without credentials", async () => {
     const runtime = await createModelRuntime({
       provider: "faux",

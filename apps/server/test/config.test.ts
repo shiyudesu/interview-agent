@@ -38,6 +38,15 @@ describe("loadServerConfig", () => {
     });
   });
 
+  it("rejects the Faux Provider in production", () => {
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
   it("requires an API key for a real provider", () => {
     expect(() =>
       loadServerConfig({

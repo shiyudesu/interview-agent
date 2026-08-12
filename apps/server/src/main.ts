@@ -26,7 +26,7 @@ import { PiReportAnalysisModel } from "./report-analysis-model.js";
 import { installGracefulShutdown } from "./shutdown.js";
 
 const config = loadServerConfig();
-const modelRuntime = await createModelRuntime(config.model);
+const modelRuntime = await createModelRuntime(config.model, config.environment);
 const databaseClient = createDatabaseClient({ databaseUrl: config.databaseUrl });
 const app = Fastify({ logger: { level: config.logLevel } });
 app.decorate<ModelRuntime>("modelRuntime", modelRuntime);
