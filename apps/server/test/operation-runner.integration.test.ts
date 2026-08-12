@@ -1,5 +1,7 @@
+import type { OperationEventDto } from "@interview-agent/contracts";
 import {
   PgInterviewRepository,
+  PgLifecycleRepository,
   PgOperationRepository,
   PgQuestionBankRepository,
   PgRepositoryUnitOfWork,
@@ -7,6 +9,7 @@ import {
   QuestionBankImportService,
   RepositoryIdempotencyConflictError,
   type StoredOperation,
+  session,
   user,
 } from "@interview-agent/db";
 import {
@@ -27,6 +30,8 @@ import {
   type ReportAnalysisRequest,
   type ReportAnalysisResult,
 } from "@interview-agent/domain";
+import type { BetterAuthOptions } from "better-auth";
+import Fastify from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   databaseNow,
@@ -35,12 +40,21 @@ import {
 } from "../../../packages/db/test/support/postgres-test-harness.js";
 import { questionDefinitionFixture } from "../../../packages/db/test/support/question-definition-fixture.js";
 import { AnswerEvaluationModelError } from "../src/answer-evaluation-model.js";
+import { registerApplication } from "../src/app.js";
+import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
+import { createInterviewCommandRouteDependencies } from "../src/command-routes.js";
+import { DeletionOrchestrationService } from "../src/deletion.js";
 import { InterviewerTextModelError } from "../src/interviewer-text-model.js";
-import { OperationEventBroker, type OperationEventPublisher } from "../src/operation-events.js";
+import {
+  createOperationEventRouteDependencies,
+  OperationEventBroker,
+  type OperationEventPublisher,
+} from "../src/operation-events.js";
 import {
   InterviewOperationHandlers,
   OperationRunner,
   ServerOwnedOperationExecution,
+  ServerOwnedOperationSupervisor,
 } from "../src/operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "../src/read-routes.js";
 import { ReportAnalysisModelError } from "../src/report-analysis-model.js";
@@ -95,6 +109,46 @@ class FauxInterviewerTextModel implements InterviewerTextModel {
     this.requests.push(request);
     const text = await this.implementation(request);
     yield { type: "delta", text: this.deltaText ?? text };
+    yield {
+      type: "completed",
+      text,
+      metadata: {
+        ...MODEL_METADATA,
+        purpose: request.purpose,
+        questionVersion: request.question.questionVersion,
+      },
+    };
+  }
+}
+
+class BlockingFauxInterviewerTextModel implements InterviewerTextModel {
+  readonly requests: InterviewerTextRequest[] = [];
+  private readonly calls: Array<{
+    readonly started: Deferred<InterviewerTextRequest>;
+    readonly completed: Deferred<string>;
+  }> = [];
+
+  queueCall() {
+    const call = {
+      started: deferred<InterviewerTextRequest>(),
+      completed: deferred<string>(),
+    };
+    this.calls.push(call);
+    return {
+      started: call.started.promise,
+      release: call.completed.resolve,
+    };
+  }
+
+  async *stream(request: InterviewerTextRequest): AsyncIterable<InterviewerTextEvent> {
+    const call = this.calls.shift();
+    if (call === undefined) {
+      throw new Error("No blocking Faux interviewer response was queued");
+    }
+    this.requests.push(request);
+    call.started.resolve(request);
+    const text = await call.completed.promise;
+    yield { type: "delta", text };
     yield {
       type: "completed",
       text,
@@ -1849,6 +1903,234 @@ describe.sequential("persisted OperationRunner", () => {
     rejectBlocked?.(new ReportAnalysisModelError("transient_provider_failure"));
     await abandonedExecution;
   }, 20_000);
+
+  it("runs the real command-to-SSE flow independently of clients and drains before PostgreSQL closes", async () => {
+    const sessionId = "operation-api-session";
+    const sessionNow = await databaseNow(testDatabase);
+    await testDatabase.client.database.insert(session).values({
+      id: sessionId,
+      token: "operation-api-token",
+      userId: OWNER_ID,
+      expiresAt: new Date(sessionNow.getTime() + 60 * 60_000),
+      createdAt: sessionNow,
+      updatedAt: sessionNow,
+    });
+
+    const blockingInterviewer = new BlockingFauxInterviewerTextModel();
+    const broker = new OperationEventBroker();
+    const supervisor = new ServerOwnedOperationSupervisor();
+    const apiHandlers = createHandlers(
+      evaluator,
+      blockingInterviewer,
+      "operation-api-worker",
+      broker,
+    );
+    const commandDependencies = createInterviewCommandRouteDependencies(
+      apiHandlers,
+      {
+        async findById(interviewId, accountId) {
+          const interview = await unitOfWork.run((repositories) =>
+            repositories.interviews.findById(interviewId, accountId),
+          );
+          return interview === null
+            ? null
+            : {
+                version: interview.version,
+                status: interview.status,
+                phase: interview.phase,
+              };
+        },
+      },
+      supervisor,
+    );
+    const authContext: AuthenticatedRequestContext = {
+      accountId: OWNER_ID,
+      sessionId,
+      email: "operation-runner@example.com",
+      name: "Operation Runner Owner",
+    };
+    const options: BetterAuthOptions = {};
+    const authentication: Authentication = {
+      handler: async () => new Response(null, { status: 404 }),
+      options,
+      getSession: async () => ({ context: authContext, headers: new Headers() }),
+    };
+    const operationEvents = {
+      ...createOperationEventRouteDependencies(unitOfWork, broker),
+      heartbeatIntervalMs: 10,
+      statusPollIntervalMs: 60_000,
+    };
+    const app = Fastify({ logger: false });
+    await registerApplication(app, {
+      authentication,
+      config: {
+        auth: {
+          secret: "0123456789abcdef0123456789abcdef",
+          baseUrl: "http://localhost:3000",
+        },
+      },
+      deletion: new DeletionOrchestrationService(
+        new PgLifecycleRepository(testDatabase.client.database),
+      ),
+      interviewCommands: commandDependencies,
+      canonicalReads: createCanonicalReadRouteDependencies(unitOfWork),
+      operationEvents,
+    });
+
+    let drainingOperationId: ReturnType<typeof parseOperationId> | null = null;
+    let operationBeforeDatabaseClose: StoredOperation | null = null;
+    let databaseCloseStarted = false;
+    app.addHook("onClose", async () => {
+      await supervisor.shutdown();
+      databaseCloseStarted = true;
+      if (drainingOperationId === null) {
+        throw new Error("No draining Operation was recorded before database close");
+      }
+      operationBeforeDatabaseClose = await operationRepository.findById(
+        drainingOperationId,
+        OWNER_ID,
+      );
+      await testDatabase.close();
+    });
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+
+    const createdResponse = await fetch(`${address}/api/v1/interviews`, {
+      method: "POST",
+      headers: jsonCommandHeaders("operation-api-create"),
+      body: JSON.stringify({ questionCount: 5, expectedVersion: 0 }),
+    });
+    expect(createdResponse.status).toBe(200);
+    const created = (await createdResponse.json()) as {
+      readonly status: string;
+      readonly result: { readonly interviewId: string; readonly interviewVersion: number };
+    };
+    expect(created).toMatchObject({
+      status: "succeeded",
+      result: { interviewVersion: 1 },
+    });
+    const interviewId = parseInterviewId(created.result.interviewId);
+
+    const firstCall = blockingInterviewer.queueCall();
+    const clarificationUrl = `${address}/api/v1/interviews/${interviewId}/clarifications`;
+    const acceptedResponse = await testStep(
+      "initial command response",
+      fetch(clarificationUrl, {
+        method: "POST",
+        headers: jsonCommandHeaders("operation-api-clarification"),
+        body: JSON.stringify({ expectedVersion: 1 }),
+      }),
+    );
+    expect(acceptedResponse.status).toBe(202);
+    const accepted = (await acceptedResponse.json()) as {
+      readonly operationId: string;
+      readonly status: string;
+    };
+    expect(accepted.status).toBe("processing");
+    await testStep("initial interviewer start", firstCall.started);
+
+    const duplicateResponse = await fetch(clarificationUrl, {
+      method: "POST",
+      headers: jsonCommandHeaders("operation-api-clarification"),
+      body: JSON.stringify({ expectedVersion: 1 }),
+    });
+    expect(duplicateResponse.status).toBe(202);
+    expect(await duplicateResponse.json()).toEqual(accepted);
+    expect(blockingInterviewer.requests).toHaveLength(1);
+    expect(supervisor.activeOperationCount).toBe(1);
+
+    const disconnectedStream = await testStep(
+      "disconnected SSE response",
+      fetch(`${address}/api/v1/operations/${accepted.operationId}/events`, {
+        headers: { accept: "text/event-stream" },
+      }),
+    );
+    expect(disconnectedStream.status).toBe(200);
+    await disconnectedStream.body?.cancel();
+
+    const subscribedStream = await testStep(
+      "subscribed SSE response",
+      fetch(`${address}/api/v1/operations/${accepted.operationId}/events`, {
+        headers: { accept: "text/event-stream" },
+      }),
+    );
+    expect(subscribedStream.status).toBe(200);
+
+    const clarificationText = "请围绕当前问题说明核心机制、适用边界以及调用链影响。";
+    firstCall.release(clarificationText);
+    const events = parseApiSse(
+      await testStep("subscribed SSE terminal body", subscribedStream.text()),
+    );
+    expect(events.map((event) => event.event)).toEqual(["text_delta", "succeeded"]);
+    expect(events[0]?.data).toMatchObject({
+      operationId: accepted.operationId,
+      type: "text_delta",
+      text: clarificationText,
+    });
+    expect(events[1]?.data).toMatchObject({
+      operationId: accepted.operationId,
+      type: "succeeded",
+    });
+
+    const canonicalOperation = await fetch(`${address}/api/v1/operations/${accepted.operationId}`);
+    expect(canonicalOperation.status).toBe(200);
+    expect(await canonicalOperation.json()).toMatchObject({
+      operationId: accepted.operationId,
+      status: "succeeded",
+      result: {
+        interviewId: String(interviewId),
+        interviewVersion: 2,
+        reportId: null,
+      },
+    });
+    const canonicalInterview = await fetch(`${address}/api/v1/interviews/${interviewId}`);
+    expect(canonicalInterview.status).toBe(200);
+    expect(await canonicalInterview.json()).toMatchObject({
+      id: String(interviewId),
+      version: 2,
+      status: "active",
+      phase: "awaiting_response",
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "clarification",
+          text: clarificationText,
+        }),
+      ]),
+    });
+    expect(blockingInterviewer.requests).toHaveLength(1);
+    expect(supervisor.activeOperationCount).toBe(0);
+
+    const drainingCall = blockingInterviewer.queueCall();
+    const drainingResponse = await fetch(clarificationUrl, {
+      method: "POST",
+      headers: jsonCommandHeaders("operation-api-draining-clarification"),
+      body: JSON.stringify({ expectedVersion: 2 }),
+    });
+    expect(drainingResponse.status).toBe(202);
+    const draining = (await drainingResponse.json()) as {
+      readonly operationId: string;
+      readonly status: string;
+    };
+    drainingOperationId = parseOperationId(draining.operationId);
+    await testStep("draining interviewer start", drainingCall.started);
+    expect(supervisor.activeOperationCount).toBe(1);
+
+    const closePromise = app.close();
+    expect(
+      await Promise.race([closePromise.then(() => "closed"), Promise.resolve("draining")]),
+    ).toBe("draining");
+    expect(databaseCloseStarted).toBe(false);
+
+    drainingCall.release("请换一种表达说明当前问题，但不要扩展题目的考察范围。");
+    await testStep("graceful supervisor drain", closePromise);
+
+    expect(databaseCloseStarted).toBe(true);
+    expect(operationBeforeDatabaseClose).toMatchObject({
+      id: drainingOperationId,
+      status: "succeeded",
+    });
+    expect(supervisor.activeOperationCount).toBe(0);
+    expect(blockingInterviewer.requests).toHaveLength(2);
+  }, 90_000);
 });
 
 function createHandlers(
@@ -2105,6 +2387,66 @@ async function seedQuestionBank(): Promise<void> {
     sourceVersion: 1,
     entries,
   });
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T | PromiseLike<T>) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>["resolve"];
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+async function testStep<T>(name: string, promise: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out during ${name}`)), 15_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function jsonCommandHeaders(idempotencyKey: string): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    "idempotency-key": idempotencyKey,
+  };
+}
+
+function parseApiSse(body: string): Array<{
+  readonly id: string;
+  readonly event: string;
+  readonly data: OperationEventDto;
+}> {
+  return body
+    .split("\n\n")
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0 && !block.startsWith(":"))
+    .map((block) => {
+      const fields = new Map(
+        block.split("\n").map((line) => {
+          const separator = line.indexOf(":");
+          return [line.slice(0, separator), line.slice(separator + 1).trim()] as const;
+        }),
+      );
+      return {
+        id: fields.get("id") ?? "",
+        event: fields.get("event") ?? "",
+        data: JSON.parse(fields.get("data") ?? "null") as OperationEventDto,
+      };
+    });
 }
 
 function mainQuestionTexts(response: unknown): string[] {

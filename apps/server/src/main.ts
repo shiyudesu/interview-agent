@@ -19,7 +19,7 @@ import { createOperationEventRouteDependencies, OperationEventBroker } from "./o
 import {
   InterviewOperationHandlers,
   OperationRunner,
-  ServerOwnedOperationStarter,
+  ServerOwnedOperationSupervisor,
 } from "./operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { PiReportAnalysisModel } from "./report-analysis-model.js";
@@ -53,6 +53,12 @@ const interviewOperations = new InterviewOperationHandlers(
     },
   ),
 );
+const operationExecutionSupervisor = new ServerOwnedOperationSupervisor((operationId) => {
+  app.log.error(
+    { event: "operation_execution_failed", operationId },
+    "Server-owned Operation execution failed",
+  );
+});
 const interviewCommands = createInterviewCommandRouteDependencies(
   interviewOperations,
   {
@@ -69,12 +75,7 @@ const interviewCommands = createInterviewCommandRouteDependencies(
           };
     },
   },
-  new ServerOwnedOperationStarter((operationId) => {
-    app.log.error(
-      { event: "operation_execution_failed", operationId },
-      "Server-owned Operation execution failed",
-    );
-  }),
+  operationExecutionSupervisor,
 );
 const canonicalReads = createCanonicalReadRouteDependencies(unitOfWork);
 const operationEvents = createOperationEventRouteDependencies(unitOfWork, operationEventBroker);
@@ -87,7 +88,10 @@ await registerApplication(app, {
   canonicalReads,
   operationEvents,
 });
-app.addHook("onClose", async () => databaseClient.close());
+app.addHook("onClose", async () => {
+  await operationExecutionSupervisor.shutdown();
+  await databaseClient.close();
+});
 installGracefulShutdown(app);
 try {
   await app.listen({ host: config.host, port: config.port });

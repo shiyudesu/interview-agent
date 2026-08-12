@@ -69,7 +69,7 @@
 - [x] 7.6 Implement report-pending and incomplete-report-pending retry flows without re-running completed question evaluations.
 - [x] 7.7 Reconcile the implemented Operation, assessment, and report scope with the design and remaining task boundaries before further feature work.
 - [x] 7.8 Separate durable model/report Operation acceptance from execution so command endpoints return `202` with the canonical Operation before provider completion.
-- [ ] 7.9 Add server-owned detached execution lifecycle handling plus real command-to-SSE integration tests proving disconnect-safe completion and canonical recovery.
+- [x] 7.9 Add server-owned detached execution lifecycle handling plus real command-to-SSE integration tests proving disconnect-safe completion and canonical recovery.
 - [ ] 7.10 Reject the Faux Provider in production configuration while retaining it for development, CI, and automated tests.
 - [ ] 7.11 Complete deletion-route TypeBox parameter/error contracts and make account/interview Operation-event erasure explicit, immediate, and non-silent.
 - [ ] 7.12 Consolidate shared API error envelopes, validation handling, owner/session access checks, and lazy-expiry retry helpers without changing public behavior.

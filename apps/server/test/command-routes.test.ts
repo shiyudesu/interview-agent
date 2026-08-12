@@ -24,6 +24,7 @@ import {
 import {
   type AcceptedOperationExecution,
   ServerOwnedOperationStarter,
+  ServerOwnedOperationSupervisor,
 } from "../src/operation-runner.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
 
@@ -500,6 +501,67 @@ describe("interview command routes", () => {
     await vi.waitFor(() => expect(finished).toBe(true));
   });
 
+  it("starts work accepted by an in-flight request before graceful shutdown drains", async () => {
+    const supervisor = new ServerOwnedOperationSupervisor();
+    const { dependencies, handlers } = commandDependencies(supervisor);
+    const acceptanceStarted = deferred<void>();
+    const releaseAcceptance = deferred<void>();
+    const workStarted = deferred<void>();
+    const releaseWork = deferred<void>();
+    handlers.submitAnswer.mockImplementation(async (input) => {
+      acceptanceStarted.resolve();
+      await releaseAcceptance.promise;
+      const acceptedOperation = operation(input, "submit_answer", {
+        status: "processing",
+        result: null,
+        completedAt: null,
+        leaseAcquiredAt: now,
+        leaseExpiresAt: new Date(now.getTime() + 60_000),
+        leaseOwner: "worker-1",
+      });
+      return {
+        operation: acceptedOperation,
+        work: {
+          operationId: acceptedOperation.id,
+          async start() {
+            workStarted.resolve();
+            await releaseWork.promise;
+            return {
+              ...acceptedOperation,
+              status: "succeeded",
+              completedAt: now,
+            };
+          },
+        },
+      };
+    });
+    const instance = await createApp(dependencies);
+    instance.addHook("onClose", async () => supervisor.shutdown());
+    const address = await instance.listen({ host: "127.0.0.1", port: 0 });
+    const request = fetch(`${address}/api/v1/interviews/interview-1/answers`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "in-flight-shutdown-key",
+      },
+      body: JSON.stringify({ expectedVersion: 3, text: "回答" }),
+    });
+    await acceptanceStarted.promise;
+
+    const close = instance.close();
+    releaseAcceptance.resolve();
+    const response = await request;
+    expect(response.status).toBe(202);
+    await workStarted.promise;
+    expect(await Promise.race([close.then(() => "closed"), Promise.resolve("draining")])).toBe(
+      "draining",
+    );
+
+    releaseWork.resolve();
+    await close;
+    expect(supervisor.activeOperationCount).toBe(0);
+  });
+
   it("returns canonical report Operation results and stable retryable failures", async () => {
     const { dependencies, handlers } = commandDependencies();
     handlers.continueInterview
@@ -743,3 +805,11 @@ describe("interview command routes", () => {
     expect(response.body).not.toContain("secret");
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}

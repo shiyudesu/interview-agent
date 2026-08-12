@@ -59,7 +59,7 @@ import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from
 import {
   type AcceptedOperationExecution,
   type CreateInterviewOperationInput,
-  ServerOwnedOperationStarter as DefaultOperationStarter,
+  ServerOwnedOperationSupervisor as DefaultOperationStarter,
   type InterviewOperationHandlers,
   type OperationCommandInput,
   type OperationExecutionStarter,

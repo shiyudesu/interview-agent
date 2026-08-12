@@ -128,20 +128,50 @@ export interface AcceptedOperationExecution {
 
 export interface OperationExecutionStarter {
   start(work: AcceptedOperationWork): void;
+  shutdown?(): Promise<void>;
 }
 
-export class ServerOwnedOperationStarter implements OperationExecutionStarter {
+export class ServerOwnedOperationSupervisor implements OperationExecutionStarter {
+  private readonly activeExecutions = new Map<OperationId, Promise<void>>();
+  private shuttingDown = false;
+  private shutdownPromise: Promise<void> | null = null;
+
   constructor(private readonly onFailure: (operationId: OperationId) => void = () => undefined) {}
 
   start(work: AcceptedOperationWork): void {
-    let execution: Promise<StoredOperation>;
-    try {
-      execution = work.start();
-    } catch {
-      this.reportFailure(work.operationId);
+    if (this.shuttingDown || this.activeExecutions.has(work.operationId)) {
       return;
     }
-    void execution.catch(() => this.reportFailure(work.operationId));
+    let tracked: Promise<void>;
+    tracked = Promise.resolve()
+      .then(() => this.execute(work))
+      .catch(() => this.reportFailure(work.operationId))
+      .finally(() => {
+        if (this.activeExecutions.get(work.operationId) === tracked) {
+          this.activeExecutions.delete(work.operationId);
+        }
+      });
+    this.activeExecutions.set(work.operationId, tracked);
+  }
+
+  get activeOperationCount(): number {
+    return this.activeExecutions.size;
+  }
+
+  shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    this.shutdownPromise ??= this.drain();
+    return this.shutdownPromise;
+  }
+
+  async drain(): Promise<void> {
+    while (this.activeExecutions.size > 0) {
+      await Promise.all(this.activeExecutions.values());
+    }
+  }
+
+  private async execute(work: AcceptedOperationWork): Promise<void> {
+    await work.start();
   }
 
   private reportFailure(operationId: OperationId): void {
@@ -152,6 +182,8 @@ export class ServerOwnedOperationStarter implements OperationExecutionStarter {
     }
   }
 }
+
+export class ServerOwnedOperationStarter extends ServerOwnedOperationSupervisor {}
 
 type ProgressOperationType = Exclude<
   CreateOperation["type"],
