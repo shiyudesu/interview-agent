@@ -33,6 +33,7 @@ import {
   mapInternalReportSnapshotToPublic,
   mapInterviewToResponse,
   mapMarkQuestionUnknownCommand,
+  mapOperationToStatusResponse,
   mapQuestionBankQuestionDtoToDefinition,
   mapQuestionDefinitionToQuestionBankDto,
   mapQuestionDefinitionToSnapshot,
@@ -925,6 +926,10 @@ describe("error mappings", () => {
     const envelope = mapDomainErrorToEnvelope(
       new InterviewVersionConflictError(2, 3),
       parseInterviewId("interview-1"),
+      {
+        status: "active",
+        phase: "awaiting_response",
+      },
     );
     expect(Check(ErrorEnvelopeSchema, envelope)).toBe(true);
     expect(envelope).toEqual({
@@ -933,6 +938,10 @@ describe("error mappings", () => {
         message: "Interview state changed; reload the canonical state and retry.",
         interviewId: "interview-1",
         currentVersion: 3,
+        currentState: {
+          status: "active",
+          phase: "awaiting_response",
+        },
       },
     });
     expect(JSON.stringify(envelope)).not.toContain("stack");
@@ -956,6 +965,65 @@ describe("error mappings", () => {
         code: "internal_error",
         message: "An unexpected error occurred.",
       },
+    });
+  });
+
+  describe("Operation response mappings", () => {
+    const base = {
+      id: parseOperationId("operation-1"),
+      retryable: false,
+      result: null,
+      error: null,
+      createdAt: new Date(occurredAt),
+      updatedAt: later,
+    };
+
+    it("maps durable success results while excluding retry-only internal fields", () => {
+      expect(
+        mapOperationToStatusResponse({
+          ...base,
+          status: "succeeded",
+          result: {
+            interviewId: "interview-1",
+            interviewVersion: 4,
+            reportId: null,
+            targetOperationId: "operation-target",
+            targetOperationStatus: "succeeded",
+          },
+        }),
+      ).toEqual({
+        operationId: "operation-1",
+        status: "succeeded",
+        createdAt: occurredAt,
+        updatedAt: later.toISOString(),
+        result: {
+          interviewId: "interview-1",
+          interviewVersion: 4,
+          reportId: null,
+        },
+      });
+    });
+
+    it("sanitizes persisted failure details", () => {
+      const mapped = mapOperationToStatusResponse({
+        ...base,
+        status: "failed",
+        retryable: true,
+        error: {
+          code: "model_failure",
+          message: "provider token=secret",
+          retryable: true,
+        },
+      });
+      expect(mapped).toMatchObject({
+        status: "failed",
+        failure: {
+          code: "model_failure",
+          message: "Model processing failed.",
+          retryable: true,
+        },
+      });
+      expect(JSON.stringify(mapped)).not.toContain("secret");
     });
   });
 

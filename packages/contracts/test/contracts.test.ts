@@ -17,6 +17,7 @@ import {
   InterviewDetailResponseSchema,
   MarkQuestionUnknownRequestSchema,
   OperationEventSchema,
+  OperationResponseSchema,
   OperationStatusResponseSchema,
   PublicReportQuestionFeedbackSchema,
   QuestionBankImportSchema,
@@ -286,6 +287,23 @@ describe("API command and error schemas", () => {
     expect(Check(CreateInterviewRequestSchema, { questionCount: 7, expectedVersion: 0 })).toBe(
       false,
     );
+    expect(Check(CreateInterviewRequestSchema, { questionCount: 5, expectedVersion: 1 })).toBe(
+      false,
+    );
+    expect(
+      Check(SubmitAnswerRequestSchema, {
+        expectedVersion: 2_147_483_648,
+        text: "回答",
+      }),
+    ).toBe(false);
+    expect(
+      Check(OperationResponseSchema, {
+        operationId: "operation-1",
+        status: "processing",
+        createdAt: "2026-08-12T03:00:00.000Z",
+        updatedAt: "2026-08-12T03:00:00.000Z",
+      }),
+    ).toBe(true);
   });
 
   it("validates the stable version-conflict error envelope", () => {
@@ -295,6 +313,10 @@ describe("API command and error schemas", () => {
         message: "Interview state changed",
         interviewId: "interview-1",
         currentVersion: 8,
+        currentState: {
+          status: "active",
+          phase: "awaiting_response",
+        },
       },
     };
 
@@ -303,6 +325,42 @@ describe("API command and error schemas", () => {
       Check(ErrorEnvelopeSchema, {
         ...envelope,
         error: { ...envelope.error, expectedVersion: 7 },
+      }),
+    ).toBe(false);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        ...envelope,
+        error: {
+          ...envelope.error,
+          currentState: {
+            status: "abandoned",
+            phase: null,
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        ...envelope,
+        error: {
+          ...envelope.error,
+          currentState: {
+            status: "report_pending",
+            phase: "processing",
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        ...envelope,
+        error: {
+          ...envelope.error,
+          currentState: {
+            status: "active",
+            phase: null,
+          },
+        },
       }),
     ).toBe(false);
   });

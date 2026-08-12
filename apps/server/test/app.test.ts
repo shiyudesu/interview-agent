@@ -1,10 +1,11 @@
-import { parseAccountId, parseInterviewId } from "@interview-agent/domain";
+import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerApplication } from "../src/app.js";
 import type { AuthenticatedRequestContext, Authentication } from "../src/auth.js";
+import type { InterviewCommandRouteDependencies } from "../src/command-routes.js";
 import { DeletionOrchestrationService } from "../src/deletion.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
@@ -38,6 +39,32 @@ function deletion() {
   });
 }
 
+function interviewCommands(): InterviewCommandRouteDependencies {
+  const unavailable = async () => {
+    throw new Error("Command handler was not configured for this test");
+  };
+  return {
+    handlers: {
+      createInterview: unavailable,
+      submitAnswer: unavailable,
+      submitSupplement: unavailable,
+      requestQuestionClarification: unavailable,
+      markUnknown: unavailable,
+      skip: unavailable,
+      continueInterview: unavailable,
+      endEarly: unavailable,
+      abandon: unavailable,
+      retry: unavailable,
+    },
+    states: {
+      findById: async () => null,
+    },
+    now: () => new Date("2026-08-12T00:00:00.000Z"),
+    nextInterviewId: () => parseInterviewId("generated-interview"),
+    nextOperationId: () => parseOperationId("generated-operation"),
+  };
+}
+
 afterEach(async () => {
   await Promise.all(apps.splice(0).map((instance) => instance.close()));
 });
@@ -57,6 +84,7 @@ describe("registerApplication", () => {
       authentication: authentication({ handler }),
       config,
       deletion: deletion(),
+      interviewCommands: interviewCommands(),
     });
 
     const response = await instance.inject({
@@ -101,6 +129,7 @@ describe("registerApplication", () => {
       }),
       config,
       deletion: deletion(),
+      interviewCommands: interviewCommands(),
     });
 
     const response = await instance.inject({
@@ -134,6 +163,7 @@ describe("registerApplication", () => {
       authentication: authentication({ getSession }),
       config,
       deletion: deletion(),
+      interviewCommands: interviewCommands(),
     });
     instance.get("/api/v1/context", async (request) => request.authContext);
     instance.get("/health", async (request) => request.authContext);
@@ -169,6 +199,7 @@ describe("registerApplication", () => {
       }),
       config,
       deletion: deletion(),
+      interviewCommands: interviewCommands(),
     });
 
     const response = await instance.inject({
@@ -231,6 +262,7 @@ describe("registerApplication", () => {
         markInterviewDeleting,
         markAccountDeleting,
       }),
+      interviewCommands: interviewCommands(),
     });
 
     const missingConfirmation = await instance.inject({
@@ -285,6 +317,7 @@ describe("registerApplication", () => {
           throw new Error("sensitive database detail");
         },
       }),
+      interviewCommands: interviewCommands(),
     });
 
     const response = await instance.inject({

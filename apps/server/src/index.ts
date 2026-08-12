@@ -1,6 +1,7 @@
 export * from "./answer-evaluation-model.js";
 export * from "./app.js";
 export * from "./auth.js";
+export * from "./command-routes.js";
 export * from "./config.js";
 export * from "./deletion.js";
 export * from "./email-sender.js";

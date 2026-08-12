@@ -2,19 +2,28 @@ import { type Static, Type } from "typebox";
 
 import {
   IdempotencyKeySchema,
+  InterviewIdSchema,
   InterviewQuestionCountSchema,
   InterviewVersionSchema,
   OperationIdSchema,
 } from "./common.js";
+import { type OperationStatusResponseDto, OperationStatusResponseSchema } from "./responses.js";
 
 export const IdempotencyHeadersSchema = Type.Object({
   "idempotency-key": IdempotencyKeySchema,
 });
 
+export const InterviewCommandParamsSchema = Type.Object(
+  {
+    interviewId: InterviewIdSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const CreateInterviewRequestSchema = Type.Object(
   {
     questionCount: InterviewQuestionCountSchema,
-    expectedVersion: InterviewVersionSchema,
+    expectedVersion: Type.Literal(0),
   },
   { additionalProperties: false },
 );
@@ -98,9 +107,10 @@ export const ContinueRequestSchema = ContinueInterviewRequestSchema;
 export const EarlyEndRequestSchema = EndInterviewEarlyRequestSchema;
 export const AbandonRequestSchema = AbandonInterviewRequestSchema;
 export const RetryRequestSchema = RetryOperationRequestSchema;
-export const OperationResponseSchema = OperationAcceptedResponseSchema;
+export const OperationResponseSchema = OperationStatusResponseSchema;
 
 export type IdempotencyHeadersDto = Static<typeof IdempotencyHeadersSchema>;
+export type InterviewCommandParamsDto = Static<typeof InterviewCommandParamsSchema>;
 export type CreateInterviewRequestDto = Static<typeof CreateInterviewRequestSchema>;
 export type SubmitAnswerRequestDto = Static<typeof SubmitAnswerRequestSchema>;
 export type SubmitSupplementRequestDto = Static<typeof SubmitSupplementRequestSchema>;
@@ -112,4 +122,4 @@ export type EndInterviewEarlyRequestDto = Static<typeof EndInterviewEarlyRequest
 export type AbandonInterviewRequestDto = Static<typeof AbandonInterviewRequestSchema>;
 export type RetryOperationRequestDto = Static<typeof RetryOperationRequestSchema>;
 export type OperationAcceptedResponseDto = Static<typeof OperationAcceptedResponseSchema>;
-export type OperationResponseDto = OperationAcceptedResponseDto;
+export type OperationResponseDto = OperationStatusResponseDto;

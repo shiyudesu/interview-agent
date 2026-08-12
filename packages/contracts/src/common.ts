@@ -70,7 +70,7 @@ export const InterviewQuestionCountSchema = Type.Union([
   Type.Literal(15),
 ]);
 
-export const InterviewVersionSchema = Type.Integer({ minimum: 0 });
+export const InterviewVersionSchema = Type.Integer({ minimum: 0, maximum: 2_147_483_647 });
 export const PositiveVersionSchema = Type.Integer({ minimum: 1, maximum: 2_147_483_647 });
 export const ScoreSchema = Type.Integer({ minimum: 0, maximum: 100 });
 export const PositiveScoreSchema = Type.Integer({ minimum: 1, maximum: 100 });

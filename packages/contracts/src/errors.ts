@@ -1,6 +1,12 @@
 import { type Static, Type } from "typebox";
 
-import { InterviewIdSchema, InterviewVersionSchema, OperationIdSchema } from "./common.js";
+import {
+  InterviewIdSchema,
+  InterviewPhaseSchema,
+  InterviewStatusSchema,
+  InterviewVersionSchema,
+  OperationIdSchema,
+} from "./common.js";
 
 export const OperationFailureCodeSchema = Type.Union([
   Type.Literal("operation_failed"),
@@ -56,12 +62,30 @@ export const NotFoundApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const CanonicalInterviewStateSchema = Type.Union([
+  Type.Object(
+    {
+      status: Type.Literal("active"),
+      phase: InterviewPhaseSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      status: Type.Exclude(InterviewStatusSchema, Type.Literal("active")),
+      phase: Type.Null(),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export const VersionConflictApiErrorSchema = Type.Object(
   {
     code: Type.Literal("version_conflict"),
     message: Type.String({ minLength: 1 }),
     interviewId: InterviewIdSchema,
     currentVersion: InterviewVersionSchema,
+    currentState: CanonicalInterviewStateSchema,
   },
   { additionalProperties: false },
 );
@@ -115,6 +139,7 @@ export type ValidationIssueDto = Static<typeof ValidationIssueSchema>;
 export type ValidationApiErrorDto = Static<typeof ValidationApiErrorSchema>;
 export type UnauthorizedApiErrorDto = Static<typeof UnauthorizedApiErrorSchema>;
 export type NotFoundApiErrorDto = Static<typeof NotFoundApiErrorSchema>;
+export type CanonicalInterviewStateDto = Static<typeof CanonicalInterviewStateSchema>;
 export type VersionConflictApiErrorDto = Static<typeof VersionConflictApiErrorSchema>;
 export type CommandRejectedApiErrorDto = Static<typeof CommandRejectedApiErrorSchema>;
 export type OperationFailureCodeDto = Static<typeof OperationFailureCodeSchema>;

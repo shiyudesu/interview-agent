@@ -11,6 +11,7 @@ export * from "./interview-response-mappings.js";
 export * from "./mapping-validation.js";
 export * from "./model-outputs.js";
 export * from "./operation-events.js";
+export * from "./operation-response-mappings.js";
 export * from "./question-bank.js";
 export * from "./question-bank-mappings.js";
 export * from "./report-mappings.js";

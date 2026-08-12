@@ -4,14 +4,23 @@ import {
   InvalidInterviewCommandError,
 } from "@interview-agent/domain";
 
-import { type ErrorEnvelopeDto, ErrorEnvelopeSchema } from "./errors.js";
+import {
+  type CanonicalInterviewStateDto,
+  type ErrorEnvelopeDto,
+  ErrorEnvelopeSchema,
+} from "./errors.js";
 import { InboundRequestValidationError, parseMappedDto } from "./mapping-validation.js";
 
 export function mapDomainErrorToEnvelope(
   error: unknown,
   interviewId: InterviewId | null = null,
+  currentState: CanonicalInterviewStateDto | null = null,
 ): ErrorEnvelopeDto {
-  if (error instanceof InterviewVersionConflictError && interviewId !== null) {
+  if (
+    error instanceof InterviewVersionConflictError &&
+    interviewId !== null &&
+    currentState !== null
+  ) {
     return parseMappedDto(
       ErrorEnvelopeSchema,
       {
@@ -20,6 +29,7 @@ export function mapDomainErrorToEnvelope(
           message: "Interview state changed; reload the canonical state and retry.",
           interviewId: String(interviewId),
           currentVersion: error.actualVersion,
+          currentState,
         },
       },
       "version conflict error",

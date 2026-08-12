@@ -5,6 +5,7 @@ import {
   PgRepositoryUnitOfWork,
   type QuestionBankImportEntry,
   QuestionBankImportService,
+  RepositoryIdempotencyConflictError,
   type StoredOperation,
   user,
 } from "@interview-agent/db";
@@ -175,7 +176,27 @@ describe.sequential("persisted OperationRunner", () => {
     ]);
     expect(competing.filter((operation) => operation.status === "succeeded")).toHaveLength(1);
     expect(competing.filter((operation) => operation.status === "failed")).toHaveLength(1);
+    expect(competing.find((operation) => operation.status === "failed")).toMatchObject({
+      error: { classification: "version_conflict" },
+    });
     expect((await interviewRepository.findById(interviewId, OWNER_ID))?.version).toBe(2);
+  });
+
+  it("rejects cross-command reuse of an existing idempotency key", async () => {
+    const suffix = "runner-cross-command-idempotency";
+    const interviewId = await createInterview(suffix);
+
+    await expect(
+      handlers.skip({
+        ...commandInput(
+          OWNER_ID,
+          interviewId,
+          "cross-command-operation",
+          `${suffix}-create-key`,
+          1,
+        ),
+      }),
+    ).rejects.toBeInstanceOf(RepositoryIdempotencyConflictError);
   });
 
   it("persists a recoverable pending creation Operation before finalization", async () => {
@@ -218,7 +239,10 @@ describe.sequential("persisted OperationRunner", () => {
     ).resolves.toMatchObject({
       status: "failed",
       retryable: false,
-      error: { message: "Interview creation is still finalizing" },
+      error: {
+        classification: "command_rejected",
+        message: "Interview creation is still finalizing",
+      },
     });
 
     await expect(
@@ -374,6 +398,43 @@ describe.sequential("persisted OperationRunner", () => {
         ),
       }),
     ).rejects.toThrow();
+  });
+
+  it("classifies stale retry versions as canonical version conflicts", async () => {
+    const interviewId = await createInterview("runner-retry-version-conflict");
+    evaluator.implementation = async () => {
+      throw new AnswerEvaluationModelError("transient_provider_failure", [], MODEL_METADATA);
+    };
+    const failed = await handlers.submitAnswer({
+      ...commandInput(
+        OWNER_ID,
+        interviewId,
+        "retry-version-conflict-target",
+        "retry-version-conflict-target-key",
+        1,
+      ),
+      text: "这个回答会产生可重试失败。",
+    });
+
+    const retry = await handlers.retry({
+      ...retryInput(
+        OWNER_ID,
+        interviewId,
+        "retry-version-conflict-command",
+        "retry-version-conflict-command-key",
+        failed.id,
+        1,
+      ),
+    });
+
+    expect(retry).toMatchObject({
+      status: "failed",
+      retryable: false,
+      error: {
+        classification: "version_conflict",
+      },
+    });
+    expect(await operationRepository.findById(failed.id, OWNER_ID)).toEqual(failed);
   });
 
   it("retries clarification without changing the original request time", async () => {

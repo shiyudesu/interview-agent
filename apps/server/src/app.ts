@@ -8,6 +8,10 @@ import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { AuthenticatedRequestContext, Authentication } from "./auth.js";
+import {
+  type InterviewCommandRouteDependencies,
+  registerInterviewCommandRoutes,
+} from "./command-routes.js";
 import type { ServerConfig } from "./config.js";
 import { type DeletionOrchestrationService, DeletionTargetNotFoundError } from "./deletion.js";
 
@@ -21,6 +25,7 @@ export interface RegisterApplicationInput {
   readonly authentication: Authentication;
   readonly config: Pick<ServerConfig, "auth">;
   readonly deletion: DeletionOrchestrationService;
+  readonly interviewCommands: InterviewCommandRouteDependencies;
 }
 
 export async function registerApplication(
@@ -74,6 +79,8 @@ export async function registerApplication(
       }
     },
   });
+
+  await registerInterviewCommandRoutes(app, input.interviewCommands);
 
   app.delete<{
     Params: { readonly interviewId: string };

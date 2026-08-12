@@ -145,6 +145,7 @@ type OperationFailure = JsonObject & {
   readonly code: "operation_failed" | "model_failure";
   readonly message: string;
   readonly retryable: boolean;
+  readonly classification?: "command_rejected" | "version_conflict";
 };
 
 export class OperationRunner {
@@ -385,7 +386,7 @@ export class OperationRunner {
 
   private failRetryCommand(
     retryOperation: StoredOperation,
-    _error:
+    error:
       | InterviewDomainError
       | InterviewVersionConflictError
       | OperationRunnerError
@@ -393,6 +394,8 @@ export class OperationRunner {
       | RepositoryNotFoundError
       | RepositoryOperationRetryConflictError,
   ): Promise<StoredOperation> {
+    const classification =
+      error instanceof InterviewVersionConflictError ? "version_conflict" : "command_rejected";
     return this.unitOfWork.run(async (repositories) => {
       const operation = requiredOperation(
         await repositories.operations.findById(retryOperation.id, retryOperation.accountId),
@@ -410,7 +413,7 @@ export class OperationRunner {
             return repositories.operations.failPendingRetryCommand({
               operationId: operation.id,
               accountId: operation.accountId,
-              error: operationFailure("Retry command was rejected", false),
+              error: operationFailure("Retry command was rejected", false, classification),
             });
           }
           throw error;
@@ -438,7 +441,7 @@ export class OperationRunner {
         ...completionLease(claimed),
         operationId: operation.id,
         accountId: operation.accountId,
-        error: operationFailure("Retry command was rejected", false),
+        error: operationFailure("Retry command was rejected", false, classification),
         retryable: false,
       });
     });
@@ -458,6 +461,17 @@ export class OperationRunner {
               request.interviewId,
             )
           : null;
+      if (
+        existing !== null &&
+        (existing.interviewId !== request.interviewId ||
+          existing.type !== request.type ||
+          existing.expectedVersion !== request.expectedVersion)
+      ) {
+        throw new RepositoryIdempotencyConflictError(
+          existing.idempotencyScope,
+          existing.idempotencyKey,
+        );
+      }
       const questionPosition =
         existing === null
           ? interview?.currentQuestionPosition
@@ -503,7 +517,11 @@ export class OperationRunner {
             ...completionLease(blocked),
             operationId: blocked.operation.id,
             accountId: request.accountId,
-            error: operationFailure("Interview creation is still finalizing", false),
+            error: operationFailure(
+              "Interview creation is still finalizing",
+              false,
+              "command_rejected",
+            ),
             retryable: false,
           }),
         };
@@ -538,7 +556,13 @@ export class OperationRunner {
             ...completionLease(claimed),
             operationId: claimed.operation.id,
             accountId: request.accountId,
-            error: operationFailure(error.message, false),
+            error: operationFailure(
+              error.message,
+              false,
+              error instanceof InterviewVersionConflictError
+                ? "version_conflict"
+                : "command_rejected",
+            ),
             retryable: false,
           }),
         };
@@ -1060,11 +1084,16 @@ function retryOperationResult(target: StoredOperation, interview: Interview): Js
   };
 }
 
-function operationFailure(message: string, retryable: boolean): OperationFailure {
+function operationFailure(
+  message: string,
+  retryable: boolean,
+  classification?: OperationFailure["classification"],
+): OperationFailure {
   return {
     code: "operation_failed",
     message: message.trim().length === 0 ? "Operation failed" : message,
     retryable,
+    ...(classification === undefined ? {} : { classification }),
   };
 }
 
