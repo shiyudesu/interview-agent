@@ -1580,9 +1580,14 @@ describe.sequential("persisted OperationRunner", () => {
       ),
     );
     let rejectBlocked: ((reason: unknown) => void) | undefined;
+    let markReportStarted: (() => void) | undefined;
+    const reportStarted = new Promise<void>((resolve) => {
+      markReportStarted = resolve;
+    });
     const blockedAnalyzer = new FauxReportAnalysisModel();
     blockedAnalyzer.implementation = () =>
       new Promise<ReportAnalysisResult>((_resolve, reject) => {
+        markReportStarted?.();
         rejectBlocked = reject;
       });
     const crashedHandlers = createHandlers(
@@ -1598,6 +1603,7 @@ describe.sequential("persisted OperationRunner", () => {
         commandInput(OWNER_ID, interviewId, "report-restart-end", "report-restart-end-key", 2),
       )
       .catch((error: unknown) => error);
+    await reportStarted;
     const processing = await waitForLatestReportOperation(interviewId, "processing");
     if (processing.leaseExpiresAt === null) {
       throw new Error("Processing report Operation is missing its lease expiry");
