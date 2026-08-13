@@ -27,12 +27,11 @@ import {
   type ReportResponseDto,
   ReportResponseSchema,
 } from "@interview-agent/contracts";
-import {
-  type InterviewDetail,
-  type InterviewHistoryCursor,
-  type PgRepositoryUnitOfWork,
-  RepositoryInterviewExpiredError,
-  type StoredOperation,
+import type {
+  InterviewDetail,
+  InterviewHistoryCursor,
+  PgRepositoryUnitOfWork,
+  StoredOperation,
 } from "@interview-agent/db";
 import {
   type AccountId,
@@ -42,7 +41,11 @@ import {
   parseMessageId,
   parseOperationId,
 } from "@interview-agent/domain";
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+
+import { createApiRouteErrorHandler, internalError, notFoundError } from "./api-route-errors.js";
+import { authenticatedRequestContext } from "./authenticated-request.js";
+import { retryAfterRepositoryInterviewExpiry } from "./repository-interview-expiry.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const HISTORY_CURSOR_VERSION = 1;
@@ -54,6 +57,12 @@ const CANONICAL_STATE_TRANSACTION = {
   isolationLevel: "repeatable read",
   accessMode: "read write",
 } as const;
+
+const readRouteErrorHandler = createApiRouteErrorHandler({
+  logEvent: "canonical_read_route_failed",
+  logMessage: "Canonical read route failed",
+  mapContentTypeParserErrors: false,
+});
 
 export interface CanonicalReadRouteDependencies {
   currentAccount(accountId: AccountId, sessionId: string): Promise<AccountResponseDto | null>;
@@ -91,7 +100,7 @@ export function createCanonicalReadRouteDependencies(
       }, CANONICAL_READ_TRANSACTION),
 
     activeInterview: (accountId) =>
-      retryAfterLazyExpiry(() =>
+      retryAfterRepositoryInterviewExpiry(() =>
         unitOfWork.run(async (repositories) => {
           const interview = await repositories.interviews.findActiveByAccountId(accountId);
           if (interview === null) {
@@ -110,7 +119,7 @@ export function createCanonicalReadRouteDependencies(
       ),
 
     interviewDetail: (accountId, interviewId) =>
-      retryAfterLazyExpiry(() =>
+      retryAfterRepositoryInterviewExpiry(() =>
         unitOfWork.run(async (repositories) => {
           const detail = await repositories.interviews.findDetailByOwner(interviewId, accountId);
           return detail === null ? null : mapInterviewDetail(repositories, detail);
@@ -118,7 +127,7 @@ export function createCanonicalReadRouteDependencies(
       ),
 
     operationStatus: (accountId, operationId) =>
-      retryAfterLazyExpiry(() =>
+      retryAfterRepositoryInterviewExpiry(() =>
         unitOfWork.run(async (repositories) => {
           const operation = await repositories.operations.findById(operationId, accountId);
           return operation === null ? null : mapOperationToStatusResponse(operation);
@@ -141,7 +150,7 @@ export function createCanonicalReadRouteDependencies(
     },
 
     reportDetail: (accountId, interviewId) =>
-      retryAfterLazyExpiry(() =>
+      retryAfterRepositoryInterviewExpiry(() =>
         unitOfWork.run(async (repositories) => {
           const report = await repositories.reports.findByInterviewId(interviewId, accountId);
           return report === null ? null : mapInternalReportSnapshotToPublic(report.snapshot);
@@ -155,7 +164,7 @@ export async function registerCanonicalReadRoutes(
   dependencies: CanonicalReadRouteDependencies,
 ): Promise<void> {
   app.get("/api/v1/account", readRouteOptions(AccountResponseSchema), async (request, reply) => {
-    const context = authenticatedContext(request, reply);
+    const context = authenticatedRequestContext(request, reply);
     if (context === null) {
       return;
     }
@@ -168,7 +177,7 @@ export async function registerCanonicalReadRoutes(
     "/api/v1/interviews/active",
     readRouteOptions(CurrentInterviewResponseSchema),
     async (request, reply) => {
-      const context = authenticatedContext(request, reply);
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
         return;
       }
@@ -188,7 +197,7 @@ export async function registerCanonicalReadRoutes(
       },
     },
     async (request, reply) => {
-      const context = authenticatedContext(request, reply);
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
         return;
       }
@@ -211,7 +220,7 @@ export async function registerCanonicalReadRoutes(
       },
     },
     async (request, reply) => {
-      const context = authenticatedContext(request, reply);
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
         return;
       }
@@ -234,7 +243,7 @@ export async function registerCanonicalReadRoutes(
       },
     },
     async (request, reply) => {
-      const context = authenticatedContext(request, reply);
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
         return;
       }
@@ -254,7 +263,7 @@ export async function registerCanonicalReadRoutes(
       },
     },
     async (request, reply) => {
-      const context = authenticatedContext(request, reply);
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
         return;
       }
@@ -366,17 +375,6 @@ function operationReference(operation: StoredOperation): PublicOperationProjecti
   return null;
 }
 
-async function retryAfterLazyExpiry<Response>(load: () => Promise<Response>): Promise<Response> {
-  try {
-    return await load();
-  } catch (error) {
-    if (!(error instanceof RepositoryInterviewExpiredError)) {
-      throw error;
-    }
-    return load();
-  }
-}
-
 function hasFailureClassification(error: StoredOperation["error"]): boolean {
   return (error as { readonly classification?: unknown } | null)?.classification !== undefined;
 }
@@ -485,7 +483,7 @@ async function sendRead<Response>(
   try {
     const response = await load();
     if (response === null && missingResource !== null) {
-      return reply.code(404).send(notFound(missingResource));
+      return reply.code(404).send(notFoundError(missingResource));
     }
     return reply.code(200).send(response);
   } catch (error) {
@@ -495,29 +493,6 @@ async function sendRead<Response>(
     request.log.error({ event: "canonical_read_failed" }, "Canonical read failed");
     return reply.code(500).send(internalError());
   }
-}
-
-function authenticatedContext(request: FastifyRequest, reply: FastifyReply) {
-  if (request.authContext === null) {
-    reply.code(401).send({
-      error: {
-        code: "unauthorized",
-        message: "Authentication is required",
-      },
-    });
-    return null;
-  }
-  return request.authContext;
-}
-
-function notFound(resource: "account" | "interview" | "operation" | "report") {
-  return {
-    error: {
-      code: "not_found",
-      message: "Resource was not found.",
-      resource,
-    },
-  };
 }
 
 function invalidCursor() {
@@ -534,31 +509,4 @@ function invalidCursor() {
       ],
     },
   };
-}
-
-function internalError() {
-  return {
-    error: {
-      code: "internal_error",
-      message: "An unexpected error occurred.",
-    },
-  };
-}
-
-function readRouteErrorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
-  if (error.validation !== undefined) {
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues: error.validation.map((issue) => ({
-          path: issue.instancePath || `/${error.validationContext ?? "request"}`,
-          code: issue.keyword,
-          message: issue.message ?? "Request validation failed",
-        })),
-      },
-    });
-  }
-  request.log.error({ event: "canonical_read_route_failed" }, "Canonical read route failed");
-  return reply.code(500).send(internalError());
 }

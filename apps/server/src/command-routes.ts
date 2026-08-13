@@ -54,8 +54,10 @@ import {
   parseInterviewId,
   parseOperationId,
 } from "@interview-agent/domain";
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
+import { createApiRouteErrorHandler, internalError, notFoundError } from "./api-route-errors.js";
+import { authenticatedAccountId } from "./authenticated-request.js";
 import {
   type AcceptedOperationExecution,
   type CreateInterviewOperationInput,
@@ -135,6 +137,12 @@ const commandResponses = {
   503: ErrorEnvelopeSchema,
 } as const;
 
+const commandRouteErrorHandler = createApiRouteErrorHandler({
+  logEvent: "interview_command_route_failed",
+  logMessage: "Interview command route failed",
+  mapContentTypeParserErrors: true,
+});
+
 export async function registerInterviewCommandRoutes(
   app: FastifyInstance,
   dependencies: InterviewCommandRouteDependencies,
@@ -161,7 +169,7 @@ export async function registerInterviewCommandRoutes(
         ...commandBase(request, dependencies, accountId, dependencies.nextInterviewId()),
         questionCount: request.body.questionCount,
       };
-      return executeCommand(request, reply, dependencies, input.interviewId, () =>
+      return executeCommand(request, reply, dependencies, accountId, input.interviewId, () =>
         dependencies.handlers.createInterview(input),
       );
     },
@@ -288,7 +296,7 @@ export async function registerInterviewCommandRoutes(
         ...commandBase(request, dependencies, accountId, interviewId),
         targetOperationId: parseOperationId(request.body.operationId),
       };
-      return executeCommand(request, reply, dependencies, interviewId, () =>
+      return executeCommand(request, reply, dependencies, accountId, interviewId, () =>
         dependencies.handlers.retry(input),
       );
     },
@@ -326,7 +334,7 @@ async function executeTextCommand(
     ...commandBase(request, dependencies, accountId, interviewId),
     text: request.body.text,
   };
-  return executeCommand(request, reply, dependencies, interviewId, () => invoke(input));
+  return executeCommand(request, reply, dependencies, accountId, interviewId, () => invoke(input));
 }
 
 async function executeControlCommand(
@@ -345,7 +353,7 @@ async function executeControlCommand(
   }
   const interviewId = parseInterviewId(request.params.interviewId);
   const input = commandBase(request, dependencies, accountId, interviewId);
-  return executeCommand(request, reply, dependencies, interviewId, () => invoke(input));
+  return executeCommand(request, reply, dependencies, accountId, interviewId, () => invoke(input));
 }
 
 function commandBase(
@@ -371,6 +379,7 @@ async function executeCommand(
   request: FastifyRequest,
   reply: FastifyReply,
   dependencies: InterviewCommandRouteDependencies,
+  accountId: AccountId,
   interviewId: InterviewId,
   invoke: () => Promise<CommandAcceptance>,
 ) {
@@ -403,7 +412,7 @@ async function executeCommand(
     if (classification === "command_rejected") {
       return reply.code(409).send(commandRejected());
     }
-    const current = await dependencies.states.findById(interviewId, requiredAccountId(request));
+    const current = await dependencies.states.findById(interviewId, accountId);
     if (
       current !== null &&
       (classification === "version_conflict" || current.version !== operation.expectedVersion)
@@ -412,7 +421,7 @@ async function executeCommand(
     }
     return reply.code(409).send(commandRejected());
   } catch (error) {
-    return sendCommandError(request, reply, dependencies, interviewId, error);
+    return sendCommandError(request, reply, dependencies, accountId, interviewId, error);
   }
 }
 
@@ -420,6 +429,7 @@ async function sendCommandError(
   request: FastifyRequest,
   reply: FastifyReply,
   dependencies: InterviewCommandRouteDependencies,
+  accountId: AccountId,
   interviewId: InterviewId,
   error: unknown,
 ) {
@@ -427,18 +437,18 @@ async function sendCommandError(
     error instanceof InterviewVersionConflictError ||
     error instanceof RepositoryVersionConflictError
   ) {
-    const current = await dependencies.states.findById(interviewId, requiredAccountId(request));
+    const current = await dependencies.states.findById(interviewId, accountId);
     if (current === null) {
-      return reply.code(404).send(notFound("interview"));
+      return reply.code(404).send(notFoundError("interview"));
     }
     return reply.code(409).send(versionConflict(interviewId, current));
   }
   if (error instanceof RepositoryNotFoundError) {
-    return reply.code(404).send(notFound(publicResource(error.resource)));
+    return reply.code(404).send(notFoundError(publicResource(error.resource)));
   }
   if (error instanceof RepositoryInterviewUnavailableError) {
     if (error.status === "deleting") {
-      return reply.code(404).send(notFound("interview"));
+      return reply.code(404).send(notFoundError("interview"));
     }
     return reply.code(409).send(commandRejected());
   }
@@ -457,28 +467,6 @@ async function sendCommandError(
   }
   request.log.error({ event: "interview_command_failed" }, "Interview command failed");
   return reply.code(500).send(internalError());
-}
-
-function authenticatedAccountId(request: FastifyRequest, reply: FastifyReply): AccountId | null {
-  const context = request.authContext;
-  if (context === null) {
-    reply.code(401).send({
-      error: {
-        code: "unauthorized",
-        message: "Authentication is required",
-      },
-    });
-    return null;
-  }
-  return context.accountId;
-}
-
-function requiredAccountId(request: FastifyRequest): AccountId {
-  const context = request.authContext;
-  if (context === null) {
-    throw new Error("Authenticated command request has no account context");
-  }
-  return context.accountId;
 }
 
 function versionConflict(
@@ -528,16 +516,6 @@ function commandRejected(): ErrorEnvelopeDto {
   );
 }
 
-function notFound(resource: "account" | "interview" | "operation" | "report"): ErrorEnvelopeDto {
-  return {
-    error: {
-      code: "not_found",
-      message: "Resource was not found.",
-      resource,
-    },
-  };
-}
-
 function publicResource(resource: string): "account" | "interview" | "operation" | "report" {
   const normalized = resource.toLowerCase();
   if (normalized.includes("account")) {
@@ -550,51 +528,4 @@ function publicResource(resource: string): "account" | "interview" | "operation"
     return "report";
   }
   return "interview";
-}
-
-function internalError(): ErrorEnvelopeDto {
-  return {
-    error: {
-      code: "internal_error",
-      message: "An unexpected error occurred.",
-    },
-  };
-}
-
-function commandRouteErrorHandler(
-  error: FastifyError,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
-  if (error.validation !== undefined) {
-    const issues = error.validation.map((issue) => ({
-      path: issue.instancePath || `/${error.validationContext ?? "request"}`,
-      code: issue.keyword,
-      message: issue.message ?? "Request validation failed",
-    }));
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues,
-      },
-    });
-  }
-  if (typeof error.code === "string" && error.code.startsWith("FST_ERR_CTP_")) {
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues: [
-          {
-            path: "/body",
-            code: error.code,
-            message: "The request body is invalid.",
-          },
-        ],
-      },
-    });
-  }
-  request.log.error({ event: "interview_command_route_failed" }, "Interview command route failed");
-  return reply.code(500).send(internalError());
 }

@@ -12,9 +12,11 @@ import {
 } from "@interview-agent/contracts";
 import { parseInterviewId } from "@interview-agent/domain";
 import { fromNodeHeaders } from "better-auth/node";
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import type { AuthenticatedRequestContext, Authentication } from "./auth.js";
+import { createApiRouteErrorHandler, internalError, notFoundError } from "./api-route-errors.js";
+import type { Authentication } from "./auth.js";
+import { authenticatedRequestContext } from "./authenticated-request.js";
 import {
   type InterviewCommandRouteDependencies,
   registerInterviewCommandRoutes,
@@ -26,12 +28,6 @@ import {
   registerOperationEventRoutes,
 } from "./operation-events.js";
 import { type CanonicalReadRouteDependencies, registerCanonicalReadRoutes } from "./read-routes.js";
-
-declare module "fastify" {
-  interface FastifyRequest {
-    authContext: AuthenticatedRequestContext | null;
-  }
-}
 
 export interface RegisterApplicationInput {
   readonly authentication: Authentication;
@@ -62,12 +58,7 @@ export async function registerApplication(
       forwardSetCookies(session.headers, reply);
     } catch {
       request.log.error({ event: "authentication_session_failed" }, "Authentication failed");
-      return reply.code(500).send({
-        error: {
-          code: "internal_error",
-          message: "An unexpected error occurred.",
-        },
-      });
+      return reply.code(500).send(internalError());
     }
   });
 
@@ -128,9 +119,9 @@ export async function registerApplication(
       errorHandler: deletionRouteErrorHandler,
     },
     async (request, reply) => {
-      const context = request.authContext;
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
-        return reply.code(401).send(unauthorizedResponse());
+        return;
       }
       const interviewId = parseInterviewId(request.params.interviewId);
       try {
@@ -141,7 +132,7 @@ export async function registerApplication(
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
-          return reply.code(404).send(notFoundResponse("interview"));
+          return reply.code(404).send(notFoundError("interview"));
         }
         request.log.error(
           { event: "deletion_request_failed", scope: "interview" },
@@ -168,9 +159,9 @@ export async function registerApplication(
       errorHandler: deletionRouteErrorHandler,
     },
     async (request, reply) => {
-      const context = request.authContext;
+      const context = authenticatedRequestContext(request, reply);
       if (context === null) {
-        return reply.code(401).send(unauthorizedResponse());
+        return;
       }
       try {
         const result = await input.deletion.deleteAccount(context.accountId);
@@ -180,7 +171,7 @@ export async function registerApplication(
         return reply.code(202).send(deletionResponse(result));
       } catch (error) {
         if (error instanceof DeletionTargetNotFoundError) {
-          return reply.code(404).send(notFoundResponse("account"));
+          return reply.code(404).send(notFoundError("account"));
         }
         request.log.error(
           { event: "deletion_request_failed", scope: "account" },
@@ -250,25 +241,6 @@ function deletionResponse(result: { readonly requestedAt: Date; readonly purgeDe
   };
 }
 
-function unauthorizedResponse() {
-  return {
-    error: {
-      code: "unauthorized",
-      message: "Authentication is required",
-    },
-  };
-}
-
-function notFoundResponse(resource: "account" | "interview") {
-  return {
-    error: {
-      code: "not_found",
-      message: "Resource was not found.",
-      resource,
-    },
-  };
-}
-
 function deletionFailureResponse() {
   return {
     error: {
@@ -278,39 +250,9 @@ function deletionFailureResponse() {
   };
 }
 
-function deletionRouteErrorHandler(
-  error: FastifyError,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
-  if (error.validation !== undefined) {
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues: error.validation.map((issue) => ({
-          path: issue.instancePath || `/${error.validationContext ?? "request"}`,
-          code: issue.keyword,
-          message: issue.message ?? "Request validation failed",
-        })),
-      },
-    });
-  }
-  if (typeof error.code === "string" && error.code.startsWith("FST_ERR_CTP_")) {
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues: [
-          {
-            path: "/body",
-            code: error.code,
-            message: "The request body is invalid.",
-          },
-        ],
-      },
-    });
-  }
-  request.log.error({ event: "deletion_route_failed" }, "Deletion route failed");
-  return reply.code(500).send(deletionFailureResponse());
-}
+const deletionRouteErrorHandler = createApiRouteErrorHandler({
+  logEvent: "deletion_route_failed",
+  logMessage: "Deletion route failed",
+  mapContentTypeParserErrors: true,
+  unexpectedError: deletionFailureResponse,
+});

@@ -212,6 +212,15 @@ describe("deletion route contracts", () => {
       headers: { authorization: "Bearer owner" },
       payload: {},
     });
+    const malformedAccountBody = await instance.inject({
+      method: "DELETE",
+      url: "/api/v1/account",
+      headers: {
+        authorization: "Bearer owner-session",
+        "content-type": "application/json",
+      },
+      payload: '{"confirmed":',
+    });
     const unauthorizedInterview = await instance.inject({
       method: "DELETE",
       url: `/api/v1/interviews/${interviewId}`,
@@ -225,11 +234,25 @@ describe("deletion route contracts", () => {
 
     expectContract(invalidParams, 400, DeletionValidationErrorResponseSchema);
     expectContract(invalidAccountBody, 400, DeletionValidationErrorResponseSchema);
+    expectContract(malformedAccountBody, 400, DeletionValidationErrorResponseSchema);
     expect(invalidParams.json()).toMatchObject({
       error: {
         code: "validation_error",
         message: "The request is invalid.",
         issues: [expect.objectContaining({ path: "/interviewId" })],
+      },
+    });
+    expect(malformedAccountBody.json()).toEqual({
+      error: {
+        code: "validation_error",
+        message: "The request is invalid.",
+        issues: [
+          {
+            path: "/body",
+            code: "FST_ERR_CTP_INVALID_JSON_BODY",
+            message: "The request body is invalid.",
+          },
+        ],
       },
     });
     expectContract(unauthorizedInterview, 401, DeletionUnauthorizedResponseSchema);

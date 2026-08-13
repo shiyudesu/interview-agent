@@ -10,18 +10,23 @@ import {
   type OperationTerminalEventDto,
   type OperationTextDeltaEventDto,
 } from "@interview-agent/contracts";
-import {
-  type PgRepositoryUnitOfWork,
-  RepositoryInterviewExpiredError,
-  type StoredOperation,
-} from "@interview-agent/db";
+import type { PgRepositoryUnitOfWork, StoredOperation } from "@interview-agent/db";
 import {
   type AccountId,
   type InterviewId,
   type OperationId,
   parseOperationId,
 } from "@interview-agent/domain";
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+
+import {
+  createApiRouteErrorHandler,
+  internalError,
+  notFoundError,
+  unauthorizedError,
+} from "./api-route-errors.js";
+import { authenticatedRequestContext } from "./authenticated-request.js";
+import { retryAfterRepositoryInterviewExpiry } from "./repository-interview-expiry.js";
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 1_000;
@@ -34,6 +39,12 @@ const OPERATION_EVENT_TRANSACTION = {
   isolationLevel: "repeatable read",
   accessMode: "read write",
 } as const;
+
+const operationEventRouteErrorHandler = createApiRouteErrorHandler({
+  logEvent: "operation_event_route_failed",
+  logMessage: "Operation event route failed",
+  mapContentTypeParserErrors: false,
+});
 
 type OperationEventListener = (event: OperationEventDto) => void;
 
@@ -584,7 +595,7 @@ export function createOperationEventRouteDependencies(
     broker,
     access: {
       findAccessible: (accountId, sessionId, operationId) =>
-        retryAfterLazyExpiry(() =>
+        retryAfterRepositoryInterviewExpiry(() =>
           unitOfWork.run(async (repositories) => {
             if (!(await repositories.accounts.isSessionActive(accountId, sessionId))) {
               return null;
@@ -652,9 +663,9 @@ async function streamOperationEvents(
   dependencies: OperationEventRouteDependencies,
   activeStreams: Set<() => void>,
 ) {
-  const context = request.authContext;
+  const context = authenticatedRequestContext(request, reply);
   if (context === null) {
-    return reply.code(401).send(unauthorized());
+    return;
   }
   const accountId = context.accountId;
   const sessionId = context.sessionId;
@@ -713,9 +724,9 @@ async function streamOperationEvents(
     }
     close();
     if (!sessionActive) {
-      return reply.code(401).send(unauthorized());
+      return reply.code(401).send(unauthorizedError());
     }
-    return reply.code(404).send(notFound());
+    return reply.code(404).send(notFoundError("operation"));
   }
 
   if (!dependencies.broker.hasState(operation) && lastSequence > 0) {
@@ -889,17 +900,6 @@ function isSessionActive(
   return access.isSessionActive?.(accountId, sessionId) ?? Promise.resolve(true);
 }
 
-async function retryAfterLazyExpiry<Result>(load: () => Promise<Result>): Promise<Result> {
-  try {
-    return await load();
-  } catch (error) {
-    if (!(error instanceof RepositoryInterviewExpiredError)) {
-      throw error;
-    }
-    return load();
-  }
-}
-
 function parseLastEventId(value: string | undefined): number | null {
   if (value === undefined) {
     return 0;
@@ -940,25 +940,6 @@ function positiveInteger(value: number | undefined, fallback: number, minimum: n
   return value;
 }
 
-function unauthorized() {
-  return {
-    error: {
-      code: "unauthorized",
-      message: "Authentication is required",
-    },
-  };
-}
-
-function notFound() {
-  return {
-    error: {
-      code: "not_found",
-      message: "Resource was not found.",
-      resource: "operation",
-    },
-  };
-}
-
 function replayUnavailable(operationId: OperationId) {
   return {
     error: {
@@ -967,35 +948,4 @@ function replayUnavailable(operationId: OperationId) {
       operationId: String(operationId),
     },
   };
-}
-
-function internalError() {
-  return {
-    error: {
-      code: "internal_error",
-      message: "An unexpected error occurred.",
-    },
-  };
-}
-
-function operationEventRouteErrorHandler(
-  error: FastifyError,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
-  if (error.validation !== undefined) {
-    return reply.code(400).send({
-      error: {
-        code: "validation_error",
-        message: "The request is invalid.",
-        issues: error.validation.map((issue) => ({
-          path: issue.instancePath || `/${error.validationContext ?? "request"}`,
-          code: issue.keyword,
-          message: issue.message ?? "Request validation failed",
-        })),
-      },
-    });
-  }
-  request.log.error({ event: "operation_event_route_failed" }, "Operation event route failed");
-  return reply.code(500).send(internalError());
 }
