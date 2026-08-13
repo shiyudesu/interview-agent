@@ -20,6 +20,7 @@ COPY packages/domain/package.json packages/domain/package.json
 
 RUN pnpm install \
     --filter=@interview-agent/server... \
+    --filter=@interview-agent/web... \
     --frozen-lockfile \
     --fetch-retries=5 \
     --fetch-timeout=300000 \
@@ -29,9 +30,10 @@ FROM dependencies AS build
 
 COPY tsconfig.base.json ./
 COPY apps/server ./apps/server
+COPY apps/web ./apps/web
 COPY packages ./packages
 
-RUN pnpm --filter=@interview-agent/server... run build
+RUN pnpm --filter=@interview-agent/server... --filter=@interview-agent/web... run build
 RUN pnpm --filter=@interview-agent/server --prod deploy /app/deploy
 
 FROM node:24.19.0-bookworm-slim AS runtime
@@ -41,6 +43,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=build --chown=node:node /app/deploy ./
+COPY --from=build --chown=node:node /app/apps/web/dist ./public
 
 USER node
 

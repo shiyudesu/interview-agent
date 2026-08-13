@@ -24,6 +24,7 @@ import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { PiReportAnalysisModel } from "./report-analysis-model.js";
 import { createServer } from "./server.js";
 import { installGracefulShutdown } from "./shutdown.js";
+import { registerWebApplication } from "./web-application.js";
 
 const config = loadServerConfig();
 const modelRuntime = await createModelRuntime(config.model, config.environment);
@@ -88,6 +89,7 @@ await registerApplication(app, {
   canonicalReads,
   operationEvents,
 });
+await registerWebApplication(app, { environment: config.environment });
 app.addHook("onClose", async () => {
   await operationExecutionSupervisor.shutdown();
   await databaseClient.close();

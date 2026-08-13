@@ -1,4 +1,5 @@
 import { type Static, type TSchema, Type } from "typebox";
+import { Check } from "typebox/value";
 
 import {
   InterviewIdSchema,
@@ -231,3 +232,7 @@ export type OperationEventReplayUnavailableErrorResponseDto = Static<
   typeof OperationEventReplayUnavailableErrorResponseSchema
 >;
 export type InternalErrorResponseDto = Static<typeof InternalErrorResponseSchema>;
+
+export function isErrorEnvelopeDto(value: unknown): value is ErrorEnvelopeDto {
+  return Check(ErrorEnvelopeSchema, value);
+}

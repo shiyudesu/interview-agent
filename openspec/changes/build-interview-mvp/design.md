@@ -40,6 +40,14 @@ question-bank
 
 This is preferred over a server-centric package because Operation handlers and state transitions must be testable without infrastructure and reusable by a future worker.
 
+The browser application is a Vite SPA with React Router, TanStack Query, Tailwind CSS, and focused
+Radix primitives. Its shared fetch client always uses same-origin credentials, disables browser HTTP
+caching in favor of Query state, and exposes an API error DTO only after the complete contracts
+error envelope validates. Local Vite requests proxy `/api` to the configured Better Auth origin and
+rewrite the proxied Origin/Host consistently. Production builds copy the Vite output into the Server
+image; Fastify serves immutable assets and returns the uncached SPA entry only for non-API browser
+navigations.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:
