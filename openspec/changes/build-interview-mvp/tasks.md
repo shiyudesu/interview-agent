@@ -75,7 +75,7 @@
 - [x] 7.12 Consolidate shared API error envelopes, validation handling, owner/session access checks, and lazy-expiry retry helpers without changing public behavior.
 - [x] 7.13 Decompose Operation orchestration into acceptance, model execution, report execution, retry, and finalization services while preserving transaction boundaries.
 - [x] 7.14 Generate local/test OpenAPI documentation from TypeBox route schemas and keep Swagger disabled outside those environments.
-- [ ] 7.15 Add full API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, command-to-SSE flow, and SSE disconnect recovery.
+- [x] 7.15 Add full API integration tests for authentication, ownership, idempotency, concurrency conflicts, expiry, terminal-state rejection, command-to-SSE flow, and SSE disconnect recovery.
 
 ## 8. Assessment and Reports
 
