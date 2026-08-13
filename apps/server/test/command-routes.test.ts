@@ -10,7 +10,6 @@ import {
 } from "@interview-agent/db";
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerApplication } from "../src/app.js";
@@ -27,8 +26,9 @@ import {
   ServerOwnedOperationSupervisor,
 } from "../src/operation-runner.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { createServer } from "../src/server.js";
 
-const apps: ReturnType<typeof Fastify>[] = [];
+const apps: ReturnType<typeof createServer>[] = [];
 const accountId = parseAccountId("command-route-owner");
 const now = new Date("2026-08-12T03:00:00.000Z");
 const authContext: AuthenticatedRequestContext = {
@@ -38,6 +38,7 @@ const authContext: AuthenticatedRequestContext = {
   name: "Candidate",
 };
 const config = {
+  environment: "test",
   auth: {
     secret: "0123456789abcdef0123456789abcdef",
     baseUrl: "http://localhost:3000",
@@ -179,7 +180,7 @@ async function createApp(
   context: AuthenticatedRequestContext | null = authContext,
   authenticationOverride?: Authentication,
 ) {
-  const instance = Fastify({ logger: false });
+  const instance = createServer({ logger: false });
   apps.push(instance);
   await registerApplication(instance, {
     authentication: authenticationOverride ?? authentication(context),
@@ -362,6 +363,24 @@ describe("interview command routes", () => {
       error: {
         code: "validation_error",
         message: "The request is invalid.",
+      },
+    });
+
+    const extraProperty = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews/interview-1/skip",
+      headers: { "idempotency-key": "extra-property-key" },
+      payload: { expectedVersion: 3, ignoredByOlderValidator: true },
+    });
+    expect(extraProperty.statusCode).toBe(400);
+    expect(extraProperty.json()).toMatchObject({
+      error: {
+        code: "validation_error",
+        issues: [
+          expect.objectContaining({
+            code: "additionalProperties",
+          }),
+        ],
       },
     });
 

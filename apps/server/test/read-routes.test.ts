@@ -9,7 +9,6 @@ import type {
 import type { PgRepositoryUnitOfWork } from "@interview-agent/db";
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerApplication } from "../src/app.js";
@@ -25,8 +24,9 @@ import {
   createCanonicalReadRouteDependencies,
   InvalidHistoryCursorError,
 } from "../src/read-routes.js";
+import { createServer } from "../src/server.js";
 
-const apps: ReturnType<typeof Fastify>[] = [];
+const apps: ReturnType<typeof createServer>[] = [];
 const accountId = parseAccountId("read-route-owner");
 const authContext: AuthenticatedRequestContext = {
   accountId,
@@ -37,6 +37,7 @@ const authContext: AuthenticatedRequestContext = {
 const occurredAt = "2026-08-12T04:00:00.000Z";
 const later = "2026-08-12T05:00:00.000Z";
 const config = {
+  environment: "test",
   auth: {
     secret: "0123456789abcdef0123456789abcdef",
     baseUrl: "http://localhost:3000",
@@ -215,7 +216,7 @@ async function createApp(
   reads: CanonicalReadRouteDependencies,
   context: AuthenticatedRequestContext | null = authContext,
 ) {
-  const instance = Fastify({ logger: false });
+  const instance = createServer({ logger: false });
   apps.push(instance);
   await registerApplication(instance, {
     authentication: authentication(context),

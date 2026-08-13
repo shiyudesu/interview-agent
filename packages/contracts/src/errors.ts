@@ -1,4 +1,4 @@
-import { type Static, Type } from "typebox";
+import { type Static, type TSchema, Type } from "typebox";
 
 import {
   InterviewIdSchema,
@@ -48,19 +48,28 @@ export const UnauthorizedApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const NotFoundApiErrorSchema = Type.Object(
-  {
-    code: Type.Literal("not_found"),
-    message: Type.String({ minLength: 1 }),
-    resource: Type.Union([
-      Type.Literal("account"),
-      Type.Literal("interview"),
-      Type.Literal("operation"),
-      Type.Literal("report"),
-    ]),
-  },
-  { additionalProperties: false },
-);
+function notFoundApiErrorSchema(resource: "account" | "interview" | "operation" | "report") {
+  return Type.Object(
+    {
+      code: Type.Literal("not_found"),
+      message: Type.String({ minLength: 1 }),
+      resource: Type.Literal(resource),
+    },
+    { additionalProperties: false },
+  );
+}
+
+export const AccountNotFoundApiErrorSchema = notFoundApiErrorSchema("account");
+export const InterviewNotFoundApiErrorSchema = notFoundApiErrorSchema("interview");
+export const OperationNotFoundApiErrorSchema = notFoundApiErrorSchema("operation");
+export const ReportNotFoundApiErrorSchema = notFoundApiErrorSchema("report");
+
+export const NotFoundApiErrorSchema = Type.Union([
+  AccountNotFoundApiErrorSchema,
+  InterviewNotFoundApiErrorSchema,
+  OperationNotFoundApiErrorSchema,
+  ReportNotFoundApiErrorSchema,
+]);
 
 export const CanonicalInterviewStateSchema = Type.Union([
   Type.Object(
@@ -127,6 +136,46 @@ export const InternalApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+function errorResponseSchema(error: TSchema) {
+  return Type.Object(
+    {
+      error,
+    },
+    { additionalProperties: false },
+  );
+}
+
+export const ValidationErrorResponseSchema = errorResponseSchema(ValidationApiErrorSchema);
+export const UnauthorizedErrorResponseSchema = errorResponseSchema(UnauthorizedApiErrorSchema);
+export const AccountNotFoundErrorResponseSchema = errorResponseSchema(
+  AccountNotFoundApiErrorSchema,
+);
+export const InterviewNotFoundErrorResponseSchema = errorResponseSchema(
+  InterviewNotFoundApiErrorSchema,
+);
+export const OperationNotFoundErrorResponseSchema = errorResponseSchema(
+  OperationNotFoundApiErrorSchema,
+);
+export const ReportNotFoundErrorResponseSchema = errorResponseSchema(ReportNotFoundApiErrorSchema);
+export const NotFoundErrorResponseSchema = errorResponseSchema(NotFoundApiErrorSchema);
+export const VersionConflictErrorResponseSchema = errorResponseSchema(
+  VersionConflictApiErrorSchema,
+);
+export const CommandRejectedErrorResponseSchema = errorResponseSchema(
+  CommandRejectedApiErrorSchema,
+);
+export const CommandConflictErrorResponseSchema = Type.Union([
+  VersionConflictErrorResponseSchema,
+  CommandRejectedErrorResponseSchema,
+]);
+export const OperationFailureErrorResponseSchema = errorResponseSchema(
+  OperationFailureApiErrorSchema,
+);
+export const OperationEventReplayUnavailableErrorResponseSchema = errorResponseSchema(
+  OperationEventReplayUnavailableApiErrorSchema,
+);
+export const InternalErrorResponseSchema = errorResponseSchema(InternalApiErrorSchema);
+
 export const ApiErrorSchema = Type.Union([
   ValidationApiErrorSchema,
   UnauthorizedApiErrorSchema,
@@ -148,6 +197,10 @@ export const ErrorEnvelopeSchema = Type.Object(
 export type ValidationIssueDto = Static<typeof ValidationIssueSchema>;
 export type ValidationApiErrorDto = Static<typeof ValidationApiErrorSchema>;
 export type UnauthorizedApiErrorDto = Static<typeof UnauthorizedApiErrorSchema>;
+export type AccountNotFoundApiErrorDto = Static<typeof AccountNotFoundApiErrorSchema>;
+export type InterviewNotFoundApiErrorDto = Static<typeof InterviewNotFoundApiErrorSchema>;
+export type OperationNotFoundApiErrorDto = Static<typeof OperationNotFoundApiErrorSchema>;
+export type ReportNotFoundApiErrorDto = Static<typeof ReportNotFoundApiErrorSchema>;
 export type NotFoundApiErrorDto = Static<typeof NotFoundApiErrorSchema>;
 export type CanonicalInterviewStateDto = Static<typeof CanonicalInterviewStateSchema>;
 export type VersionConflictApiErrorDto = Static<typeof VersionConflictApiErrorSchema>;
@@ -163,3 +216,18 @@ export type ModelFailureApiErrorDto = Static<typeof ModelFailureApiErrorSchema>;
 export type InternalApiErrorDto = Static<typeof InternalApiErrorSchema>;
 export type ApiErrorDto = Static<typeof ApiErrorSchema>;
 export type ErrorEnvelopeDto = Static<typeof ErrorEnvelopeSchema>;
+export type ValidationErrorResponseDto = Static<typeof ValidationErrorResponseSchema>;
+export type UnauthorizedErrorResponseDto = Static<typeof UnauthorizedErrorResponseSchema>;
+export type AccountNotFoundErrorResponseDto = Static<typeof AccountNotFoundErrorResponseSchema>;
+export type InterviewNotFoundErrorResponseDto = Static<typeof InterviewNotFoundErrorResponseSchema>;
+export type OperationNotFoundErrorResponseDto = Static<typeof OperationNotFoundErrorResponseSchema>;
+export type ReportNotFoundErrorResponseDto = Static<typeof ReportNotFoundErrorResponseSchema>;
+export type NotFoundErrorResponseDto = Static<typeof NotFoundErrorResponseSchema>;
+export type VersionConflictErrorResponseDto = Static<typeof VersionConflictErrorResponseSchema>;
+export type CommandRejectedErrorResponseDto = Static<typeof CommandRejectedErrorResponseSchema>;
+export type CommandConflictErrorResponseDto = Static<typeof CommandConflictErrorResponseSchema>;
+export type OperationFailureErrorResponseDto = Static<typeof OperationFailureErrorResponseSchema>;
+export type OperationEventReplayUnavailableErrorResponseDto = Static<
+  typeof OperationEventReplayUnavailableErrorResponseSchema
+>;
+export type InternalErrorResponseDto = Static<typeof InternalErrorResponseSchema>;

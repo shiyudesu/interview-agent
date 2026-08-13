@@ -470,37 +470,50 @@ const operationStatusProperties = {
   updatedAt: IsoTimestampSchema,
 } as const;
 
+export const PendingOperationStatusResponseSchema = Type.Object(
+  {
+    ...operationStatusProperties,
+    status: Type.Literal("pending"),
+  },
+  { additionalProperties: false },
+);
+
+export const ProcessingOperationStatusResponseSchema = Type.Object(
+  {
+    ...operationStatusProperties,
+    status: Type.Literal("processing"),
+  },
+  { additionalProperties: false },
+);
+
+export const AcceptedOperationStatusResponseSchema = Type.Union([
+  PendingOperationStatusResponseSchema,
+  ProcessingOperationStatusResponseSchema,
+]);
+
+export const SucceededOperationStatusResponseSchema = Type.Object(
+  {
+    ...operationStatusProperties,
+    status: Type.Literal("succeeded"),
+    result: Type.Union([OperationResultReferenceSchema, ReportOperationResultReferenceSchema]),
+  },
+  { additionalProperties: false },
+);
+
+export const FailedOperationStatusResponseSchema = Type.Object(
+  {
+    ...operationStatusProperties,
+    status: Type.Literal("failed"),
+    failure: OperationFailureDetailSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const OperationStatusResponseSchema = Type.Union([
-  Type.Object(
-    {
-      ...operationStatusProperties,
-      status: Type.Literal("pending"),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      ...operationStatusProperties,
-      status: Type.Literal("processing"),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      ...operationStatusProperties,
-      status: Type.Literal("succeeded"),
-      result: Type.Union([OperationResultReferenceSchema, ReportOperationResultReferenceSchema]),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      ...operationStatusProperties,
-      status: Type.Literal("failed"),
-      failure: OperationFailureDetailSchema,
-    },
-    { additionalProperties: false },
-  ),
+  PendingOperationStatusResponseSchema,
+  ProcessingOperationStatusResponseSchema,
+  SucceededOperationStatusResponseSchema,
+  FailedOperationStatusResponseSchema,
 ]);
 
 export type LinkedIdentityDto = Static<typeof LinkedIdentitySchema>;
@@ -532,4 +545,15 @@ export type InterviewHistoryItemDto = Static<typeof InterviewHistoryItemSchema>;
 export type InterviewHistoryResponseDto = Static<typeof InterviewHistoryResponseSchema>;
 export type OperationResultReferenceDto = Static<typeof OperationResultReferenceSchema>;
 export type ReportOperationResultReferenceDto = Static<typeof ReportOperationResultReferenceSchema>;
+export type PendingOperationStatusResponseDto = Static<typeof PendingOperationStatusResponseSchema>;
+export type ProcessingOperationStatusResponseDto = Static<
+  typeof ProcessingOperationStatusResponseSchema
+>;
+export type AcceptedOperationStatusResponseDto = Static<
+  typeof AcceptedOperationStatusResponseSchema
+>;
+export type SucceededOperationStatusResponseDto = Static<
+  typeof SucceededOperationStatusResponseSchema
+>;
+export type FailedOperationStatusResponseDto = Static<typeof FailedOperationStatusResponseSchema>;
 export type OperationStatusResponseDto = Static<typeof OperationStatusResponseSchema>;

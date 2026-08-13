@@ -31,7 +31,6 @@ import {
   type ReportAnalysisResult,
 } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   databaseNow,
@@ -58,6 +57,7 @@ import {
 } from "../src/operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "../src/read-routes.js";
 import { ReportAnalysisModelError } from "../src/report-analysis-model.js";
+import { createServer } from "../src/server.js";
 
 const OWNER_ID = parseAccountId("operation-runner-owner");
 const SECOND_OWNER_ID = parseAccountId("operation-runner-second-owner");
@@ -1960,10 +1960,11 @@ describe.sequential("persisted OperationRunner", () => {
       heartbeatIntervalMs: 10,
       statusPollIntervalMs: 60_000,
     };
-    const app = Fastify({ logger: false });
+    const app = createServer({ logger: false });
     await registerApplication(app, {
       authentication,
       config: {
+        environment: "test",
         auth: {
           secret: "0123456789abcdef0123456789abcdef",
           baseUrl: "http://localhost:3000",

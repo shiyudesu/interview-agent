@@ -17,6 +17,8 @@ export const AUTH_SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
 export const AUTH_RATE_LIMIT_WINDOW_SECONDS = 60;
 export const AUTH_RATE_LIMIT_MAX_REQUESTS = 60;
 export const AUTH_SENSITIVE_RATE_LIMIT_MAX_REQUESTS = 3;
+export const BETTER_AUTH_COOKIE_PREFIX = "better-auth";
+export const BETTER_AUTH_SESSION_COOKIE_NAME = `${BETTER_AUTH_COOKIE_PREFIX}.session_token`;
 
 export interface CreateAuthenticationInput {
   readonly database: Database;
@@ -139,6 +141,7 @@ export function createAuthentication(input: CreateAuthenticationInput): Authenti
       },
     },
     advanced: {
+      cookiePrefix: BETTER_AUTH_COOKIE_PREFIX,
       ipAddress: {
         ipAddressHeaders: ["x-interview-client-ip"],
       },

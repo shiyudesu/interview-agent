@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import {
   type AbandonInterviewRequestDto,
   AbandonInterviewRequestSchema,
+  AcceptedOperationStatusResponseSchema,
   type CanonicalInterviewStateDto,
+  CommandConflictErrorResponseSchema,
   type ContinueInterviewRequestDto,
   ContinueInterviewRequestSchema,
   type CreateInterviewRequestDto,
@@ -14,12 +16,14 @@ import {
   ErrorEnvelopeSchema,
   type IdempotencyHeadersDto,
   IdempotencyHeadersSchema,
+  InternalErrorResponseSchema,
   type InterviewCommandParamsDto,
   InterviewCommandParamsSchema,
   type MarkQuestionUnknownRequestDto,
   MarkQuestionUnknownRequestSchema,
   mapOperationToStatusResponse,
-  OperationResponseSchema,
+  NotFoundErrorResponseSchema,
+  OperationFailureErrorResponseSchema,
   parseMappedDto,
   type RequestClarificationRequestDto,
   RequestClarificationRequestSchema,
@@ -31,6 +35,9 @@ import {
   SubmitAnswerRequestSchema,
   type SubmitSupplementRequestDto,
   SubmitSupplementRequestSchema,
+  SucceededOperationStatusResponseSchema,
+  UnauthorizedErrorResponseSchema,
+  ValidationErrorResponseSchema,
 } from "@interview-agent/contracts";
 import {
   ActiveInterviewExistsError,
@@ -127,14 +134,14 @@ export function createInterviewCommandRouteDependencies(
 }
 
 const commandResponses = {
-  200: OperationResponseSchema,
-  202: OperationResponseSchema,
-  400: ErrorEnvelopeSchema,
-  401: ErrorEnvelopeSchema,
-  404: ErrorEnvelopeSchema,
-  409: ErrorEnvelopeSchema,
-  500: ErrorEnvelopeSchema,
-  503: ErrorEnvelopeSchema,
+  200: SucceededOperationStatusResponseSchema,
+  202: AcceptedOperationStatusResponseSchema,
+  400: ValidationErrorResponseSchema,
+  401: UnauthorizedErrorResponseSchema,
+  404: NotFoundErrorResponseSchema,
+  409: CommandConflictErrorResponseSchema,
+  500: InternalErrorResponseSchema,
+  503: OperationFailureErrorResponseSchema,
 } as const;
 
 const commandRouteErrorHandler = createApiRouteErrorHandler({
@@ -154,6 +161,8 @@ export async function registerInterviewCommandRoutes(
     "/api/v1/interviews",
     {
       schema: {
+        tags: ["Interviews"],
+        summary: "Create an interview",
         headers: IdempotencyHeadersSchema,
         body: CreateInterviewRequestSchema,
         response: commandResponses,
@@ -181,7 +190,7 @@ export async function registerInterviewCommandRoutes(
     Body: SubmitAnswerRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/answers",
-    commandRouteOptions(SubmitAnswerRequestSchema),
+    commandRouteOptions(SubmitAnswerRequestSchema, "Submit an answer"),
     async (request, reply) =>
       executeTextCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.submitAnswer(input),
@@ -194,7 +203,7 @@ export async function registerInterviewCommandRoutes(
     Body: SubmitSupplementRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/supplements",
-    commandRouteOptions(SubmitSupplementRequestSchema),
+    commandRouteOptions(SubmitSupplementRequestSchema, "Supplement the current answer"),
     async (request, reply) =>
       executeTextCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.submitSupplement(input),
@@ -207,7 +216,7 @@ export async function registerInterviewCommandRoutes(
     Body: RequestClarificationRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/clarifications",
-    commandRouteOptions(RequestClarificationRequestSchema),
+    commandRouteOptions(RequestClarificationRequestSchema, "Request question clarification"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.requestQuestionClarification(input),
@@ -220,7 +229,7 @@ export async function registerInterviewCommandRoutes(
     Body: MarkQuestionUnknownRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/unknown",
-    commandRouteOptions(MarkQuestionUnknownRequestSchema),
+    commandRouteOptions(MarkQuestionUnknownRequestSchema, "Mark the current question unknown"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.markUnknown(input),
@@ -233,7 +242,7 @@ export async function registerInterviewCommandRoutes(
     Body: SkipQuestionRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/skip",
-    commandRouteOptions(SkipQuestionRequestSchema),
+    commandRouteOptions(SkipQuestionRequestSchema, "Skip the current question"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.skip(input),
@@ -246,7 +255,7 @@ export async function registerInterviewCommandRoutes(
     Body: ContinueInterviewRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/continue",
-    commandRouteOptions(ContinueInterviewRequestSchema),
+    commandRouteOptions(ContinueInterviewRequestSchema, "Continue to the next question"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.continueInterview(input),
@@ -259,7 +268,7 @@ export async function registerInterviewCommandRoutes(
     Body: EndInterviewEarlyRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/end-early",
-    commandRouteOptions(EndInterviewEarlyRequestSchema),
+    commandRouteOptions(EndInterviewEarlyRequestSchema, "End the interview early"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.endEarly(input),
@@ -272,7 +281,7 @@ export async function registerInterviewCommandRoutes(
     Body: AbandonInterviewRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/abandon",
-    commandRouteOptions(AbandonInterviewRequestSchema),
+    commandRouteOptions(AbandonInterviewRequestSchema, "Abandon the interview"),
     async (request, reply) =>
       executeControlCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.abandon(input),
@@ -285,7 +294,7 @@ export async function registerInterviewCommandRoutes(
     Body: RetryOperationRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/retry",
-    commandRouteOptions(RetryOperationRequestSchema),
+    commandRouteOptions(RetryOperationRequestSchema, "Retry a failed Operation"),
     async (request, reply) => {
       const accountId = authenticatedAccountId(request, reply);
       if (accountId === null) {
@@ -303,9 +312,11 @@ export async function registerInterviewCommandRoutes(
   );
 }
 
-function commandRouteOptions(body: object) {
+function commandRouteOptions(body: object, summary: string) {
   return {
     schema: {
+      tags: ["Interviews"],
+      summary,
       headers: IdempotencyHeadersSchema,
       params: InterviewCommandParamsSchema,
       body,

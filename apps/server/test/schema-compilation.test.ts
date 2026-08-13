@@ -1,15 +1,17 @@
+import { TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
 import {
   ActiveInterviewResponseSchema,
   CompleteReportResponseSchema,
   IdempotencyHeadersSchema,
   OperationEventSchema,
 } from "@interview-agent/contracts";
-import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
+
+import { createServer } from "../src/server.js";
 
 describe("Fastify schema compilation", () => {
   it("compiles representative Operation event, complete report, and active interview schemas", async () => {
-    const app = Fastify();
+    const app = createServer();
 
     app.post(
       "/operation-event",
@@ -19,7 +21,7 @@ describe("Fastify schema compilation", () => {
           response: { 200: OperationEventSchema },
         },
       },
-      async () => null,
+      async () => undefined,
     );
     app.post(
       "/complete-report",
@@ -29,7 +31,7 @@ describe("Fastify schema compilation", () => {
           response: { 200: CompleteReportResponseSchema },
         },
       },
-      async () => null,
+      async () => undefined,
     );
     app.post(
       "/active-interview",
@@ -39,16 +41,18 @@ describe("Fastify schema compilation", () => {
           response: { 200: ActiveInterviewResponseSchema },
         },
       },
-      async () => null,
+      async () => undefined,
     );
 
     await app.ready();
+    expect(app.validatorCompiler).toBe(TypeBoxValidatorCompiler);
+    expect(app.serializerCompiler).toEqual(expect.any(Function));
     expect(app.hasRoute({ method: "POST", url: "/active-interview" })).toBe(true);
     await app.close();
   });
 
   it("requires a valid idempotency key without stripping standard Fastify headers", async () => {
-    const app = Fastify();
+    const app = createServer();
 
     app.post(
       "/mutating-command",

@@ -9,7 +9,6 @@ import {
 import type { StoredOperation } from "@interview-agent/db";
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import type { TSchema } from "typebox";
 import { Check } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,8 +26,9 @@ import {
   type OperationEventRouteDependencies,
 } from "../src/operation-events.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { createServer } from "../src/server.js";
 
-const apps: ReturnType<typeof Fastify>[] = [];
+const apps: ReturnType<typeof createServer>[] = [];
 const accountId = parseAccountId("deletion-route-owner");
 const interviewId = parseInterviewId("deletion-route-interview");
 const requestedAt = new Date("2026-08-12T12:00:00.000Z");
@@ -40,6 +40,7 @@ const context: AuthenticatedRequestContext = {
   name: "Candidate",
 };
 const config = {
+  environment: "test",
   auth: {
     secret: "0123456789abcdef0123456789abcdef",
     baseUrl: "http://localhost:3000",
@@ -112,7 +113,7 @@ async function createApp(
     readonly getSession?: (headers: Headers) => Promise<AuthenticationSessionResult>;
   } = {},
 ) {
-  const instance = Fastify({ logger: false });
+  const instance = createServer({ logger: false });
   apps.push(instance);
   await registerApplication(instance, {
     authentication: authentication(

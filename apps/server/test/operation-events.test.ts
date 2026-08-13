@@ -6,7 +6,6 @@ import {
 } from "@interview-agent/db";
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import { Check } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -22,8 +21,9 @@ import {
 } from "../src/operation-events.js";
 import { ServerOwnedOperationExecution } from "../src/operation-runner.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { createServer } from "../src/server.js";
 
-const apps: ReturnType<typeof Fastify>[] = [];
+const apps: ReturnType<typeof createServer>[] = [];
 const ownerId = parseAccountId("operation-event-owner");
 const operationId = parseOperationId("operation-event-1");
 const occurredAt = new Date("2026-08-12T06:00:00.000Z");
@@ -34,6 +34,7 @@ const authContext: AuthenticatedRequestContext = {
   name: "Candidate",
 };
 const config = {
+  environment: "test",
   auth: {
     secret: "0123456789abcdef0123456789abcdef",
     baseUrl: "http://localhost:3000",
@@ -143,7 +144,7 @@ async function createApp(
   events: OperationEventRouteDependencies,
   context: AuthenticatedRequestContext | null = authContext,
 ) {
-  const instance = Fastify({ logger: false });
+  const instance = createServer({ logger: false });
   apps.push(instance);
   await registerApplication(instance, {
     authentication: authentication(context),

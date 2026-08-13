@@ -1,14 +1,18 @@
 import { fastifySSE } from "@fastify/sse";
 import {
-  ErrorEnvelopeSchema,
+  InternalErrorResponseSchema,
   mapOperationTextDeltaEvent,
   mapOperationToTerminalEvent,
   type OperationEventDto,
+  OperationEventReplayUnavailableErrorResponseSchema,
   type OperationEventStreamHeadersDto,
   OperationEventStreamHeadersSchema,
+  OperationNotFoundErrorResponseSchema,
   OperationReadParamsSchema,
   type OperationTerminalEventDto,
   type OperationTextDeltaEventDto,
+  UnauthorizedErrorResponseSchema,
+  ValidationErrorResponseSchema,
 } from "@interview-agent/contracts";
 import type { PgRepositoryUnitOfWork, StoredOperation } from "@interview-agent/db";
 import {
@@ -638,14 +642,16 @@ export async function registerOperationEventRoutes(
     {
       sse: { kind: "only" },
       schema: {
+        tags: ["Operations"],
+        summary: "Stream Operation events",
         params: OperationReadParamsSchema,
         headers: OperationEventStreamHeadersSchema,
         response: {
-          400: ErrorEnvelopeSchema,
-          401: ErrorEnvelopeSchema,
-          404: ErrorEnvelopeSchema,
-          409: ErrorEnvelopeSchema,
-          500: ErrorEnvelopeSchema,
+          400: ValidationErrorResponseSchema,
+          401: UnauthorizedErrorResponseSchema,
+          404: OperationNotFoundErrorResponseSchema,
+          409: OperationEventReplayUnavailableErrorResponseSchema,
+          500: InternalErrorResponseSchema,
         },
       },
       errorHandler: operationEventRouteErrorHandler,

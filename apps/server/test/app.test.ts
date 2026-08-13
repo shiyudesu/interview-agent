@@ -1,6 +1,5 @@
 import { parseAccountId, parseInterviewId, parseOperationId } from "@interview-agent/domain";
 import type { BetterAuthOptions } from "better-auth";
-import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { registerApplication } from "../src/app.js";
@@ -12,9 +11,11 @@ import {
   type OperationEventRouteDependencies,
 } from "../src/operation-events.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { createServer } from "../src/server.js";
 
-const apps: ReturnType<typeof Fastify>[] = [];
+const apps: ReturnType<typeof createServer>[] = [];
 const config = {
+  environment: "test",
   auth: {
     secret: "0123456789abcdef0123456789abcdef",
     baseUrl: "http://localhost:3000",
@@ -32,7 +33,7 @@ function authentication(changes: Partial<Authentication> = {}): Authentication {
 }
 
 function app() {
-  const instance = Fastify({ logger: false });
+  const instance = createServer({ logger: false });
   apps.push(instance);
   return instance;
 }
@@ -99,6 +100,221 @@ afterEach(async () => {
 });
 
 describe("registerApplication", () => {
+  it.each(["test", "development"] as const)(
+    "serves generated OpenAPI documentation without authentication in %s",
+    async (environment) => {
+      const getSession = vi.fn(async () => ({ context: null, headers: new Headers() }));
+      const instance = app();
+      await registerApplication(instance, {
+        authentication: authentication({ getSession }),
+        config: { ...config, environment },
+        deletion: deletion(),
+        interviewCommands: interviewCommands(),
+        canonicalReads: canonicalReads(),
+        operationEvents: operationEvents(),
+      });
+
+      const jsonResponse = await instance.inject({
+        method: "GET",
+        url: "/documentation/json",
+      });
+      const uiResponse = await instance.inject({
+        method: "GET",
+        url: "/documentation/",
+      });
+      const document = jsonResponse.json();
+
+      expect(jsonResponse.statusCode).toBe(200);
+      expect(uiResponse.statusCode).toBe(200);
+      expect(getSession).not.toHaveBeenCalled();
+      expect(instance.hasDecorator("swagger")).toBe(true);
+      expect(instance.hasDecorator("swaggerCSP")).toBe(true);
+      expect(document.openapi).toBe("3.1.0");
+      expect(document.paths["/api/auth/*"]).toBeUndefined();
+      expect(document.components.securitySchemes.betterAuthSession).toMatchObject({
+        type: "apiKey",
+        in: "cookie",
+        name: "better-auth.session_token",
+      });
+      expect(document.security).toEqual([{ betterAuthSession: [] }]);
+
+      const createInterview = document.paths["/api/v1/interviews"].post;
+      const createInterviewBody =
+        createInterview.requestBody.content["application/json"].schema.properties;
+      expect(createInterview.summary).toBe("Create an interview");
+      expect(createInterviewBody).toEqual(
+        expect.objectContaining({
+          expectedVersion: expect.any(Object),
+          questionCount: expect.any(Object),
+        }),
+      );
+      expect(
+        createInterview.parameters.some(
+          (parameter: { in: string; name: string }) =>
+            parameter.in === "header" && parameter.name.toLowerCase() === "idempotency-key",
+        ),
+      ).toBe(true);
+      expect(Object.keys(createInterview.responses)).toEqual(
+        expect.arrayContaining(["200", "202", "400", "401", "404", "409", "500", "503"]),
+      );
+      expect(
+        createInterview.responses["202"].content["application/json"].schema.anyOf,
+      ).toBeDefined();
+      expect(JSON.stringify(createInterview.responses["200"])).toContain('"succeeded"');
+      expect(JSON.stringify(createInterview.responses["200"])).not.toContain('"pending"');
+      expect(JSON.stringify(createInterview.responses["202"])).toContain('"pending"');
+      expect(JSON.stringify(createInterview.responses["202"])).toContain('"processing"');
+      expect(JSON.stringify(createInterview.responses["202"])).not.toContain('"succeeded"');
+      expect(JSON.stringify(createInterview.responses["400"])).toContain('"validation_error"');
+      expect(JSON.stringify(createInterview.responses["400"])).not.toContain('"internal_error"');
+      expect(JSON.stringify(createInterview.responses["401"])).toContain('"unauthorized"');
+      expect(JSON.stringify(createInterview.responses["404"])).toContain('"not_found"');
+      expect(JSON.stringify(createInterview.responses["409"])).toContain('"version_conflict"');
+      expect(JSON.stringify(createInterview.responses["409"])).toContain('"command_rejected"');
+      expect(JSON.stringify(createInterview.responses["500"])).toContain('"internal_error"');
+      expect(JSON.stringify(createInterview.responses["503"])).toContain('"operation_failure"');
+
+      const history = document.paths["/api/v1/interviews"].get;
+      expect(
+        history.parameters.map((parameter: { in: string; name: string }) => [
+          parameter.in,
+          parameter.name,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ["query", "cursor"],
+          ["query", "limit"],
+        ]),
+      );
+      expect(
+        document.paths["/api/v1/interviews/active"].get.responses["200"].content["application/json"]
+          .schema.anyOf,
+      ).toBeDefined();
+      expect(Object.keys(document.paths["/api/v1/account"].get.responses)).toEqual([
+        "200",
+        "401",
+        "404",
+        "500",
+      ]);
+      expect(Object.keys(document.paths["/api/v1/interviews/active"].get.responses)).toEqual([
+        "200",
+        "401",
+        "404",
+        "500",
+      ]);
+      expect(Object.keys(history.responses)).toEqual(["200", "400", "401", "500"]);
+      expect(
+        JSON.stringify(document.paths["/api/v1/operations/{operationId}"].get.responses["404"]),
+      ).toContain('"operation"');
+      expect(
+        JSON.stringify(
+          document.paths["/api/v1/interviews/{interviewId}/report"].get.responses["404"],
+        ),
+      ).toContain('"report"');
+
+      const answer = document.paths["/api/v1/interviews/{interviewId}/answers"].post;
+      expect(
+        answer.parameters.map((parameter: { in: string; name: string }) => [
+          parameter.in,
+          parameter.name.toLowerCase(),
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          ["path", "interviewid"],
+          ["header", "idempotency-key"],
+        ]),
+      );
+      expect(answer.requestBody.content["application/json"].schema.properties).toEqual(
+        expect.objectContaining({
+          expectedVersion: expect.any(Object),
+          text: expect.any(Object),
+        }),
+      );
+
+      const events = document.paths["/api/v1/operations/{operationId}/events"].get;
+      expect(events.responses["200"].content).toEqual({
+        "text/event-stream": {
+          schema: expect.objectContaining({ type: "string" }),
+        },
+      });
+      expect(events.responses["204"].content).toBeUndefined();
+      expect(events.responses["204"].description).toContain("terminal");
+      expect(events.responses["400"].content["application/json"]).toBeDefined();
+      expect(JSON.stringify(events.responses["400"])).toContain('"validation_error"');
+      expect(JSON.stringify(events.responses["401"])).toContain('"unauthorized"');
+      expect(JSON.stringify(events.responses["404"])).toContain('"operation"');
+      expect(JSON.stringify(events.responses["409"])).toContain(
+        '"operation_event_replay_unavailable"',
+      );
+      expect(JSON.stringify(events.responses["500"])).toContain('"internal_error"');
+      expect(
+        events.parameters.some(
+          (parameter: { in: string; name: string }) =>
+            parameter.in === "header" && parameter.name.toLowerCase() === "last-event-id",
+        ),
+      ).toBe(true);
+
+      const commandOperations = [
+        document.paths["/api/v1/interviews"].post,
+        document.paths["/api/v1/interviews/{interviewId}/answers"].post,
+        document.paths["/api/v1/interviews/{interviewId}/supplements"].post,
+        document.paths["/api/v1/interviews/{interviewId}/clarifications"].post,
+        document.paths["/api/v1/interviews/{interviewId}/unknown"].post,
+        document.paths["/api/v1/interviews/{interviewId}/skip"].post,
+        document.paths["/api/v1/interviews/{interviewId}/continue"].post,
+        document.paths["/api/v1/interviews/{interviewId}/end-early"].post,
+        document.paths["/api/v1/interviews/{interviewId}/abandon"].post,
+        document.paths["/api/v1/interviews/{interviewId}/retry"].post,
+      ];
+      for (const operation of commandOperations) {
+        expect(Object.keys(operation.responses)).toEqual(
+          expect.arrayContaining(["200", "202", "400", "401", "404", "409", "500", "503"]),
+        );
+      }
+
+      const deletionOperations = [
+        document.paths["/api/v1/interviews/{interviewId}"].delete,
+        document.paths["/api/v1/account"].delete,
+      ];
+      for (const operation of deletionOperations) {
+        expect(Object.keys(operation.responses)).toEqual(
+          expect.arrayContaining(["202", "400", "401", "404", "500"]),
+        );
+      }
+
+      expect(Object.keys(events.responses)).toEqual(
+        expect.arrayContaining(["200", "204", "400", "401", "404", "409", "500"]),
+      );
+    },
+  );
+
+  it("does not register documentation routes or decorators in production", async () => {
+    const getSession = vi.fn(async () => ({ context: null, headers: new Headers() }));
+    const instance = app();
+    await registerApplication(instance, {
+      authentication: authentication({ getSession }),
+      config: { ...config, environment: "production" },
+      deletion: deletion(),
+      interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
+    });
+
+    const [jsonResponse, yamlResponse, uiResponse] = await Promise.all([
+      instance.inject({ method: "GET", url: "/documentation/json" }),
+      instance.inject({ method: "GET", url: "/documentation/yaml" }),
+      instance.inject({ method: "GET", url: "/documentation/" }),
+    ]);
+
+    expect(jsonResponse.statusCode).toBe(404);
+    expect(yamlResponse.statusCode).toBe(404);
+    expect(uiResponse.statusCode).toBe(404);
+    expect(getSession).not.toHaveBeenCalled();
+    expect(instance.hasDecorator("swagger")).toBe(false);
+    expect(instance.hasDecorator("swaggerCSP")).toBe(false);
+    expect(instance.printPlugins()).not.toContain("@fastify/swagger");
+  });
+
   it("mounts Better Auth and preserves request, response, and Set-Cookie headers", async () => {
     let receivedRequest: Request | undefined;
     const handler = vi.fn(async (request: Request) => {

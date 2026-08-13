@@ -2,9 +2,11 @@ import { type Static, Type } from "typebox";
 
 import { InterviewIdSchema, IsoTimestampSchema } from "./common.js";
 import {
-  InternalApiErrorSchema,
-  UnauthorizedApiErrorSchema,
-  ValidationApiErrorSchema,
+  AccountNotFoundErrorResponseSchema,
+  InternalErrorResponseSchema,
+  InterviewNotFoundErrorResponseSchema,
+  UnauthorizedErrorResponseSchema,
+  ValidationErrorResponseSchema,
 } from "./errors.js";
 
 export const InterviewDeletionParamsSchema = Type.Object(
@@ -30,39 +32,10 @@ export const DeletionAcceptedResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DeletionValidationErrorResponseSchema = Type.Object(
-  {
-    error: ValidationApiErrorSchema,
-  },
-  { additionalProperties: false },
-);
-
-export const DeletionUnauthorizedResponseSchema = Type.Object(
-  {
-    error: UnauthorizedApiErrorSchema,
-  },
-  { additionalProperties: false },
-);
-
-function deletionNotFoundResponseSchema(resource: "account" | "interview") {
-  return Type.Object(
-    {
-      error: Type.Object(
-        {
-          code: Type.Literal("not_found"),
-          message: Type.String({ minLength: 1 }),
-          resource: Type.Literal(resource),
-        },
-        { additionalProperties: false },
-      ),
-    },
-    { additionalProperties: false },
-  );
-}
-
-export const InterviewDeletionNotFoundResponseSchema = deletionNotFoundResponseSchema("interview");
-
-export const AccountDeletionNotFoundResponseSchema = deletionNotFoundResponseSchema("account");
+export const DeletionValidationErrorResponseSchema = ValidationErrorResponseSchema;
+export const DeletionUnauthorizedResponseSchema = UnauthorizedErrorResponseSchema;
+export const InterviewDeletionNotFoundResponseSchema = InterviewNotFoundErrorResponseSchema;
+export const AccountDeletionNotFoundResponseSchema = AccountNotFoundErrorResponseSchema;
 
 export const DeletionFailureResponseSchema = Type.Object(
   {
@@ -77,12 +50,7 @@ export const DeletionFailureResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const DeletionInternalFailureResponseSchema = Type.Object(
-  {
-    error: InternalApiErrorSchema,
-  },
-  { additionalProperties: false },
-);
+export const DeletionInternalFailureResponseSchema = InternalErrorResponseSchema;
 
 export const DeletionServerFailureResponseSchema = Type.Union([
   DeletionFailureResponseSchema,

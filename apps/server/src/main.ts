@@ -4,7 +4,6 @@ import {
   PgLifecycleRepository,
   PgRepositoryUnitOfWork,
 } from "@interview-agent/db";
-import Fastify from "fastify";
 
 import { PiAnswerEvaluationModel } from "./answer-evaluation-model.js";
 import { registerApplication } from "./app.js";
@@ -23,12 +22,13 @@ import {
 } from "./operation-runner.js";
 import { createCanonicalReadRouteDependencies } from "./read-routes.js";
 import { PiReportAnalysisModel } from "./report-analysis-model.js";
+import { createServer } from "./server.js";
 import { installGracefulShutdown } from "./shutdown.js";
 
 const config = loadServerConfig();
 const modelRuntime = await createModelRuntime(config.model, config.environment);
 const databaseClient = createDatabaseClient({ databaseUrl: config.databaseUrl });
-const app = Fastify({ logger: { level: config.logLevel } });
+const app = createServer({ logger: { level: config.logLevel } });
 app.decorate<ModelRuntime>("modelRuntime", modelRuntime);
 const emailSender = createNodemailerEmailSender(config.email, app.log);
 const authentication = createAuthentication({

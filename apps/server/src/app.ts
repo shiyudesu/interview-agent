@@ -23,6 +23,7 @@ import {
 } from "./command-routes.js";
 import type { ServerConfig } from "./config.js";
 import { type DeletionOrchestrationService, DeletionTargetNotFoundError } from "./deletion.js";
+import { registerOpenApiDocumentation } from "./openapi.js";
 import {
   type OperationEventRouteDependencies,
   registerOperationEventRoutes,
@@ -31,7 +32,7 @@ import { type CanonicalReadRouteDependencies, registerCanonicalReadRoutes } from
 
 export interface RegisterApplicationInput {
   readonly authentication: Authentication;
-  readonly config: Pick<ServerConfig, "auth">;
+  readonly config: Pick<ServerConfig, "auth" | "environment">;
   readonly deletion: DeletionOrchestrationService;
   readonly interviewCommands: InterviewCommandRouteDependencies;
   readonly canonicalReads: CanonicalReadRouteDependencies;
@@ -42,6 +43,8 @@ export async function registerApplication(
   app: FastifyInstance,
   input: RegisterApplicationInput,
 ): Promise<void> {
+  await registerOpenApiDocumentation(app, input.config.environment);
+
   app.addContentTypeParser(
     "application/x-www-form-urlencoded",
     { parseAs: "string" },
@@ -65,6 +68,7 @@ export async function registerApplication(
   app.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
+    schema: { hide: true },
     async handler(request, reply) {
       try {
         const response = await input.authentication.handler(
@@ -106,6 +110,8 @@ export async function registerApplication(
     "/api/v1/interviews/:interviewId",
     {
       schema: {
+        tags: ["Interviews"],
+        summary: "Delete an interview",
         params: InterviewDeletionParamsSchema,
         body: ConfirmDeletionRequestSchema,
         response: {
@@ -147,6 +153,8 @@ export async function registerApplication(
     "/api/v1/account",
     {
       schema: {
+        tags: ["Account"],
+        summary: "Delete the current account",
         body: ConfirmDeletionRequestSchema,
         response: {
           400: DeletionValidationErrorResponseSchema,

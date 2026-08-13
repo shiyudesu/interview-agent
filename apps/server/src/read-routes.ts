@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
 
 import {
+  AccountNotFoundErrorResponseSchema,
   type AccountResponseDto,
   AccountResponseSchema,
   type CurrentInterviewResponseDto,
   CurrentInterviewResponseSchema,
-  ErrorEnvelopeSchema,
+  InternalErrorResponseSchema,
   type InterviewDetailResponseDto,
   InterviewDetailResponseSchema,
   type InterviewHistoryResponseDto,
   InterviewHistoryResponseSchema,
+  InterviewNotFoundErrorResponseSchema,
   type InterviewReadParamsDto,
   InterviewReadParamsSchema,
   mapAccountAccessToResponse,
@@ -17,6 +19,7 @@ import {
   mapInterviewHistoryToResponse,
   mapInterviewToResponse,
   mapOperationToStatusResponse,
+  OperationNotFoundErrorResponseSchema,
   type OperationReadParamsDto,
   OperationReadParamsSchema,
   type OperationStatusResponseDto,
@@ -24,8 +27,11 @@ import {
   type PaginationQueryDto,
   PaginationQuerySchema,
   type PublicOperationProjection,
+  ReportNotFoundErrorResponseSchema,
   type ReportResponseDto,
   ReportResponseSchema,
+  UnauthorizedErrorResponseSchema,
+  ValidationErrorResponseSchema,
 } from "@interview-agent/contracts";
 import type {
   InterviewDetail,
@@ -163,19 +169,27 @@ export async function registerCanonicalReadRoutes(
   app: FastifyInstance,
   dependencies: CanonicalReadRouteDependencies,
 ): Promise<void> {
-  app.get("/api/v1/account", readRouteOptions(AccountResponseSchema), async (request, reply) => {
-    const context = authenticatedRequestContext(request, reply);
-    if (context === null) {
-      return;
-    }
-    return sendRead(request, reply, "account", () =>
-      dependencies.currentAccount(context.accountId, context.sessionId),
-    );
-  });
+  app.get(
+    "/api/v1/account",
+    readRouteOptions(AccountResponseSchema, "Get the current account", "Account", {
+      404: AccountNotFoundErrorResponseSchema,
+    }),
+    async (request, reply) => {
+      const context = authenticatedRequestContext(request, reply);
+      if (context === null) {
+        return;
+      }
+      return sendRead(request, reply, "account", () =>
+        dependencies.currentAccount(context.accountId, context.sessionId),
+      );
+    },
+  );
 
   app.get(
     "/api/v1/interviews/active",
-    readRouteOptions(CurrentInterviewResponseSchema),
+    readRouteOptions(CurrentInterviewResponseSchema, "Get the active interview", "Interviews", {
+      404: InterviewNotFoundErrorResponseSchema,
+    }),
     async (request, reply) => {
       const context = authenticatedRequestContext(request, reply);
       if (context === null) {
@@ -190,9 +204,15 @@ export async function registerCanonicalReadRoutes(
   app.get<{ Params: InterviewReadParamsDto }>(
     "/api/v1/interviews/:interviewId",
     {
-      ...readRouteOptions(InterviewDetailResponseSchema),
+      ...readRouteOptions(InterviewDetailResponseSchema, "Get interview detail", "Interviews", {
+        400: ValidationErrorResponseSchema,
+        404: InterviewNotFoundErrorResponseSchema,
+      }),
       schema: {
-        ...readRouteOptions(InterviewDetailResponseSchema).schema,
+        ...readRouteOptions(InterviewDetailResponseSchema, "Get interview detail", "Interviews", {
+          400: ValidationErrorResponseSchema,
+          404: InterviewNotFoundErrorResponseSchema,
+        }).schema,
         params: InterviewReadParamsSchema,
       },
     },
@@ -213,9 +233,15 @@ export async function registerCanonicalReadRoutes(
   app.get<{ Params: OperationReadParamsDto }>(
     "/api/v1/operations/:operationId",
     {
-      ...readRouteOptions(OperationStatusResponseSchema),
+      ...readRouteOptions(OperationStatusResponseSchema, "Get Operation status", "Operations", {
+        400: ValidationErrorResponseSchema,
+        404: OperationNotFoundErrorResponseSchema,
+      }),
       schema: {
-        ...readRouteOptions(OperationStatusResponseSchema).schema,
+        ...readRouteOptions(OperationStatusResponseSchema, "Get Operation status", "Operations", {
+          400: ValidationErrorResponseSchema,
+          404: OperationNotFoundErrorResponseSchema,
+        }).schema,
         params: OperationReadParamsSchema,
       },
     },
@@ -236,9 +262,18 @@ export async function registerCanonicalReadRoutes(
   app.get<{ Querystring: PaginationQueryDto }>(
     "/api/v1/interviews",
     {
-      ...readRouteOptions(InterviewHistoryResponseSchema),
+      ...readRouteOptions(InterviewHistoryResponseSchema, "List interview history", "Interviews", {
+        400: ValidationErrorResponseSchema,
+      }),
       schema: {
-        ...readRouteOptions(InterviewHistoryResponseSchema).schema,
+        ...readRouteOptions(
+          InterviewHistoryResponseSchema,
+          "List interview history",
+          "Interviews",
+          {
+            400: ValidationErrorResponseSchema,
+          },
+        ).schema,
         querystring: PaginationQuerySchema,
       },
     },
@@ -256,9 +291,25 @@ export async function registerCanonicalReadRoutes(
   app.get<{ Params: InterviewReadParamsDto }>(
     "/api/v1/interviews/:interviewId/report",
     {
-      ...readRouteOptions(ReportResponseSchema),
+      ...readRouteOptions(
+        ReportResponseSchema,
+        "Get the immutable interview report",
+        "Interviews",
+        {
+          400: ValidationErrorResponseSchema,
+          404: ReportNotFoundErrorResponseSchema,
+        },
+      ),
       schema: {
-        ...readRouteOptions(ReportResponseSchema).schema,
+        ...readRouteOptions(
+          ReportResponseSchema,
+          "Get the immutable interview report",
+          "Interviews",
+          {
+            400: ValidationErrorResponseSchema,
+            404: ReportNotFoundErrorResponseSchema,
+          },
+        ).schema,
         params: InterviewReadParamsSchema,
       },
     },
@@ -459,15 +510,21 @@ function decodeHistoryCursor(cursor: string): InterviewHistoryCursor {
   }
 }
 
-function readRouteOptions(successSchema: object) {
+function readRouteOptions(
+  successSchema: object,
+  summary: string,
+  tag: "Account" | "Interviews" | "Operations" = "Interviews",
+  statusSchemas: Readonly<Record<number, object>> = {},
+) {
   return {
     schema: {
+      tags: [tag],
+      summary,
       response: {
         200: successSchema,
-        400: ErrorEnvelopeSchema,
-        401: ErrorEnvelopeSchema,
-        404: ErrorEnvelopeSchema,
-        500: ErrorEnvelopeSchema,
+        ...statusSchemas,
+        401: UnauthorizedErrorResponseSchema,
+        500: InternalErrorResponseSchema,
       },
     },
     errorHandler: readRouteErrorHandler,
