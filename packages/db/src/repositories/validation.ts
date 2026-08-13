@@ -689,19 +689,13 @@ export function assertReportMatchesInterview(
     const evaluationByRubricId = new Map(
       question.evaluation?.rubricItems.map((item) => [item.rubricItemId, item] as const) ?? [],
     );
-    const evaluationEvidenceIds = new Set(
-      question.evaluation?.rubricItems.flatMap((item) => item.evidenceMaterialIds) ?? [],
-    );
     const materialIds = new Set(question.answerMaterial.map((material) => material.id));
 
     for (const evidence of feedback.evidence) {
       if (
         (evidence.source === "question_snapshot" &&
           evidence.questionId !== blueprint.question.questionId) ||
-        (evidence.source === "answer_material" &&
-          (!materialIds.has(evidence.answerMaterialId) ||
-            (question.evaluation !== null &&
-              !evaluationEvidenceIds.has(evidence.answerMaterialId))))
+        (evidence.source === "answer_material" && !materialIds.has(evidence.answerMaterialId))
       ) {
         throw corruption(
           "report",

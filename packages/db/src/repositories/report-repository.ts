@@ -295,23 +295,6 @@ function assertSnapshotMatchesStoredInterview(
     const evaluationByRubricId = new Map(
       evaluationItems.map((item) => [item.rubricItemId, item] as const),
     );
-    const evaluationEvidenceIds = new Set(
-      evaluationItems.flatMap((item) => item.evidenceMaterialIds),
-    );
-    if (
-      evaluationRow !== undefined &&
-      feedback.evidence.some(
-        (evidence) =>
-          evidence.source === "answer_material" &&
-          !evaluationEvidenceIds.has(evidence.answerMaterialId),
-      )
-    ) {
-      throw new RepositoryCorruptionError(
-        "report",
-        snapshot.reportId,
-        `question ${feedback.position} evidence disagrees with evaluation`,
-      );
-    }
     for (const point of feedback.matchedKnowledgePoints) {
       const evaluation = evaluationByRubricId.get(point.rubricItemId);
       if (

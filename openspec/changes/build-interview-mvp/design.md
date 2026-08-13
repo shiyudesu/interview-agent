@@ -326,6 +326,21 @@ analysis. Initial and repair calls reserve conservative UTF-8 input, tool framin
 available output capacity; one repair and two transient retries share the same bounds and attach
 attempted-call metadata on failure.
 
+Final report construction adds deterministic minimum feedback for every zero-point reason. Unknown
+and skipped questions discard model-authored answer analysis entirely, state the public question
+goal and missing answer evidence, and provide one safe learning action. Irrelevant and incorrect
+questions receive deterministic reason-specific framing around validated model detail, while
+incorrect feedback retains the persisted missing or incorrect concepts and accepted answer
+evidence. Reports whose selected questions all score zero use deterministic global summaries so
+model prose cannot invent strengths or successful answers.
+
+Private assessment content is checked at answer-evaluation acceptance, report-analysis acceptance,
+and final report persistence. The shared validation covers Rubric and follow-up identifiers, exact
+private text, ordered fragments distributed across fields, and cross-question leakage. Final
+question-level evidence may cite any accepted answer material used by the report analysis; evidence
+attached to an awarded or missing Rubric point remains constrained to that persisted evaluation
+fact.
+
 ### 10. Use Better Auth behind project-owned account workflows
 
 Better Auth provides GitHub OAuth, email OTP, PostgreSQL sessions, and explicit linking. Configuration disables implicit linking and permits an authenticated user to link a GitHub identity with a different email without changing the primary email.

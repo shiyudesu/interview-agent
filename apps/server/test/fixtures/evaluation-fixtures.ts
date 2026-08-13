@@ -245,7 +245,7 @@ export const EVALUATION_FIXTURE_SUITE: EvaluationFixtureSuite = Object.freeze({
             rubricItemId: "rubric-done",
             evidenceMaterialIds: Object.freeze([]),
             awardedPoints: 0,
-            missingOrIncorrectPoints: Object.freeze(["没有说明取消时 Done channel 会被关闭"]),
+            missingOrIncorrectPoints: Object.freeze(["未交代取消发生后 Done channel 的状态变化"]),
           }),
         ]),
         recommendedFollowUp: Object.freeze({
@@ -408,7 +408,9 @@ export const EVALUATION_FIXTURE_SUITE: EvaluationFixtureSuite = Object.freeze({
             rubricItemId: "rubric-done",
             evidenceMaterialIds: Object.freeze([]),
             awardedPoints: 0,
-            missingOrIncorrectPoints: Object.freeze(["没有明确说明取消时 Done channel 会被关闭"]),
+            missingOrIncorrectPoints: Object.freeze([
+              "未明确交代取消发生后 Done channel 的状态变化",
+            ]),
           }),
         ]),
         recommendedFollowUp: Object.freeze({
@@ -458,7 +460,7 @@ export const EVALUATION_FIXTURE_SUITE: EvaluationFixtureSuite = Object.freeze({
             rubricItemId: "rubric-done",
             evidenceMaterialIds: Object.freeze([]),
             awardedPoints: 0,
-            missingOrIncorrectPoints: Object.freeze(["没有说明取消时 Done channel 会被关闭"]),
+            missingOrIncorrectPoints: Object.freeze(["未交代取消发生后 Done channel 的状态变化"]),
           }),
         ]),
         recommendedFollowUp: Object.freeze({

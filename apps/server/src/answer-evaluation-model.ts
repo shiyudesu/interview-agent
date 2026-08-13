@@ -24,6 +24,11 @@ import { Check, Errors } from "typebox/value";
 
 import { encodeUntrustedModelContent, getCurrentModelContract } from "./model-contract-registry.js";
 import type { ModelRuntime } from "./model-runtime.js";
+import {
+  createQuestionPrivateContentScope,
+  exposesFragmentedPrivateContent,
+  exposesPrivateContent,
+} from "./private-assessment-content.js";
 
 const TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([a-z0-9_]+)\}\}/gu;
 const ANSWER_EVALUATION_OUTPUT_TOOL_NAME = "submit_answer_evaluation";
@@ -434,6 +439,7 @@ function validateDomainOutput(
   const rubricById = new Map(request.question.rubric.map((item) => [item.id, item] as const));
   const seenRubricIds = new Set<string>();
   const validEvidenceIds = new Set(request.answerMaterial.map(({ id }) => id));
+  const privateContentScope = createQuestionPrivateContentScope(request.question);
   let totalMissingOrIncorrectCharacters = 0;
   let awardedPoints = 0;
 
@@ -545,6 +551,15 @@ function validateDomainOutput(
           ),
         );
       }
+      if (exposesPrivateContent(point, privateContentScope)) {
+        issues.push(
+          issue(
+            `${path}/missingOrIncorrectPoints/${pointIndex}`,
+            "private_content_leak",
+            "Missing or incorrect text must not expose internal assessment or reference-answer content",
+          ),
+        );
+      }
     }
   }
 
@@ -554,6 +569,21 @@ function validateDomainOutput(
         issue("/rubricItems", "missing_rubric_id", `Missing required Rubric ID ${rubricId}`),
       );
     }
+  }
+  const allMissingOrIncorrectPoints = output.rubricItems.flatMap(
+    ({ missingOrIncorrectPoints }) => missingOrIncorrectPoints,
+  );
+  if (
+    !issues.some(({ code }) => code === "private_content_leak") &&
+    exposesFragmentedPrivateContent(allMissingOrIncorrectPoints, privateContentScope)
+  ) {
+    issues.push(
+      issue(
+        "/rubricItems",
+        "private_content_leak",
+        "Combined missing or incorrect text must not reconstruct internal assessment content",
+      ),
+    );
   }
   if (totalMissingOrIncorrectCharacters > MAX_MISSING_OR_INCORRECT_TOTAL_CHARACTERS) {
     issues.push(

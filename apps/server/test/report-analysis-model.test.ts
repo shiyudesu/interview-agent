@@ -62,7 +62,7 @@ function questionSnapshot(index: number): QuestionSnapshot {
         goal: `内部追问目标${index + 1}不得公开`,
       },
     ],
-    knowledgeExplanation: `内部完整知识解释${index + 1}包含只供评估使用的完整内容`,
+    knowledgeExplanation: "取消信号沿父子上下文向下传播子节点不会反向取消父节点",
   };
 }
 
@@ -140,19 +140,51 @@ function validOutput(request: ReportAnalysisRequest) {
     weaknesses: ["部分概念的边界和机制说明不够完整。"],
     priorities: ["优先巩固关键机制及其适用边界。"],
     learningSuggestions: ["结合小型示例复盘关键机制并总结常见误区。"],
-    perQuestion: request.questions.map(({ question, answerMaterial }, index) => ({
-      questionId: String(question.questionId),
-      answerSummary:
-        answerMaterial.length === 0
-          ? `第${index + 1}题没有可分析的作答材料。`
-          : `第${index + 1}题回答提到了部分相关机制。`,
-      scoreRationale:
-        answerMaterial.length === 0
-          ? `第${index + 1}题依据既定结果未形成有效作答。`
-          : `第${index + 1}题依据已确认的评价事实形成分析结论。`,
-      improvementSuggestions: [`建议针对第${index + 1}题补充机制边界和实践影响。`],
-      evidenceMaterialIds: answerMaterial.map(({ id }) => String(id)),
-    })),
+    perQuestion: request.questions.map((input, index) => {
+      const outcome = input.evaluation === null ? input.outcome : input.evaluation.outcome;
+      const common = {
+        questionId: String(input.question.questionId),
+        evidenceMaterialIds: input.answerMaterial.map(({ id }) => String(id)),
+      };
+      switch (outcome.kind) {
+        case "scored":
+          return {
+            ...common,
+            answerSummary: `第${index + 1}题回答提到了相关机制。`,
+            scoreRationale: `第${index + 1}题依据已确认的评价事实形成分析结论。`,
+            improvementSuggestions: [`建议继续梳理第${index + 1}题的机制边界和实践影响。`],
+          };
+        case "incorrect":
+          return {
+            ...common,
+            answerSummary: `第${index + 1}题回答围绕主题展开，但对核心机制的理解错误。`,
+            scoreRationale: `本题要求说明核心机制，已确认的缺失知识点表明相关概念边界仍有误解。`,
+            improvementSuggestions: ["建议对照缺失知识点逐项纠正概念边界，再用示例验证理解。"],
+          };
+        case "unknown":
+          return {
+            ...common,
+            answerSummary: `第${index + 1}题明确表示尚未掌握相关知识，没有可分析的作答材料。`,
+            scoreRationale: "本题考察相关核心机制；当前对应知识点尚未掌握，需要补齐基础理解。",
+            improvementSuggestions: ["建议先学习核心概念及其适用边界，再用自己的话复述。"],
+          };
+        case "skipped":
+          return {
+            ...common,
+            answerSummary: `第${index + 1}题选择跳过，未提交可分析的作答材料。`,
+            scoreRationale: "本题考察相关核心机制；由于未作答，相关知识点缺少作答证据。",
+            improvementSuggestions: ["建议补做本题，先梳理题目要求，再结合示例练习。"],
+          };
+        case "irrelevant":
+          return {
+            ...common,
+            answerSummary: `第${index + 1}题作答偏离了题目主题，没有回应要求说明的核心机制。`,
+            scoreRationale: "本题要求说明相关机制，但当前内容答非所问，未形成有效分析依据。",
+            improvementSuggestions: ["建议重新审题，先梳理问题要求，再围绕目标主题组织回答。"],
+          };
+      }
+      throw new Error("Unexpected report outcome");
+    }),
   };
 }
 
@@ -280,9 +312,23 @@ describe("PiReportAnalysisModel", () => {
     ]);
     const adapter = new PiReportAnalysisModel(runtime);
 
-    await expect(adapter.analyze(request)).resolves.toMatchObject({
+    const result = await adapter.analyze(request);
+
+    expect(result).toMatchObject({
       perQuestion: expect.any(Array),
     });
+    expect(result.perQuestion.map(({ answerSummary }) => answerSummary)).toEqual([
+      expect.stringContaining("理解错误"),
+      expect.stringContaining("尚未掌握"),
+      expect.stringContaining("跳过"),
+      expect.stringContaining("偏离"),
+      expect.stringContaining("理解错误"),
+    ]);
+    expect(JSON.stringify(result)).not.toContain(
+      request.questions[0]?.question.knowledgeExplanation,
+    );
+    expect(JSON.stringify(result)).not.toContain("内部评分描述");
+    expect(JSON.stringify(result)).not.toContain("内部追问目标");
 
     if (capturedContext === undefined) {
       throw new Error("Expected a captured model context");
@@ -558,6 +604,81 @@ describe("PiReportAnalysisModel", () => {
       }),
       issueCode: "zero_reason_contradiction",
     },
+    {
+      name: "all-zero global correctness claim",
+      mutate: (_request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => ({
+        ...output,
+        strengths: ["所有题都回答正确，表现优秀。"],
+      }),
+      issueCode: "aggregate_outcome_contradiction",
+    },
+    {
+      name: "per-question reference-answer leakage",
+      mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => ({
+        ...output,
+        perQuestion: output.perQuestion.map((analysis, index) =>
+          index === 2
+            ? {
+                ...analysis,
+                improvementSuggestions: [
+                  request.questions[index]?.question.knowledgeExplanation ?? "",
+                ],
+              }
+            : analysis,
+        ),
+      }),
+      issueCode: "private_content_leak",
+    },
+    {
+      name: "reference-answer leakage split across fields",
+      mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => {
+        const privateAnswer = request.questions[0]?.question.knowledgeExplanation ?? "";
+        const splitAt = Math.floor(privateAnswer.length / 2);
+        return {
+          ...output,
+          perQuestion: output.perQuestion.map((analysis, index) =>
+            index === 0
+              ? {
+                  ...analysis,
+                  answerSummary: privateAnswer.slice(0, splitAt),
+                  improvementSuggestions: [privateAnswer.slice(splitAt)],
+                }
+              : analysis,
+          ),
+        };
+      },
+      issueCode: "private_content_leak",
+    },
+    {
+      name: "reference-answer leakage split into short fields",
+      mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => {
+        const privateAnswer = request.questions[0]?.question.knowledgeExplanation ?? "";
+        return {
+          ...output,
+          overallExplanation: privateAnswer.slice(0, 5),
+          strengths: [privateAnswer.slice(5, 10)],
+          weaknesses: [privateAnswer.slice(10, 15)],
+          priorities: [privateAnswer.slice(15, 20)],
+          learningSuggestions: [privateAnswer.slice(20)],
+        };
+      },
+      issueCode: "private_content_leak",
+    },
+    {
+      name: "reference-answer leakage in decorated fragments",
+      mutate: (request: ReportAnalysisRequest, output: ReturnType<typeof validOutput>) => {
+        const privateAnswer = request.questions[0]?.question.knowledgeExplanation ?? "";
+        const firstSplit = Math.floor(privateAnswer.length / 3);
+        const secondSplit = Math.floor((privateAnswer.length * 2) / 3);
+        return {
+          ...output,
+          overallExplanation: `第一段内容：${privateAnswer.slice(0, firstSplit)}`,
+          strengths: [`第二段内容：${privateAnswer.slice(firstSplit, secondSplit)}`],
+          weaknesses: [`第三段内容：${privateAnswer.slice(secondSplit)}`],
+        };
+      },
+      issueCode: "private_content_leak",
+    },
   ])("rejects $name after the one allowed repair", async ({ mutate, issueCode }) => {
     const request = completeRequest();
     const runtime = await fauxRuntime();
@@ -568,6 +689,25 @@ describe("PiReportAnalysisModel", () => {
     await expect(adapter.analyze(request)).rejects.toMatchObject({
       code: "invalid_output",
       issues: expect.arrayContaining([expect.objectContaining({ code: issueCode })]),
+    });
+  });
+
+  it("does not treat benign text across field boundaries as a private-content label", async () => {
+    const request = completeRequest();
+    const runtime = await fauxRuntime();
+    const output = validOutput(request);
+    runtime.faux.setResponses([
+      structuredResponse({
+        ...output,
+        strengths: ["建议参考"],
+        weaknesses: ["答案之外还应关注实践边界。"],
+      }),
+    ]);
+    const adapter = new PiReportAnalysisModel(runtime);
+
+    await expect(adapter.analyze(request)).resolves.toMatchObject({
+      strengths: ["建议参考"],
+      weaknesses: ["答案之外还应关注实践边界。"],
     });
   });
 

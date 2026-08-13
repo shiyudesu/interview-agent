@@ -38,6 +38,12 @@ import { Check, Errors } from "typebox/value";
 
 import { encodeUntrustedModelContent, getCurrentModelContract } from "./model-contract-registry.js";
 import type { ModelRuntime } from "./model-runtime.js";
+import {
+  createQuestionPrivateContentScope,
+  exposesFragmentedPrivateContent,
+  exposesPrivateContent,
+  type PrivateContentCandidate,
+} from "./private-assessment-content.js";
 
 const TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([a-z0-9_]+)\}\}/gu;
 const REPORT_ANALYSIS_OUTPUT_TOOL_NAME = "submit_report_analysis";
@@ -58,17 +64,14 @@ const MAX_REPORT_LIST_ITEMS = 8;
 const MAX_REPORT_QUESTION_SUGGESTIONS = 6;
 const MAX_REPORT_LIST_ITEM_CHARACTERS = 300;
 const MAX_REPORT_OUTPUT_CHARACTERS = 16_000;
-const PRIVATE_LABEL_PATTERN =
-  /(?:Rubric|评分点|评分项|评分标准|参考答案|标准答案|完整答案|答案(?:是|为)|知识说明|知识解释)/iu;
-const PRIVATE_SOURCE_PATTERN =
-  /(?:question[-_ ]?bank|题库(?:文件|来源)|内部题库|follow[-_ ]?up goal|追问目标)/iu;
 const CANONICAL_CLAIM_PATTERN =
   /(?:完整报告|不完整报告|总分|得分|分数|评分|满分|零分|百分之|[0-9０-９一二三四五六七八九十百]+分|%|complete report|incomplete report|overall score|total score|score\s*[:=]?\s*\d+|\d+\s*(?:points?|percent))/iu;
 const ZERO_OUTCOME_POSITIVE_PATTERN =
   /(?:完全正确|全部正确|回答正确|答对|部分正确|掌握良好|表现优秀|获得满分)/u;
 const SCORED_OUTCOME_NEGATIVE_PATTERN =
   /(?:未作答|没有作答|跳过|不知道|完全错误|毫不相关|没有可分析的作答)/u;
-const FULL_CORRECTNESS_PATTERN = /(?:完全正确|全部正确|回答完全正确|答对全部|满分)/u;
+const FULL_CORRECTNESS_PATTERN =
+  /(?:完全正确|全部正确|回答完全正确|答对全部|所有题.{0,8}回答正确|每道题.{0,8}回答正确|满分)/u;
 const UNKNOWN_REASON_PATTERN = /(?:不知道|不会|不清楚|未掌握)/u;
 const SKIPPED_REASON_PATTERN = /(?:跳过|略过|未回答但选择跳过)/u;
 const IRRELEVANT_REASON_PATTERN = /(?:不相关|答非所问|偏题|毫不相关)/u;
@@ -122,11 +125,6 @@ interface PreparedReportQuestion {
   readonly outcome: QuestionOutcome;
 }
 
-interface LeakageCandidate {
-  readonly text: string;
-  readonly minimumNormalizedLength: number;
-}
-
 interface PreparedReportAnalysisCall {
   readonly systemPrompt: string;
   readonly initialInput: string;
@@ -142,7 +140,7 @@ interface PreparedReportAnalysisCall {
   readonly reportKind: "complete" | "incomplete";
   readonly questions: readonly PreparedReportQuestion[];
   readonly privateIdentifiers: readonly string[];
-  readonly leakageCandidates: readonly LeakageCandidate[];
+  readonly leakageCandidates: readonly PrivateContentCandidate[];
 }
 
 interface PreparedRequestFacts {
@@ -156,7 +154,7 @@ interface PreparedRequestFacts {
   readonly answerEvidenceCharacters: number;
   readonly questions: readonly PreparedReportQuestion[];
   readonly privateIdentifiers: readonly string[];
-  readonly leakageCandidates: readonly LeakageCandidate[];
+  readonly leakageCandidates: readonly PrivateContentCandidate[];
 }
 
 interface NormalizedQuestionSnapshot {
@@ -565,25 +563,14 @@ function prepareRequestFacts(request: unknown): PreparedRequestFacts {
       }),
     ),
   );
+  const privateScopes = questions.map(({ question }) =>
+    createQuestionPrivateContentScope(question),
+  );
   const privateIdentifiers = Object.freeze(
-    questions.flatMap(({ question }) => [
-      ...question.rubric.map(({ id }) => String(id)),
-      ...question.followUpGoals.map(({ id }) => String(id)),
-    ]),
+    privateScopes.flatMap(({ privateIdentifiers: identifiers }) => identifiers),
   );
   const leakageCandidates = Object.freeze(
-    questions.flatMap(({ question }) => [
-      ...question.rubric.map(({ description }) =>
-        Object.freeze({ text: description, minimumNormalizedLength: 6 }),
-      ),
-      ...question.followUpGoals.map(({ goal }) =>
-        Object.freeze({ text: goal, minimumNormalizedLength: 6 }),
-      ),
-      Object.freeze({
-        text: question.knowledgeExplanation,
-        minimumNormalizedLength: 12,
-      }),
-    ]),
+    privateScopes.flatMap(({ leakageCandidates: candidates }) => candidates),
   );
 
   return Object.freeze({
@@ -1151,6 +1138,31 @@ function validateDomainOutput(
       }
     }
   });
+  validateAggregateOutcomeLanguage(call, output, issues);
+  const visibleTextFields = [
+    output.overallExplanation,
+    ...output.strengths,
+    ...output.weaknesses,
+    ...output.priorities,
+    ...output.learningSuggestions,
+    ...output.perQuestion.flatMap((analysis) => [
+      analysis.answerSummary,
+      analysis.scoreRationale,
+      ...analysis.improvementSuggestions,
+    ]),
+  ];
+  if (
+    !issues.some(({ code }) => code === "private_content_leak") &&
+    exposesFragmentedPrivateContent(visibleTextFields, call)
+  ) {
+    issues.push(
+      issue(
+        "/",
+        "private_content_leak",
+        "Combined report text must not expose fragmented internal assessment or reference-answer content",
+      ),
+    );
+  }
 
   if (totalOutputCharacters > call.outputCharacterBudget) {
     issues.push(
@@ -1162,6 +1174,36 @@ function validateDomainOutput(
     );
   }
   return issues;
+}
+
+function validateAggregateOutcomeLanguage(
+  call: PreparedReportAnalysisCall,
+  output: ModelReportAnalysisOutputDto,
+  issues: ReportAnalysisValidationIssue[],
+): void {
+  const globalText = [
+    output.overallExplanation,
+    ...output.strengths,
+    ...output.weaknesses,
+    ...output.priorities,
+    ...output.learningSuggestions,
+  ].join("\n");
+  const allZero = call.questions.every(({ outcome }) => outcome.score === 0);
+  const allFullyCorrect = call.questions.every(
+    ({ outcome }) => outcome.kind === "scored" && outcome.score === 100,
+  );
+  if (
+    (allZero && ZERO_OUTCOME_POSITIVE_PATTERN.test(globalText)) ||
+    (!allFullyCorrect && FULL_CORRECTNESS_PATTERN.test(globalText))
+  ) {
+    issues.push(
+      issue(
+        "/",
+        "aggregate_outcome_contradiction",
+        "Global report text must remain consistent with deterministic question outcomes",
+      ),
+    );
+  }
 }
 
 function validateText(
@@ -1259,36 +1301,6 @@ function validateOutcomeLanguage(
       ),
     );
   }
-}
-
-function exposesPrivateContent(value: string, call: PreparedReportAnalysisCall): boolean {
-  if (PRIVATE_LABEL_PATTERN.test(value) || PRIVATE_SOURCE_PATTERN.test(value)) {
-    return true;
-  }
-  const foldedValue = value.toLocaleLowerCase("en-US");
-  if (
-    call.privateIdentifiers.some(
-      (identifier) =>
-        identifier.length >= 4 && foldedValue.includes(identifier.toLocaleLowerCase("en-US")),
-    )
-  ) {
-    return true;
-  }
-  const normalizedValue = normalizeForLeakageCheck(value);
-  return call.leakageCandidates.some(({ text, minimumNormalizedLength }) => {
-    const normalizedCandidate = normalizeForLeakageCheck(text);
-    return (
-      normalizedCandidate.length >= minimumNormalizedLength &&
-      normalizedValue.includes(normalizedCandidate)
-    );
-  });
-}
-
-function normalizeForLeakageCheck(value: string): string {
-  return value
-    .normalize("NFKC")
-    .toLocaleLowerCase("en-US")
-    .replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }
 
 function createRepairInput(

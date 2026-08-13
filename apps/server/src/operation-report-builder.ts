@@ -11,9 +11,16 @@ import {
   type ReportId,
   type ReportKind,
   type ReportQuestionInput,
+  type ZeroQuestionOutcome,
 } from "@interview-agent/domain";
 
 import { OperationRunnerError } from "./operation-errors.js";
+import {
+  createQuestionPrivateContentScope,
+  exposesFragmentedPrivateContent,
+  exposesPrivateContent,
+  mergePrivateContentScopes,
+} from "./private-assessment-content.js";
 
 export function createReportAnalysisRequest(interview: Interview): ReportAnalysisRequest {
   if (interview.status !== "report_pending" || interview.pendingReportKind === null) {
@@ -77,6 +84,7 @@ export function createReportPersistence(
   ) {
     throw new OperationRunnerError("Report analysis coverage does not match the interview");
   }
+  assertNoPrivateReportContent(request, analysis);
 
   const selectedQuestionStates = interview.questions.filter(
     (question) => question.outcome !== null,
@@ -99,16 +107,13 @@ export function createReportPersistence(
     };
   });
   const domains = aggregateDomainScores(selectedScores);
+  const reportText = createGlobalReportText(selectedQuestionStates, selectedScores, analysis);
   const common = {
     reportId,
     interviewId: interview.id,
     accountId: interview.accountId,
     generatedAt: createdAt.toISOString(),
-    overallExplanation: analysis.overallExplanation,
-    strengths: analysis.strengths,
-    weaknesses: analysis.weaknesses,
-    priorities: analysis.priorities,
-    learningSuggestions: analysis.learningSuggestions,
+    ...reportText,
     schemaVersion: analysis.metadata.schemaVersion,
     modelMetadata: {
       provider: analysis.metadata.provider,
@@ -158,6 +163,76 @@ export function createReportPersistence(
   };
 }
 
+function createGlobalReportText(
+  questionStates: readonly Interview["questions"][number][],
+  scores: readonly { readonly outcome: NonNullable<Interview["questions"][number]["outcome"]> }[],
+  analysis: ReportAnalysisResult,
+): Pick<
+  ImmutableReportSnapshot,
+  "overallExplanation" | "strengths" | "weaknesses" | "priorities" | "learningSuggestions"
+> {
+  if (!scores.every(({ outcome }) => outcome.score === 0)) {
+    return {
+      overallExplanation: analysis.overallExplanation,
+      strengths: analysis.strengths,
+      weaknesses: analysis.weaknesses,
+      priorities: analysis.priorities,
+      learningSuggestions: analysis.learningSuggestions,
+    };
+  }
+  const hasEvaluatedAnswer = questionStates.some(({ evaluation }) => evaluation !== null);
+  return {
+    overallExplanation: hasEvaluatedAnswer
+      ? "本次已完成题目均未确认已掌握的知识点；报告依据作答记录区分错误、偏题和未作答原因。"
+      : "本次没有可用于分析知识掌握情况的作答材料；报告仅记录未掌握或跳过的题目及后续学习方向。",
+    strengths: [
+      hasEvaluatedAnswer
+        ? "你完成了作答并留下了可用于定位误区的材料。"
+        : "你明确记录了尚未掌握或选择跳过的题目，便于安排后续学习。",
+    ],
+    weaknesses: ["本次没有确认已掌握的知识点。"],
+    priorities: ["优先处理各题反馈中列出的未掌握、偏题或错误概念。"],
+    learningSuggestions: ["按题目顺序补齐核心概念、机制和适用边界，再重新作答并复盘。"],
+  };
+}
+
+function assertNoPrivateReportContent(
+  request: ReportAnalysisRequest,
+  analysis: ReportAnalysisResult,
+): void {
+  const scopes = request.questions.map(({ question }) =>
+    createQuestionPrivateContentScope(question),
+  );
+  const aggregateScope = mergePrivateContentScopes(scopes);
+  const visibleText = [
+    analysis.overallExplanation,
+    ...analysis.strengths,
+    ...analysis.weaknesses,
+    ...analysis.priorities,
+    ...analysis.learningSuggestions,
+    ...request.questions.flatMap((questionInput, index) => {
+      const questionAnalysis = analysis.perQuestion[index];
+      if (questionAnalysis === undefined) {
+        throw new OperationRunnerError("Report analysis is missing question feedback");
+      }
+      return [
+        questionAnalysis.answerSummary,
+        questionAnalysis.scoreRationale,
+        ...questionAnalysis.improvementSuggestions,
+        ...(questionInput.evaluation?.rubricItems.flatMap(
+          ({ missingOrIncorrectPoints }) => missingOrIncorrectPoints,
+        ) ?? []),
+      ];
+    }),
+  ];
+  if (
+    visibleText.some((value) => exposesPrivateContent(value, aggregateScope)) ||
+    exposesFragmentedPrivateContent(visibleText, aggregateScope)
+  ) {
+    throw new OperationRunnerError("Generated report contains private assessment content");
+  }
+}
+
 function createReportQuestionFeedback(
   interview: Interview,
   questionState: Interview["questions"][number],
@@ -172,15 +247,25 @@ function createReportQuestionFeedback(
     source: "question_snapshot" as const,
     questionId: question.questionId,
   };
+  const acceptedEvidenceIds = new Set(questionState.answerMaterial.map(({ id }) => id));
   const evaluationEvidenceIds = new Set(
     questionState.evaluation?.rubricItems.flatMap((item) => item.evidenceMaterialIds) ?? [],
   );
-  const analysisEvidence = analysis.evidenceMaterialIds
-    .filter((id) => evaluationEvidenceIds.has(id))
-    .map((answerMaterialId) => ({
-      source: "answer_material" as const,
-      answerMaterialId,
-    }));
+  const analysisEvidenceIds = new Set(analysis.evidenceMaterialIds);
+  if (
+    analysisEvidenceIds.size !== analysis.evidenceMaterialIds.length ||
+    analysis.evidenceMaterialIds.some((id) => !acceptedEvidenceIds.has(id)) ||
+    (questionState.evaluation === null
+      ? analysis.evidenceMaterialIds.length > 0
+      : analysis.evidenceMaterialIds.length === 0) ||
+    [...evaluationEvidenceIds].some((id) => !analysisEvidenceIds.has(id))
+  ) {
+    throw new OperationRunnerError("Report question analysis evidence is invalid");
+  }
+  const analysisEvidence = analysis.evidenceMaterialIds.map((answerMaterialId) => ({
+    source: "answer_material" as const,
+    answerMaterialId,
+  }));
   const matchedKnowledgePoints =
     questionState.evaluation?.rubricItems
       .filter((item) => item.awardedPoints > 0)
@@ -200,8 +285,8 @@ function createReportQuestionFeedback(
             rubricItemId: requiredRubricItemId(question, interview.id),
             summary:
               outcome.kind === "unknown"
-                ? "该题涉及的知识点尚未掌握。"
-                : "该题涉及的知识点尚未作答。",
+                ? `围绕“${question.displayedWording}”所需的核心知识尚未获得作答证据。`
+                : `你跳过了“${question.displayedWording}”，相关核心知识尚未通过作答体现。`,
             evidence: [questionReference],
           },
         ]
@@ -223,11 +308,15 @@ function createReportQuestionFeedback(
     domain: question.domain,
     position: questionState.position,
     displayedQuestion: question.displayedWording,
-    answerSummary: analysis.answerSummary,
+    ...(outcome.kind === "scored"
+      ? {
+          answerSummary: analysis.answerSummary,
+          scoreRationale: analysis.scoreRationale,
+          improvementSuggestions: analysis.improvementSuggestions,
+        }
+      : createZeroPointFeedbackText(outcome, question.displayedWording, analysis)),
     matchedKnowledgePoints,
     missingOrIncorrectPoints,
-    scoreRationale: analysis.scoreRationale,
-    improvementSuggestions: analysis.improvementSuggestions,
     evidence,
   };
   return outcome.kind === "scored"
@@ -242,6 +331,63 @@ function createReportQuestionFeedback(
         score: 0,
         zeroScoreReason: outcome.zeroScoreReason,
       };
+}
+
+export function createZeroPointFeedbackText(
+  outcome: ZeroQuestionOutcome,
+  displayedQuestion: string,
+  analysis: ReportAnalysisResult["perQuestion"][number],
+): Pick<
+  ImmutableReportSnapshot["questions"][number],
+  "answerSummary" | "scoreRationale" | "improvementSuggestions"
+> {
+  const assessmentGoal = `本题要求回应：“${displayedQuestion}”`;
+  switch (outcome.kind) {
+    case "unknown":
+      return {
+        answerSummary: "你明确表示暂未掌握本题相关内容，因此没有可用于分析的作答材料。",
+        scoreRationale: `${assessmentGoal}；相关知识点尚未获得作答证据。`,
+        improvementSuggestions: [
+          "先梳理题目中的技术对象、核心机制和适用边界，学习后再用自己的话完整回答。",
+        ],
+      };
+    case "skipped":
+      return {
+        answerSummary: "你主动选择跳过本题，因此没有可用于分析的作答材料。",
+        scoreRationale: `${assessmentGoal}；由于未作答，相关知识点尚未获得作答证据。`,
+        improvementSuggestions: [
+          "补做本题时先明确问题要求，再围绕技术对象、核心机制和适用边界组织回答。",
+        ],
+      };
+    case "irrelevant":
+      return {
+        answerSummary: `提交内容没有回应“${displayedQuestion}”所询问的技术主题。 ${analysis.answerSummary}`,
+        scoreRationale: `作答偏离了问题要求，无法据此确认相关知识点。 ${analysis.scoreRationale}`,
+        improvementSuggestions: withRequiredSuggestion(
+          "重新审题，先明确问题要求说明的技术对象和边界，再围绕该主题组织回答。",
+          analysis.improvementSuggestions,
+        ),
+      };
+    case "incorrect":
+      return {
+        answerSummary: `作答与题目相关，但结构化评估确认其中存在错误理解。 ${analysis.answerSummary}`,
+        scoreRationale: `下方列出的缺失或错误知识点是需要纠正的具体概念。 ${analysis.scoreRationale}`,
+        improvementSuggestions: withRequiredSuggestion(
+          "对照缺失或错误知识点逐项纠正概念边界，再通过示例验证新的理解。",
+          analysis.improvementSuggestions,
+        ),
+      };
+  }
+}
+
+function withRequiredSuggestion(
+  required: string,
+  modelSuggestions: readonly string[],
+): readonly string[] {
+  return [
+    required,
+    ...modelSuggestions.filter((suggestion) => suggestion !== required).slice(0, 5),
+  ];
 }
 
 function requiredBlueprintQuestion(interview: Interview, position: number) {

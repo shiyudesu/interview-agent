@@ -1502,10 +1502,56 @@ describe.sequential("persisted OperationRunner", () => {
     expect(report).toMatchObject({
       kind: "complete",
       overallScore: 0,
+      overallExplanation: expect.stringContaining("没有可用于分析知识掌握情况的作答材料"),
+      weaknesses: ["本次没有确认已掌握的知识点。"],
     });
     expect(report?.questions).toHaveLength(5);
     expect(report?.questions.every((question) => question.score === 0)).toBe(true);
+    expect(
+      report?.questions.every(
+        (question) =>
+          question.outcome === "unknown" &&
+          question.answerSummary.includes("明确表示暂未掌握") &&
+          question.scoreRationale.includes(question.displayedQuestion) &&
+          question.missingOrIncorrectPoints.some((point) =>
+            point.includes(question.displayedQuestion),
+          ) &&
+          question.improvementSuggestions[0]?.includes("学习后再用自己的话完整回答"),
+      ),
+    ).toBe(true);
     expect(evaluator.requests).toHaveLength(0);
+  });
+
+  it("retains answer evidence and tailored feedback for wholly incorrect answers", async () => {
+    evaluator.implementation = async (request) => incorrectEvaluation(request);
+    const interviewId = await createInterview("runner-incorrect-report");
+    await completeFiveQuestionInterview(interviewId, "runner-incorrect-report", "answer");
+
+    const reads = createCanonicalReadRouteDependencies(unitOfWork);
+    const report = await reads.reportDetail(OWNER_ID, interviewId);
+    expect(report).toMatchObject({
+      kind: "complete",
+      overallScore: 0,
+    });
+    expect(report?.questions).toHaveLength(5);
+    expect(
+      report?.questions.every(
+        (question) =>
+          question.outcome === "incorrect" &&
+          question.answerSummary.includes("存在错误理解") &&
+          question.scoreRationale.includes("需要纠正的具体概念") &&
+          question.improvementSuggestions[0]?.includes("逐项纠正概念边界") &&
+          question.missingOrIncorrectPoints.includes("回答混淆了核心机制的作用边界。"),
+      ),
+    ).toBe(true);
+    const storedReport = await unitOfWork.run((repositories) =>
+      repositories.reports.findByInterviewId(interviewId, OWNER_ID),
+    );
+    expect(
+      storedReport?.snapshot.questions.every((question) =>
+        question.evidence.some((reference) => reference.source === "answer_material"),
+      ),
+    ).toBe(true);
   });
 
   it("accepts early-end report work before analysis and finalizes the canonical report", async () => {
@@ -2270,6 +2316,23 @@ function fullEvaluation(request: AnswerEvaluationRequest): AnswerEvaluationResul
   };
 }
 
+function incorrectEvaluation(request: AnswerEvaluationRequest): AnswerEvaluationResult {
+  return {
+    classification: "relevant",
+    rubricItems: request.question.rubric.map((item) => ({
+      rubricItemId: item.id,
+      evidenceMaterialIds: [],
+      awardedPoints: 0,
+      missingOrIncorrectPoints: ["回答混淆了核心机制的作用边界。"],
+    })),
+    recommendedFollowUpGoal: null,
+    metadata: {
+      ...MODEL_METADATA,
+      questionVersion: request.question.questionVersion,
+    },
+  };
+}
+
 function fullReportAnalysis(request: ReportAnalysisRequest): ReportAnalysisResult {
   return {
     overallExplanation: "本次回答体现了已完成题目的知识掌握情况。",
@@ -2277,17 +2340,14 @@ function fullReportAnalysis(request: ReportAnalysisRequest): ReportAnalysisResul
     weaknesses: ["部分知识点仍需要进一步巩固。"],
     priorities: ["优先复习未掌握或未作答的知识点。"],
     learningSuggestions: ["结合实际场景复盘相关机制。"],
-    perQuestion: request.questions.map(({ question, evaluation }) => ({
+    perQuestion: request.questions.map(({ question, answerMaterial, evaluation }) => ({
       questionId: question.questionId,
       answerSummary:
         evaluation === null ? "该题没有可用于评分的作答。" : "回答覆盖了已记录的知识点。",
       scoreRationale:
         evaluation === null ? "该题按已记录的未作答结果处理。" : "结论依据已保存的结构化评估结果。",
       improvementSuggestions: ["针对缺失知识点进行复习并结合场景练习。"],
-      evidenceMaterialIds:
-        evaluation === null
-          ? []
-          : [...new Set(evaluation.rubricItems.flatMap((item) => item.evidenceMaterialIds))],
+      evidenceMaterialIds: evaluation === null ? [] : answerMaterial.map(({ id }) => id),
     })),
     metadata: {
       ...MODEL_METADATA,

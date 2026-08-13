@@ -576,6 +576,48 @@ describe("PiAnswerEvaluationModel", () => {
       },
       issueCode: "invalid_missing_point_length",
     },
+    {
+      name: "private Rubric text in public feedback",
+      output: {
+        classification: "relevant",
+        rubricItems: [
+          {
+            ...partialAwards[0],
+            missingOrIncorrectPoints: [request.question.rubric[0]?.description ?? ""],
+          },
+          partialAwards[1],
+        ],
+        recommendedFollowUp: null,
+      },
+      issueCode: "private_content_leak",
+    },
+    {
+      name: "private knowledge text split across missing points",
+      output: {
+        classification: "relevant",
+        rubricItems: [
+          {
+            ...zeroAwards[0],
+            missingOrIncorrectPoints: [
+              request.question.knowledgeExplanation.slice(
+                0,
+                Math.floor(request.question.knowledgeExplanation.length / 2),
+              ),
+            ],
+          },
+          {
+            ...zeroAwards[1],
+            missingOrIncorrectPoints: [
+              request.question.knowledgeExplanation.slice(
+                Math.floor(request.question.knowledgeExplanation.length / 2),
+              ),
+            ],
+          },
+        ],
+        recommendedFollowUp: null,
+      },
+      issueCode: "private_content_leak",
+    },
   ])("rejects $name through evidence, goal, and text bounds", async ({ output, issueCode }) => {
     const runtime = await fauxRuntime();
     runtime.faux.setResponses([structuredResponse(output), structuredResponse(output)]);

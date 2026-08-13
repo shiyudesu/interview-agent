@@ -82,7 +82,7 @@
 - [x] 8.1 Connect schema-constrained evaluation adapters and Operation handlers to structured evaluation persistence, Rubric evidence, points, follow-up eligibility, and zero-reason validation.
 - [x] 8.2 Implement complete-report analysis/generation and store it through immutable versioned report persistence, including a valid zero-score complete report.
 - [x] 8.3 Implement incomplete-report analysis/generation after early ending and store it without an overall score.
-- [ ] 8.4 Complete the remaining feedback-quality acceptance for tailored unknown, skipped, irrelevant, and incorrect zero-point guidance without exposing complete reference answers.
+- [x] 8.4 Complete the remaining feedback-quality acceptance for tailored unknown, skipped, irrelevant, and incorrect zero-point guidance without exposing complete reference answers.
 - [x] 8.5 Complete private owner-scoped report API access and unsupported-action rejection using immutable persistence and recorded model/prompt/Schema/question versions; Web rendering remains in 9.7.
 - [x] 8.6 Complete model/Operation integration coverage for report failure/retry, complete/incomplete reports, unassessed domains, all-zero completion, and historical immutability.
 
