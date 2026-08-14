@@ -106,5 +106,5 @@
 - [x] 10.4 Add Playwright critical-path tests for authentication substitutes, normal completion, all-zero completion, early ending, resume, report retry, history, and deletion.
 - [x] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
 - [x] 10.6 Run a production-container smoke test against clean PostgreSQL and Mailpit dependencies.
-- [ ] 10.7 Update README setup commands and add repository development instructions only after all verified scripts and workflows exist.
+- [x] 10.7 Update README setup commands and add repository development instructions only after all verified scripts and workflows exist.
 - [ ] 10.8 Verify every OpenSpec scenario has automated coverage or a documented manual acceptance step and validate the change in strict mode.
