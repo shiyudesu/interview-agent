@@ -689,7 +689,7 @@ describe("Operation event route", () => {
       signal: controller.signal,
     }).catch(() => null);
 
-    await delay(10);
+    await waitUntil(() => findAccessible.mock.calls.length === 1);
     controller.abort();
     releaseLookup?.();
     await request;
