@@ -23,6 +23,11 @@ import type {
 } from "./operation-types.js";
 import { ReportOperationExecutionService } from "./report-operation-execution.js";
 import { ReportOperationFinalizationService } from "./report-operation-finalization.js";
+import {
+  completeOperationTelemetrySpan,
+  operationTelemetryAttributes,
+  withTelemetrySpan,
+} from "./telemetry.js";
 
 export class OperationRunner {
   private readonly acceptance: OperationAcceptanceService;
@@ -66,7 +71,23 @@ export class OperationRunner {
   }
 
   createInterview(input: CreateInterviewOperationInput): Promise<StoredOperation> {
-    return this.acceptance.createInterview(input);
+    return withTelemetrySpan(
+      "interview.operation.accept",
+      operationTelemetryAttributes(
+        {
+          id: input.operationId,
+          interviewId: input.interviewId,
+          type: "create_interview",
+          expectedVersion: input.expectedVersion,
+        },
+        false,
+      ),
+      async (span) => {
+        const operation = await this.acceptance.createInterview(input);
+        completeOperationTelemetrySpan(span, operation, false);
+        return operation;
+      },
+    );
   }
 
   async run(request: ProgressCommandRequest): Promise<StoredOperation> {
@@ -74,7 +95,23 @@ export class OperationRunner {
   }
 
   async accept(request: ProgressCommandRequest): Promise<AcceptedOperationExecution> {
-    return this.acceptPrepared(await this.acceptance.acceptProgress(request));
+    return withTelemetrySpan(
+      "interview.operation.accept",
+      operationTelemetryAttributes(
+        {
+          id: request.operationId,
+          interviewId: request.interviewId,
+          type: request.type,
+          expectedVersion: request.expectedVersion,
+        },
+        false,
+      ),
+      async (span) => {
+        const accepted = this.acceptPrepared(await this.acceptance.acceptProgress(request));
+        completeOperationTelemetrySpan(span, accepted.operation, false);
+        return accepted;
+      },
+    );
   }
 
   async retry(input: RetryInterviewOperationInput): Promise<StoredOperation> {
@@ -82,7 +119,26 @@ export class OperationRunner {
   }
 
   async acceptRetry(input: RetryInterviewOperationInput): Promise<AcceptedOperationExecution> {
-    return this.acceptPrepared(await this.retryAcceptance.accept(input));
+    return withTelemetrySpan(
+      "interview.operation.accept",
+      {
+        ...operationTelemetryAttributes(
+          {
+            id: input.operationId,
+            interviewId: input.interviewId,
+            type: "retry_operation",
+            expectedVersion: input.expectedVersion,
+          },
+          true,
+        ),
+        "interview.operation.target_id": input.targetOperationId,
+      },
+      async (span) => {
+        const accepted = this.acceptPrepared(await this.retryAcceptance.accept(input));
+        completeOperationTelemetrySpan(span, accepted.operation, false);
+        return accepted;
+      },
+    );
   }
 
   private acceptPrepared(prepared: PreparedOperation): AcceptedOperationExecution {
@@ -91,11 +147,43 @@ export class OperationRunner {
     }
     if (prepared.kind === "model") {
       return acceptedExecution(responseOperation(prepared.execution), () =>
-        this.modelExecution.execute(prepared.execution),
+        this.executeModelOperation(prepared.execution),
       );
     }
     return acceptedExecution(responseOperation(prepared.execution), () =>
-      this.reportExecution.execute(prepared.execution),
+      this.executeReportOperation(prepared.execution),
+    );
+  }
+
+  private executeModelOperation(execution: ClaimedModelOperation): Promise<StoredOperation> {
+    return this.executeOperation(
+      execution.claimed.operation,
+      execution.retryCommand !== undefined,
+      () => this.modelExecution.execute(execution),
+    );
+  }
+
+  private executeReportOperation(execution: ClaimedReportOperation): Promise<StoredOperation> {
+    return this.executeOperation(
+      execution.claimed.operation,
+      execution.retryCommand !== undefined,
+      () => this.reportExecution.execute(execution),
+    );
+  }
+
+  private executeOperation(
+    operation: StoredOperation,
+    retry: boolean,
+    execute: () => Promise<StoredOperation>,
+  ): Promise<StoredOperation> {
+    return withTelemetrySpan(
+      "interview.operation.execute",
+      operationTelemetryAttributes(operation, retry),
+      async (span) => {
+        const result = await execute();
+        completeOperationTelemetrySpan(span, result, true);
+        return result;
+      },
     );
   }
 

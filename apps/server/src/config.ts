@@ -1,6 +1,8 @@
 import { type ServerEnvironment, ServerEnvironmentSchema } from "@interview-agent/contracts";
 import { Check, Errors } from "typebox/value";
 
+import { validateOtlpEndpoint } from "./telemetry.js";
+
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 3000;
 
@@ -128,7 +130,14 @@ export function loadServerConfig(
   }
 
   const github = githubConfig(selectedEnvironment);
-  const otlpEndpoint = selectedEnvironment.OTEL_EXPORTER_OTLP_ENDPOINT;
+  let otlpEndpoint: string | undefined;
+  try {
+    otlpEndpoint = validateOtlpEndpoint(selectedEnvironment.OTEL_EXPORTER_OTLP_ENDPOINT);
+  } catch {
+    throw new ConfigurationError([
+      "/OTEL_EXPORTER_OTLP_ENDPOINT must be an HTTP(S) URL without credentials, query, or fragment",
+    ]);
+  }
   const modelBaseUrl = selectedEnvironment.MODEL_BASE_URL;
   let model: ServerConfig["model"];
   if (selectedEnvironment.MODEL_PROVIDER === "faux") {

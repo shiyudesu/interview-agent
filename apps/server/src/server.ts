@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { type TypeBoxTypeProvider, TypeBoxValidatorCompiler } from "@fastify/type-provider-typebox";
+import { trace } from "@opentelemetry/api";
 import Fastify, {
   type FastifyInstance,
   type FastifyRequest,
@@ -96,8 +97,26 @@ export function createServer(options: FastifyServerOptions = {}) {
 function registerRequestLogContext(app: FastifyInstance): void {
   const failedRequests = new WeakSet<FastifyRequest>();
   app.addHook("onRequest", (request, _reply, done) => {
-    const traceId = parseTraceId(request.headers["traceparent"]);
     const correlation = routeCorrelation(request);
+    const activeSpan = trace.getActiveSpan();
+    const route = request.routeOptions.url;
+    if (activeSpan !== undefined) {
+      activeSpan.updateName(`${request.method} ${route}`);
+      activeSpan.setAttributes({
+        "http.route": route,
+        ...(correlation["interviewId"] === undefined
+          ? {}
+          : { "interview.id": correlation["interviewId"] }),
+        ...(correlation["operationId"] === undefined
+          ? {}
+          : { "interview.operation.id": correlation["operationId"] }),
+      });
+    }
+    const activeTraceId = activeSpan?.spanContext().traceId;
+    const traceId =
+      activeTraceId === undefined || /^0+$/u.test(activeTraceId)
+        ? parseTraceId(request.headers["traceparent"])
+        : activeTraceId;
     request.log = request.log.child({
       requestId: request.id,
       ...(traceId === null ? {} : { traceId }),

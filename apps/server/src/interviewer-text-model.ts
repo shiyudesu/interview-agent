@@ -15,6 +15,12 @@ import { Check } from "typebox/value";
 
 import { encodeUntrustedModelContent, getCurrentModelContract } from "./model-contract-registry.js";
 import type { ModelRuntime } from "./model-runtime.js";
+import {
+  completeModelTelemetrySpan,
+  failModelTelemetrySpan,
+  modelTelemetryAttributes,
+  withTelemetrySpan,
+} from "./telemetry.js";
 
 const TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([a-z0-9_]+)\}\}/gu;
 const PRIVATE_LABEL_PATTERN =
@@ -105,36 +111,57 @@ export class PiAgentInterviewerTextModel implements InterviewerTextModel {
   }
 
   private async *execute(call: PreparedInterviewerTextCall): AsyncIterable<InterviewerTextEvent> {
-    const startedAt = performance.now();
-    let attempt: AgentAttempt = {
-      deltas: [],
-      message: null,
-      usedToolCall: false,
-    };
+    const events = await withTelemetrySpan(
+      "interview.model.call",
+      modelTelemetryAttributes({
+        provider: this.runtime.model.provider,
+        modelId: this.runtime.model.id,
+        purpose: call.purpose,
+        promptVersion: call.promptVersion,
+        schemaVersion: call.schemaVersion,
+        questionVersion: call.questionVersion,
+      }),
+      async (span) => {
+        const startedAt = performance.now();
+        let attempt: AgentAttempt = {
+          deltas: [],
+          message: null,
+          usedToolCall: false,
+        };
 
-    try {
-      attempt = await runNoToolAgent(this.runtime, call);
-      const output = validatedOutput(call, attempt);
-      const metadata = createMetadata(this.runtime, call, startedAt, attempt.message);
+        try {
+          attempt = await runNoToolAgent(this.runtime, call);
+          const output = validatedOutput(call, attempt);
+          const metadata = createMetadata(this.runtime, call, startedAt, attempt.message);
+          completeModelTelemetrySpan(span, metadata, { outcome: "success" });
 
-      const deltas = attempt.deltas.length > 0 ? attempt.deltas : [output];
-      for (const delta of deltas) {
-        if (delta.length > 0) {
-          yield { type: "delta", text: delta };
+          const deltas = attempt.deltas.length > 0 ? attempt.deltas : [output];
+          return [
+            ...deltas
+              .filter((delta) => delta.length > 0)
+              .map((delta) => ({ type: "delta" as const, text: delta })),
+            { type: "completed" as const, text: output, metadata },
+          ];
+        } catch (error) {
+          const metadata = createMetadata(this.runtime, call, startedAt, attempt.message);
+          if (call.purpose === "rephrase_question") {
+            completeModelTelemetrySpan(span, metadata, { outcome: "fallback" });
+            return [
+              { type: "delta" as const, text: call.sourceWording },
+              { type: "completed" as const, text: call.sourceWording, metadata },
+            ];
+          }
+          if (error instanceof InterviewerTextModelError) {
+            failModelTelemetrySpan(span, error.code, metadata);
+            throw new InterviewerTextModelError(error.code, metadata);
+          }
+          failModelTelemetrySpan(span, "model_call_failed", metadata);
+          throw new InterviewerTextModelError("model_call_failed", metadata);
         }
-      }
-      yield { type: "completed", text: output, metadata };
-    } catch (error) {
-      const metadata = createMetadata(this.runtime, call, startedAt, attempt.message);
-      if (call.purpose === "rephrase_question") {
-        yield { type: "delta", text: call.sourceWording };
-        yield { type: "completed", text: call.sourceWording, metadata };
-        return;
-      }
-      if (error instanceof InterviewerTextModelError) {
-        throw new InterviewerTextModelError(error.code, metadata);
-      }
-      throw new InterviewerTextModelError("model_call_failed", metadata);
+      },
+    );
+    for (const event of events) {
+      yield event;
     }
   }
 }

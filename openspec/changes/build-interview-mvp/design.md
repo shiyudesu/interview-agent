@@ -289,6 +289,18 @@ raw automatic request/error logging is disabled. Request serializers remove quer
 serializers discard messages and stacks, and redaction covers credentials, cookies, OTPs, API keys,
 tokens, answer fields, text/content fields, and request/response bodies.
 
+OpenTelemetry initializes before Fastify or PostgreSQL modules load, but only when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is configured. The endpoint is an HTTP(S) OTLP base URL without URL
+credentials, query values, or fragments; the server exports traces to its `/v1/traces` path and
+explicitly disables ambient log and metric exporters. Automatic instrumentation is limited to HTTP
+and `pg`: query-bearing HTTP requests are skipped so callback codes and other query values cannot
+enter spans, and PostgreSQL parameter capture, SQL commenter injection, and session propagation are
+disabled. Operation acceptance/execution and model calls use explicit allowlisted spans containing
+only resource IDs, types, statuses, versions, retry/repair counts, provider/model identity, and token
+counts. They never attach command payloads, answers, prompts, model text, credentials, exception
+messages, or stacks. Without the endpoint, the OpenTelemetry API remains a safe no-op and no exporter
+or background telemetry pipeline starts.
+
 ### 7. Maintain and import the question bank as reviewed YAML
 
 The repository stores one or more YAML files per Go backend knowledge domain. A TypeBox schema validates:

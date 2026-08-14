@@ -44,6 +44,12 @@ import {
   exposesPrivateContent,
   type PrivateContentCandidate,
 } from "./private-assessment-content.js";
+import {
+  completeModelTelemetrySpan,
+  failModelTelemetrySpan,
+  modelTelemetryAttributes,
+  withTelemetrySpan,
+} from "./telemetry.js";
 
 const TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([a-z0-9_]+)\}\}/gu;
 const REPORT_ANALYSIS_OUTPUT_TOOL_NAME = "submit_report_analysis";
@@ -218,45 +224,76 @@ export class PiReportAnalysisModel implements ReportAnalysisModel {
       this.runtime.model.contextWindow,
       this.runtime.model.maxTokens,
     );
-    const startedAt = performance.now();
-    const state: ExecutionState = {
-      transientRetries: 0,
-      messages: [],
-    };
+    return withTelemetrySpan(
+      "interview.model.call",
+      modelTelemetryAttributes({
+        provider: this.runtime.model.provider,
+        modelId: this.runtime.model.id,
+        purpose: "report_analysis",
+        promptVersion: call.promptVersion,
+        schemaVersion: call.schemaVersion,
+        questionVersion: null,
+      }),
+      async (span) => {
+        const startedAt = performance.now();
+        const state: ExecutionState = {
+          transientRetries: 0,
+          messages: [],
+        };
+        let repairAttempted = false;
 
-    try {
-      const initialMessage = await this.callProvider(
-        call,
-        call.initialInput,
-        state,
-        "invalid_request",
-      );
-      let parsed = parseAttempt(call, initialMessage);
+        try {
+          const initialMessage = await this.callProvider(
+            call,
+            call.initialInput,
+            state,
+            "invalid_request",
+          );
+          let parsed = parseAttempt(call, initialMessage);
 
-      if (parsed.value === null) {
-        const repairInput = createRepairInput(
-          call.initialInput,
-          parsed.issues,
-          parsed.visibleOutput,
-        );
-        const repairMessage = await this.callProvider(call, repairInput, state, "invalid_output");
-        parsed = parseAttempt(call, repairMessage);
-        if (parsed.value === null) {
-          throw new ReportAnalysisModelError("invalid_output", parsed.issues);
+          if (parsed.value === null) {
+            repairAttempted = true;
+            const repairInput = createRepairInput(
+              call.initialInput,
+              parsed.issues,
+              parsed.visibleOutput,
+            );
+            const repairMessage = await this.callProvider(
+              call,
+              repairInput,
+              state,
+              "invalid_output",
+            );
+            parsed = parseAttempt(call, repairMessage);
+            if (parsed.value === null) {
+              throw new ReportAnalysisModelError("invalid_output", parsed.issues);
+            }
+          }
+
+          const result = createResult(this.runtime, call, parsed.value, startedAt, state.messages);
+          completeModelTelemetrySpan(span, result.metadata, {
+            outcome: "success",
+            transientRetries: state.transientRetries,
+            repairAttempted,
+          });
+          return result;
+        } catch (error) {
+          if (error instanceof ReportAnalysisModelError) {
+            const metadata = createMetadata(this.runtime, call, startedAt, state.messages);
+            failModelTelemetrySpan(span, error.code, metadata, {
+              transientRetries: state.transientRetries,
+              repairAttempted,
+            });
+            throw new ReportAnalysisModelError(error.code, error.issues, metadata);
+          }
+          failModelTelemetrySpan(span, "unexpected_failure", null, {
+            transientRetries: state.transientRetries,
+            repairAttempted,
+          });
+          throw error;
         }
-      }
-
-      return createResult(this.runtime, call, parsed.value, startedAt, state.messages);
-    } catch (error) {
-      if (error instanceof ReportAnalysisModelError) {
-        throw new ReportAnalysisModelError(
-          error.code,
-          error.issues,
-          createMetadata(this.runtime, call, startedAt, state.messages),
-        );
-      }
-      throw error;
-    }
+      },
+    );
   }
 
   private async callProvider(

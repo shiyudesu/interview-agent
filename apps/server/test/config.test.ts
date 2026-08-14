@@ -101,4 +101,30 @@ describe("loadServerConfig", () => {
       "/GITHUB_CLIENT_ID and /GITHUB_CLIENT_SECRET must be configured together",
     );
   });
+
+  it("loads a safe optional OTLP endpoint", () => {
+    expect(
+      loadServerConfig({
+        ...validEnvironment,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://telemetry.example.test/collector",
+      }).telemetry,
+    ).toEqual({
+      otlpEndpoint: "https://telemetry.example.test/collector",
+    });
+  });
+
+  it("rejects OTLP endpoints containing credentials or query values", () => {
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://user:secret@telemetry.example.test",
+      }),
+    ).toThrow("/OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://telemetry.example.test?token=secret",
+      }),
+    ).toThrow("/OTEL_EXPORTER_OTLP_ENDPOINT");
+  });
 });
