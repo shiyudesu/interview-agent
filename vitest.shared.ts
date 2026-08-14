@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 export interface SharedVitestOptions {
+  readonly include?: readonly string[];
   readonly passWithNoTests?: boolean;
 }
 
@@ -12,6 +13,7 @@ export function createVitestConfig(
     test: {
       clearMocks: true,
       environment,
+      ...(options.include === undefined ? {} : { include: [...options.include] }),
       passWithNoTests: options.passWithNoTests ?? false,
       restoreMocks: true,
       coverage: {

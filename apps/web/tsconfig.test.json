@@ -5,7 +5,15 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "rootDir": "../.."
+    "rootDir": "../..",
+    "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "e2e/**/*.ts",
+    "playwright.config.ts"
+  ]
 }

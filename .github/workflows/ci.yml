@@ -62,5 +62,8 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Browser tests
+        run: PLAYWRIGHT_CHROME_PATH="$(command -v google-chrome)" pnpm test:e2e
+
       - name: Build
         run: pnpm build

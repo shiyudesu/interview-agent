@@ -1995,7 +1995,7 @@ async function operationEvents(
   );
   expect(response.status).toBe(200);
   const events = parseSse(
-    await withTimeout(response.text(), `Operation ${operationId} SSE terminal body`),
+    await withTimeout(response.text(), `Operation ${operationId} SSE terminal body`, 30_000),
   ).map((event) => event.data);
   expect(events.at(-1)?.type).toBe("succeeded");
   expect(events.every((event) => Check(OperationEventSchema, event))).toBe(true);

@@ -57,7 +57,8 @@
       "outputs": ["coverage/**"]
     },
     "test:e2e": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["CI", "PLAYWRIGHT_CHROME_PATH"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],

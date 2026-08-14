@@ -101,6 +101,17 @@ controls, Operation streaming and recovery, history pagination, complete/incompl
 rendering, and pending/success deletion states. The task 9.9 baseline contains 45 passing tests
 across 11 files and records coverage for all Web source modules.
 
+Playwright runs the built browser application against deterministic network substitutes rather than
+live OAuth, PostgreSQL, SMTP, or model credentials. Eight serial critical-path cases cover email OTP
+authentication, normal completion through answer and SSE, all-zero normal completion, early ending,
+cross-reload resume, report-only retry, state-aware history/transcript access, and confirmed
+deletion. The substitutes return only public API contracts and still exercise the real router,
+fetch client, TanStack Query cache, SSE parser/reconciliation, forms, dialogs, and report semantic
+validation. Local WSL execution starts the mounted Windows Chrome with a unique profile and connects
+through CDP; CI uses the hosted runner's Chrome channel. Both paths run from `pnpm test:e2e`, use one
+worker for deterministic stateful flows, retain failure traces/media, and clean browser processes
+and profiles.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:
