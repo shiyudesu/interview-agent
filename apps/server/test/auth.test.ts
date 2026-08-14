@@ -130,6 +130,11 @@ describe("createAuthentication", () => {
     });
 
     expect(auth.options.socialProviders).toEqual({});
+    expect(auth.options.trustedOrigins).toEqual([
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ]);
     expect(auth.options.account?.accountLinking?.trustedProviders).toEqual([]);
     expect(auth.options.advanced).toMatchObject({
       useSecureCookies: false,

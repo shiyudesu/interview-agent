@@ -36,7 +36,6 @@ export class ApiResponseError extends Error {
 }
 
 export function createApiClient(options: ApiClientOptions = {}) {
-  const requestFetch = options.fetch ?? globalThis.fetch;
   const baseUrl = options.baseUrl?.replace(/\/+$/u, "") ?? "";
 
   return {
@@ -62,7 +61,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (requestOptions.signal !== undefined) {
         requestInit.signal = requestOptions.signal;
       }
-      const response = await requestFetch(`${baseUrl}${path}`, requestInit);
+      const response = await (options.fetch ?? globalThis.fetch)(`${baseUrl}${path}`, requestInit);
       const value = await readJsonResponse(response);
       if (!response.ok) {
         const failure = apiFailure(value);

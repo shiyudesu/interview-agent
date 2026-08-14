@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { Check } from "typebox/value";
 
 import {
   AccountIdSchema,
@@ -557,3 +558,7 @@ export type SucceededOperationStatusResponseDto = Static<
 >;
 export type FailedOperationStatusResponseDto = Static<typeof FailedOperationStatusResponseSchema>;
 export type OperationStatusResponseDto = Static<typeof OperationStatusResponseSchema>;
+
+export function isAccountResponseDto(value: unknown): value is AccountResponseDto {
+  return Check(AccountResponseSchema, value);
+}

@@ -353,6 +353,14 @@ fact.
 
 Better Auth provides GitHub OAuth, email OTP, PostgreSQL sessions, and explicit linking. Configuration disables implicit linking and permits an authenticated user to link a GitHub identity with a different email without changing the primary email.
 
+The Web authentication flow calls the existing Better Auth JSON endpoints directly. It requests and
+verifies email OTPs, starts GitHub sign-in or authenticated link redirects, and then reloads the
+project-owned `/api/v1/account` projection for linked identities and live token-free sessions.
+Unlinked OAuth failures explicitly direct the user to authenticate through the existing email method
+before linking; the UI never offers implicit merge behavior. Non-production Better Auth origin
+validation admits only the fixed local Vite origins in addition to the configured application
+origin, while production trusts only the configured origin.
+
 The server factory binds Better Auth to the checked Drizzle `user`, `session`, `account`, and
 `verification` schema, disables cookie-cached sessions, and enables secure cookies in production.
 Email OTP values are stored through an HMAC keyed by the authentication secret, with six digits,

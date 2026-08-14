@@ -2,8 +2,11 @@ import { createBrowserRouter } from "react-router-dom";
 
 import { AppShell } from "../components/app-shell.js";
 import { RouteErrorState } from "../components/page-state.js";
+import { AccountSettingsPage } from "../pages/account-settings-page.js";
+import { AuthErrorPage } from "../pages/auth-error-page.js";
 import { HomePage } from "../pages/home-page.js";
 import { NotFoundPage } from "../pages/not-found-page.js";
+import { SignInPage } from "../pages/sign-in-page.js";
 import { WorkspacePage } from "../pages/workspace-page.js";
 
 export const appRouter = createBrowserRouter([
@@ -19,6 +22,18 @@ export const appRouter = createBrowserRouter([
       {
         path: "app",
         element: <WorkspacePage />,
+      },
+      {
+        path: "sign-in",
+        element: <SignInPage />,
+      },
+      {
+        path: "auth/error",
+        element: <AuthErrorPage />,
+      },
+      {
+        path: "settings",
+        element: <AccountSettingsPage />,
       },
       {
         path: "*",
