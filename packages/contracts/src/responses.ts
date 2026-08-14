@@ -569,6 +569,10 @@ export function isCurrentInterviewResponseDto(
   return Check(CurrentInterviewResponseSchema, value);
 }
 
+export function isInterviewDetailResponseDto(value: unknown): value is InterviewDetailResponseDto {
+  return Check(InterviewDetailResponseSchema, value);
+}
+
 export function isOperationStatusResponseDto(value: unknown): value is OperationStatusResponseDto {
   return Check(OperationStatusResponseSchema, value);
 }

@@ -56,6 +56,15 @@ resume action and shows abandonment only when the response explicitly permits it
 abandon commands retain one Idempotency Key across ambiguous retries and re-read canonical state
 after both success and failure, allowing recovery when durable acceptance outlives the HTTP response.
 
+The active interview screen renders only canonical progress, current wording, transcript messages,
+and `availableActions`. Every action remains visible but disabled when the server does not permit it;
+answer and supplement forms are phase-specific. Text and control commands retain one idempotency key
+for ambiguous retry, refresh both detail and dashboard caches, clear drafts when the canonical
+version or question position changes, and suppress transport errors only when the refreshed version
+proves the old draft is stale. Pending Operations are shown as busy even when the aggregate business
+phase remains `awaiting_response`. Retryable report-pending failures expose only report Operation
+retry and never rerun question evaluation.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:

@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "../src/lib/query-client.js";
 import { InterviewCreationPage } from "../src/pages/interview-creation-page.js";
-import { InterviewPlaceholderPage } from "../src/pages/interview-placeholder-page.js";
 
 afterEach(() => {
   cleanup();
@@ -62,7 +61,9 @@ describe("interview creation", () => {
     await user.click(await screen.findByRole("radio", { name: /10 题/u }));
     await user.click(screen.getByRole("button", { name: "开始 10 题面试" }));
 
-    expect(await screen.findByRole("heading", { name: "面试已准备恢复" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Active interview route" }),
+    ).toBeInTheDocument();
     const createCall = requestFetch.mock.calls.find(
       ([url, init]) => url === "/api/v1/interviews" && init?.method === "POST",
     );
@@ -176,7 +177,7 @@ function renderCreationRoute() {
   const router = createMemoryRouter(
     [
       { path: "/app", element: <InterviewCreationPage /> },
-      { path: "/interviews/:interviewId", element: <InterviewPlaceholderPage /> },
+      { path: "/interviews/:interviewId", element: <h1>Active interview route</h1> },
     ],
     { initialEntries: ["/app"] },
   );
