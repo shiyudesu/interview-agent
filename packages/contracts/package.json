@@ -27,6 +27,10 @@
     "./reports": {
       "types": "./dist/reports.d.ts",
       "default": "./dist/reports.js"
+    },
+    "./deletion": {
+      "types": "./dist/deletion.d.ts",
+      "default": "./dist/deletion.js"
     }
   },
   "scripts": {

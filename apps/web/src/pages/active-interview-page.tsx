@@ -8,6 +8,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { Button } from "../components/button.js";
+import { DeleteInterviewButton } from "../components/delete-interview-button.js";
 import { ErrorState, LoadingState } from "../components/page-state.js";
 import { useCurrentAccount } from "../features/account/account-query.js";
 import { getInterviewDetail, runInterviewAction } from "../features/interview/interview-api.js";
@@ -193,6 +194,7 @@ export function ActiveInterviewPage() {
           <Button asChild tone="secondary">
             <Link to="/app">返回面试空间</Link>
           </Button>
+          <DeleteInterviewButton interviewId={current.id} />
         </div>
         {command.error === null || commandReconciled ? null : (
           <p className="mt-5 text-sm text-brand-700" role="alert">
@@ -257,6 +259,9 @@ export function ActiveInterviewPage() {
         <Button asChild className="mt-7" tone="secondary">
           <Link to="/history">返回面试历史</Link>
         </Button>
+        <div className="mt-4">
+          <DeleteInterviewButton interviewId={interview.id} />
+        </div>
       </div>
     );
   }
@@ -405,6 +410,7 @@ export function ActiveInterviewPage() {
                 重试失败操作
               </Button>
             )}
+            <DeleteInterviewButton interviewId={current.id} />
           </div>
           {command.error === null || commandReconciled ? null : (
             <p className="mt-5 text-sm text-brand-700" role="alert">

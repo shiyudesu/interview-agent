@@ -95,7 +95,7 @@
 - [x] 9.5 Implement Operation SSE consumption, reconnect through canonical GET state, retryable failure UI, cross-device resume, and report-pending UI.
 - [x] 9.6 Implement history list and transcript detail for completed, early-ended, and abandoned interviews.
 - [x] 9.7 Implement complete and incomplete report views, domain and per-question feedback, unassessed markers, and immutable read-only behavior.
-- [ ] 9.8 Implement interview/account deletion confirmations and immediate removal of deleted resources from the user-visible application.
+- [x] 9.8 Implement interview/account deletion confirmations and immediate removal of deleted resources from the user-visible application.
 - [ ] 9.9 Add React Testing Library coverage for critical forms, interview actions, report rendering, and deletion states.
 
 ## 10. Observability, Security, and Release Validation

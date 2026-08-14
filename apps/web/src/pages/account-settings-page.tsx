@@ -2,9 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "../components/button.js";
+import { ConfirmationDialog } from "../components/confirmation-dialog.js";
 import { ErrorState, LoadingState } from "../components/page-state.js";
 import { ACCOUNT_QUERY_KEY, useCurrentAccount } from "../features/account/account-query.js";
 import { authClient } from "../features/auth/auth-api.js";
+import { broadcastAccountDeletion, deleteAccount } from "../features/deletion/deletion-api.js";
 import { ACCOUNT_OWNED_QUERY_KEY } from "../features/interview/interview-query.js";
 import { ApiClientError } from "../lib/api-client.js";
 
@@ -27,6 +29,20 @@ export function AccountSettingsPage() {
       queryClient.removeQueries({ queryKey: ACCOUNT_OWNED_QUERY_KEY });
       queryClient.removeQueries({ queryKey: ACCOUNT_QUERY_KEY });
       navigate("/sign-in", { replace: true });
+    },
+  });
+  const deleteAccountMutation = useMutation({
+    mutationFn: () => deleteAccount(),
+    onSuccess() {
+      broadcastAccountDeletion();
+      queryClient.clear();
+      navigate("/", { replace: true });
+    },
+    onError(error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        queryClient.clear();
+        navigate("/sign-in", { replace: true });
+      }
     },
   });
 
@@ -84,7 +100,7 @@ export function AccountSettingsPage() {
         {githubLinked ? null : (
           <Button
             className="mt-6"
-            disabled={linkGitHub.isPending}
+            disabled={linkGitHub.isPending || deleteAccountMutation.isPending}
             onClick={() => linkGitHub.mutate()}
             tone="secondary"
           >
@@ -116,13 +132,37 @@ export function AccountSettingsPage() {
         </p>
       )}
       <div className="flex flex-wrap gap-3">
-        <Button disabled={signOut.isPending} onClick={() => signOut.mutate()} tone="secondary">
+        <Button
+          disabled={signOut.isPending || deleteAccountMutation.isPending}
+          onClick={() => signOut.mutate()}
+          tone="secondary"
+        >
           {signOut.isPending ? "正在退出…" : "退出登录"}
         </Button>
         <Link className="self-center text-sm font-bold underline underline-offset-4" to="/app">
           返回面试空间
         </Link>
       </div>
+
+      <section className="rounded-3xl border border-brand-600/25 bg-brand-600/5 p-6 sm:p-8">
+        <h3 className="text-xl font-black text-ink-950">删除账户</h3>
+        <p className="mt-3 text-sm leading-7 text-ink-700">
+          删除确认后，所有会话会立即撤销，账户、面试、回答、评价和报告将不可访问且无法恢复。
+        </p>
+        <div className="mt-5">
+          <ConfirmationDialog
+            confirmLabel={deleteAccountMutation.isPending ? "正在删除…" : "确认删除账户"}
+            description="该操作会立即撤销所有登录会话并隐藏全部账户数据，随后在七天内完成物理清除。此操作无法撤销。"
+            disabled={deleteAccountMutation.isPending}
+            {...(deleteAccountMutation.error === null
+              ? {}
+              : { error: deleteAccountMutation.error.message })}
+            onConfirm={() => deleteAccountMutation.mutate()}
+            title="永久删除账户？"
+            trigger={<Button tone="secondary">删除我的账户</Button>}
+          />
+        </div>
+      </section>
     </div>
   );
 }

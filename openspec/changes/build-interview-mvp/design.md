@@ -87,6 +87,14 @@ markers, the four report summary groups, and ordered per-question feedback with 
 outcomes. The page exposes no regeneration, rescoring, export, sharing, or continued-chat controls
 and links only back to the immutable transcript and history.
 
+Interview and account deletion require an accessible modal confirmation and submit only
+`confirmed: true` to the existing project-owned endpoints. The dialog remains open and
+non-dismissible while the request is pending. Success removes account-owned Query data immediately
+and navigates away from the deleted resource; an authoritative 401 clears all private caches and
+returns to sign-in. Best-effort storage events notify other same-origin tabs of account or interview
+deletion, and those tabs hard-navigate or reload so mounted observers cannot continue displaying
+deleted content.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:

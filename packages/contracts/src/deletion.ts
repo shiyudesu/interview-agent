@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { Check } from "typebox/value";
 
 import { InterviewIdSchema, IsoTimestampSchema } from "./common.js";
 import {
@@ -75,3 +76,9 @@ export type DeletionInternalFailureResponseDto = Static<
   typeof DeletionInternalFailureResponseSchema
 >;
 export type DeletionServerFailureResponseDto = Static<typeof DeletionServerFailureResponseSchema>;
+
+export function isDeletionAcceptedResponseDto(
+  value: unknown,
+): value is DeletionAcceptedResponseDto {
+  return Check(DeletionAcceptedResponseSchema, value);
+}
