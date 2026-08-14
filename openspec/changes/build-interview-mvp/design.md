@@ -95,6 +95,12 @@ returns to sign-in. Best-effort storage events notify other same-origin tabs of 
 deletion, and those tabs hard-navigate or reload so mounted observers cannot continue displaying
 deleted content.
 
+The Web RTL suite is mandatory and no longer permits an empty test set. It exercises authentication
+forms and unlinked guidance, interview creation and every command endpoint, phase-specific active
+controls, Operation streaming and recovery, history pagination, complete/incomplete report
+rendering, and pending/success deletion states. The task 9.9 baseline contains 45 passing tests
+across 11 files and records coverage for all Web source modules.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:
