@@ -119,6 +119,7 @@ pnpm build
 ```bash
 pnpm question-bank:validate:release
 pnpm model-quality:validate
+pnpm scenario-coverage:validate
 pnpm smoke:production
 ```
 
@@ -160,4 +161,5 @@ pnpm --filter @interview-agent/db db:maintenance
 - [数据生命周期](docs/data-lifecycle.md)
 - [模型质量门禁](docs/model-quality.md)
 - [题库格式与同步](question-bank/README.md)
+- [OpenSpec Scenario 覆盖清单](openspec/changes/build-interview-mvp/scenario-coverage.yaml)
 - [OpenSpec 实现变更](openspec/changes/build-interview-mvp/)

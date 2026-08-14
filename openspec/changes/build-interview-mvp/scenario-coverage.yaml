@@ -1,0 +1,726 @@
+schemaVersion: "1.0"
+change: build-interview-mvp
+scenarios:
+  - capability: account-access
+    scenario: Sign in with GitHub
+    coverage:
+      kind: manual
+      steps:
+        - Configure a GitHub OAuth application for `/api/auth/callback/github` and set both GitHub client variables in a non-production environment.
+        - Open `/sign-in`, choose GitHub, authorize the application, and return to `/app`.
+      expected: The account projection loads with a live database session and a linked GitHub identity; no OAuth token is exposed by the project API.
+  - capability: account-access
+    scenario: Sign in with email OTP
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Real Better Auth OTP delivery/sign-in and the browser authentication substitute both reach an authenticated account.
+  - capability: account-access
+    scenario: Invalid email OTP
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/auth.test.ts
+      evidence: The real endpoint rejects an incorrect OTP without creating a session, while auth configuration pins expiry and allowed attempts.
+  - capability: account-access
+    scenario: Matching email is not implicitly linked
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/auth.test.ts
+        - apps/web/test/auth-pages.test.tsx
+      evidence: Better Auth disables implicit linking and the UI renders the unlinked-account recovery guidance.
+  - capability: account-access
+    scenario: User explicitly links GitHub
+    coverage:
+      kind: manual
+      steps:
+        - Sign in with email OTP, open `/settings`, and start the explicit GitHub link flow using a GitHub identity with a different email.
+        - Complete OAuth and reload `/api/v1/account`.
+      expected: The GitHub identity appears in linked identities while the account primary email remains unchanged.
+  - capability: account-access
+    scenario: Authenticated owner accesses an interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/read-routes.test.ts
+      evidence: Owner-scoped interview and report reads succeed through authenticated request context.
+  - capability: account-access
+    scenario: Another user requests an interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/resource-access.test.ts
+      evidence: Cross-account resources return the same not-found response as missing resources.
+  - capability: account-access
+    scenario: Session is revoked
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/operation-events.test.ts
+      evidence: Revoked sessions lose protected JSON and SSE access and active streams close.
+  - capability: account-access
+    scenario: Completed interview in history
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/test/history.test.tsx
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Completed entries show an overall score and links to transcript and report.
+  - capability: account-access
+    scenario: Early-ended interview in history
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/test/history.test.tsx
+        - apps/server/test/read-routes.test.ts
+      evidence: Early-ended entries expose transcript/report links without an overall score.
+  - capability: account-access
+    scenario: Abandoned interview in history
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/test/history.test.tsx
+        - apps/server/test/read-routes.test.ts
+      evidence: Abandoned entries show terminal status and transcript access without report or score.
+  - capability: account-access
+    scenario: User already has an active interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/test/interview-creation.test.tsx
+        - packages/db/test/repository.integration.test.ts
+      evidence: The UI requires resume/abandon and PostgreSQL enforces one active or report-pending interview.
+  - capability: account-access
+    scenario: Previous interview is terminal
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - packages/db/test/repository.integration.test.ts
+      evidence: Terminal interviews no longer occupy the active-interview uniqueness slot and a new creation succeeds.
+  - capability: account-access
+    scenario: Delete an interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Confirmed deletion immediately hides the interview, closes SSE, clears Web state, and schedules purge.
+  - capability: account-access
+    scenario: Access deleted interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - packages/db/test/lifecycle.integration.test.ts
+      evidence: Deleted interview, report, and Operation reads are owner-hidden and return not found.
+  - capability: account-access
+    scenario: Delete account
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/test/deletion-ui.test.tsx
+      evidence: Account deletion revokes all sessions, hides all content, and clears browser-owned Query state.
+  - capability: account-access
+    scenario: Purge completes
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/lifecycle.integration.test.ts
+        - packages/db/test/operation-lifecycle.integration.test.ts
+      evidence: Physical purge removes recoverable rows and retains only bounded non-reversible audit metadata.
+
+  - capability: question-bank
+    scenario: Release bank is validated
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/question-bank-yaml.test.ts
+      evidence: Release mode requires 90 active reviewed questions and at least 15 per domain.
+  - capability: question-bank
+    scenario: Valid question is imported
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/question-bank-yaml.test.ts
+        - packages/db/test/question-bank-import.integration.test.ts
+      evidence: Valid reviewed YAML passes contracts and synchronizes to PostgreSQL.
+  - capability: question-bank
+    scenario: Invalid question is rejected
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/question-bank-yaml.test.ts
+        - packages/db/test/question-bank-import.integration.test.ts
+      evidence: Schema, domain, weight, and duplicate identity failures reject the import transaction.
+  - capability: question-bank
+    scenario: Question-bank text is not Simplified Chinese
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/question-bank-yaml.test.ts
+      evidence: Traditional Chinese and ordinary non-Chinese prose are rejected while technical terms remain allowed.
+  - capability: question-bank
+    scenario: Coding task is present
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/question-bank-yaml.test.ts
+      evidence: Coding, pseudocode, artifact-delivery, and automated-judge markers fail validation.
+  - capability: question-bank
+    scenario: Supported question count
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/identifiers.test.ts
+        - apps/server/test/command-routes.test.ts
+      evidence: Only 5, 10, and 15 are accepted by domain and transport contracts.
+  - capability: question-bank
+    scenario: Unsupported configuration
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/contracts.test.ts
+        - apps/web/test/interview-creation.test.tsx
+      evidence: Unsupported counts and user-controlled direction/domain/difficulty fields are absent or rejected.
+  - capability: question-bank
+    scenario: Five-question blueprint
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/blueprint-coverage.test.ts
+        - packages/db/test/blueprint-selection.integration.test.ts
+      evidence: Five-question blueprints contain five distinct domains and derive one unassessed domain.
+  - capability: question-bank
+    scenario: Ten-question blueprint
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/blueprint-coverage.test.ts
+        - packages/db/test/blueprint-selection.integration.test.ts
+      evidence: Ten-question blueprints cover all domains with extra Go and concurrency representation.
+  - capability: question-bank
+    scenario: Fifteen-question blueprint
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/blueprint-coverage.test.ts
+        - packages/db/test/blueprint-selection.integration.test.ts
+      evidence: Fifteen-question blueprints require at least two questions per domain.
+  - capability: question-bank
+    scenario: Enough unseen questions exist
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/blueprint-selection.integration.test.ts
+      evidence: Selection excludes questions used by the three most recent interviews when capacity permits.
+  - capability: question-bank
+    scenario: Avoidance would break coverage
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/blueprint-selection.integration.test.ts
+      evidence: Recent questions are reused only after unseen candidates cannot satisfy coverage.
+  - capability: question-bank
+    scenario: Blueprint creation is retried
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - packages/db/test/repository.integration.test.ts
+      evidence: Idempotent creation replays the frozen selection and cannot create a different blueprint.
+  - capability: question-bank
+    scenario: Question bank changes after interview creation
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/question-bank-import.integration.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Cross-version creation tests prove stored snapshots remain unchanged after source updates.
+  - capability: question-bank
+    scenario: Rephrasing succeeds
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/interviewer-text-model.test.ts
+      evidence: Valid surface-equivalent Simplified Chinese wording is returned with model metadata.
+  - capability: question-bank
+    scenario: Rephrasing fails
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/interviewer-text-model.test.ts
+      evidence: Failed or invalid rephrasing returns reviewed source wording without blocking the interview.
+  - capability: question-bank
+    scenario: User views an interview or report
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/interviewer-text-model.test.ts
+        - apps/server/test/report-analysis-model.test.ts
+        - apps/server/test/read-routes.test.ts
+      evidence: Prompts and public DTOs exclude Rubrics, follow-up goals, knowledge explanations, and source provenance.
+
+  - capability: interview-session
+    scenario: Interview starts successfully
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/test/interview-creation.test.tsx
+      evidence: Creation persists the full snapshot blueprint before returning only the first question.
+  - capability: interview-session
+    scenario: User views active interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/read-routes.test.ts
+        - apps/web/test/active-interview.test.tsx
+      evidence: Active projections expose position/total and actions without domain, score, Rubric, or allowance metadata.
+  - capability: interview-session
+    scenario: Submit non-empty answer
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Non-empty text is accepted as immutable answer material and enters model processing.
+  - capability: interview-session
+    scenario: Submit empty answer
+    coverage:
+      kind: automated
+      tests:
+        - packages/contracts/test/contracts.test.ts
+        - apps/server/test/command-routes.test.ts
+      evidence: Empty and whitespace-only answer payloads fail request validation without invoking handlers.
+  - capability: interview-session
+    scenario: Mark unknown
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: The explicit command stores an unknown zero outcome without a system follow-up.
+  - capability: interview-session
+    scenario: Skip question
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: The explicit skip command stores a skipped zero outcome without a system follow-up.
+  - capability: interview-session
+    scenario: User requests clarification
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/interviewer-text-model.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Clarification rephrases only the current prompt, preserves phase, and consumes no follow-up goal.
+  - capability: interview-session
+    scenario: Incomplete answer needs clarification probe
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/answer-evaluation-model.test.ts
+      evidence: Valid evaluation can select one unused clarification goal for an incomplete or ambiguous answer.
+  - capability: interview-session
+    scenario: Answer supports depth probe
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/answer-evaluation-model.test.ts
+      evidence: Valid evaluation can select one unused depth goal when the answer supports deeper probing.
+  - capability: interview-session
+    scenario: Follow-up limit is reached
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/answer-evaluation-model.test.ts
+      evidence: Used goal state prevents a third system follow-up and finalizes assessment.
+  - capability: interview-session
+    scenario: Answer is already sufficient
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/evaluation-fixtures.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Correct fixture output recommends no follow-up and the Operation enters the supplement window.
+  - capability: interview-session
+    scenario: First irrelevant response
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/answer-evaluation-model.test.ts
+        - packages/domain/test/engine.test.ts
+      evidence: The first irrelevant classification selects the bounded clarification opportunity.
+  - capability: interview-session
+    scenario: Response remains irrelevant
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/evaluation-fixtures.test.ts
+        - packages/domain/test/engine.test.ts
+      evidence: Irrelevance after the used clarification produces the distinct zero outcome without further probing.
+  - capability: interview-session
+    scenario: User supplements before continuing
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/test/active-interview.test.tsx
+      evidence: Supplement material appends and replaces the current evaluation without revealing the next question.
+  - capability: interview-session
+    scenario: User continues
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Continue freezes the current question and reveals exactly the next question or begins reporting.
+  - capability: interview-session
+    scenario: User attempts to edit prior text
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/web/test/active-interview.test.tsx
+      evidence: No edit command exists; submitted material remains transcript history and only supplements are accepted.
+  - capability: interview-session
+    scenario: Same command is retried
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - packages/db/test/operation-lifecycle.integration.test.ts
+      evidence: Duplicate idempotency keys return one canonical Operation and one set of facts.
+  - capability: interview-session
+    scenario: Two clients submit competing commands
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - packages/db/test/repository.integration.test.ts
+      evidence: Real account locks and optimistic versions allow one transition and reject the competitor.
+  - capability: interview-session
+    scenario: Model operation succeeds
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Valid model output atomically persists messages/evaluation and completes the Operation.
+  - capability: interview-session
+    scenario: Model operation fails
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - packages/domain/test/engine.test.ts
+      evidence: Exhausted model failure cancels provisional processing, preserves accepted version/activity, and stores no new facts.
+  - capability: interview-session
+    scenario: Stream completes
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-events.test.ts
+        - apps/server/test/api.integration.test.ts
+      evidence: Valid final text and one terminal status are published only after transaction commit.
+  - capability: interview-session
+    scenario: Browser disconnects
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/test/operation-stream.test.ts
+      evidence: Processing survives disconnect and clients recover through canonical JSON state.
+  - capability: interview-session
+    scenario: Accepted model command returns before provider completion
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/command-routes.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: A blocked provider still yields an immediate 202 processing Operation with no model facts.
+  - capability: interview-session
+    scenario: Browser subscribes after command acceptance
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: The command-to-SSE sequence subscribes while work is processing and receives terminal completion.
+  - capability: interview-session
+    scenario: Originating request disconnects
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/operation-execution-supervisor.test.ts
+      evidence: Server-owned execution completes independently after command and SSE client disconnects.
+  - capability: interview-session
+    scenario: Accepted execution is interrupted by process termination
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - packages/db/test/operation-lifecycle.integration.test.ts
+      evidence: Persisted leases are reclaimed after restart without duplicating business facts.
+  - capability: interview-session
+    scenario: User resumes within the activity window
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/e2e/critical-paths.spec.ts
+        - apps/server/test/read-routes.test.ts
+      evidence: Reload restores question, phase, transcript, and actions from PostgreSQL-shaped canonical DTOs.
+  - capability: interview-session
+    scenario: User leaves the page
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/e2e/critical-paths.spec.ts
+        - apps/server/test/api.integration.test.ts
+      evidence: Reload/resume and disconnect tests prove page lifecycle does not terminate the interview or provider work.
+  - capability: interview-session
+    scenario: User performs effective activity
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Accepted commands and valid retries refresh last effective activity.
+  - capability: interview-session
+    scenario: User only views the interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/read-routes.test.ts
+        - packages/db/test/repository.integration.test.ts
+      evidence: Canonical reads do not persist or advance activity timestamps.
+  - capability: interview-session
+    scenario: Expired interview is accessed
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/server/test/repository-interview-expiry.test.ts
+      evidence: First read or mutation persists abandonment and returns post-expiry canonical behavior.
+  - capability: interview-session
+    scenario: Sweeper finds expired interview
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/lifecycle.integration.test.ts
+      evidence: Periodic expiry transitions overdue active interviews to abandoned without reports.
+  - capability: interview-session
+    scenario: End early
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Early end after an outcome starts incomplete report generation and omits overall score.
+  - capability: interview-session
+    scenario: Abandon interview
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/engine.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Explicit abandonment reaches terminal state without generating a report.
+  - capability: interview-session
+    scenario: Mutate terminal interview
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - packages/domain/test/engine.test.ts
+      evidence: Progress commands against completed, early-ended, and abandoned sessions are rejected without history changes.
+
+  - capability: assessment-report
+    scenario: Question has supplements and follow-up answers
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/server/test/answer-evaluation-model.test.ts
+      evidence: Reassessment submits the complete immutable answer material set to one question snapshot.
+  - capability: assessment-report
+    scenario: Valid structured evaluation
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/answer-evaluation-model.test.ts
+        - apps/server/test/evaluation-fixtures.test.ts
+      evidence: Schema- and domain-valid output maps to persisted evaluation facts and expected semantics.
+  - capability: assessment-report
+    scenario: Invalid structured evaluation
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/answer-evaluation-model.test.ts
+      evidence: Invalid output receives one directed repair and persists nothing when repair also fails.
+  - capability: assessment-report
+    scenario: Complete interview is scored
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - packages/domain/test/reports.test.ts
+      evidence: Question, domain, and overall integer scores are derived from persisted Rubric awards.
+  - capability: assessment-report
+    scenario: Five-question interview omits a domain
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - packages/domain/test/blueprint-coverage.test.ts
+      evidence: The omitted domain is unassessed and excluded from score arithmetic.
+  - capability: assessment-report
+    scenario: User skips
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Skip yields zero with the distinct skipped reason.
+  - capability: assessment-report
+    scenario: User marks unknown
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Unknown yields zero with the distinct unknown reason.
+  - capability: assessment-report
+    scenario: Response remains irrelevant
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - apps/server/test/evaluation-fixtures.test.ts
+      evidence: Unresolved irrelevant material yields zero with the irrelevant reason.
+  - capability: assessment-report
+    scenario: Relevant answer earns no Rubric points
+    coverage:
+      kind: automated
+      tests:
+        - packages/domain/test/scoring.test.ts
+        - apps/server/test/evaluation-fixtures.test.ts
+      evidence: Relevant output with no awarded items yields zero with the incorrect reason.
+  - capability: assessment-report
+    scenario: All questions score zero
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Normal completion stores and renders a complete report with overall score zero.
+  - capability: assessment-report
+    scenario: Report generation fails
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/test/active-interview.test.tsx
+      evidence: Report failure preserves evaluations, remains report-pending, and exposes report-only retry.
+  - capability: assessment-report
+    scenario: User ends after some questions
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: Early ending stores an incomplete report with assessed feedback and no overall score.
+  - capability: assessment-report
+    scenario: Complete report is rendered
+    coverage:
+      kind: automated
+      tests:
+        - apps/web/test/report-page.test.tsx
+        - apps/web/e2e/critical-paths.spec.ts
+      evidence: The immutable public report renders score, six domains, summaries, and per-question feedback.
+  - capability: assessment-report
+    scenario: Partially correct answer
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/evaluation-fixtures.test.ts
+        - apps/server/test/operation-report-builder.test.ts
+      evidence: Partial awards retain matched evidence and ordered missing or incorrect points.
+  - capability: assessment-report
+    scenario: Feedback evidence is unavailable
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/report-analysis-model.test.ts
+        - packages/domain/test/reports.test.ts
+      evidence: Unknown, foreign, or inconsistent evidence references are rejected before report persistence.
+  - capability: assessment-report
+    scenario: Unknown or skipped question
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-report-builder.test.ts
+        - apps/web/test/report-page.test.tsx
+      evidence: Deterministic zero feedback states the goal, missing knowledge, and a safe learning direction without fabricated answer analysis.
+  - capability: assessment-report
+    scenario: Irrelevant answer
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-report-builder.test.ts
+        - apps/server/test/report-analysis-model.test.ts
+      evidence: Feedback explains that the accepted material failed to address the question.
+  - capability: assessment-report
+    scenario: Wholly incorrect answer
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/operation-runner.integration.test.ts
+        - apps/server/test/operation-report-builder.test.ts
+      evidence: Feedback retains incorrect concepts and targeted learning direction with accepted evidence.
+  - capability: assessment-report
+    scenario: User views detailed feedback
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/report-analysis-model.test.ts
+        - apps/server/test/interviewer-text-model.test.ts
+      evidence: Private-content validators reject Rubric, goal, knowledge-source, and memorization-ready leakage.
+  - capability: assessment-report
+    scenario: Model or prompt changes later
+    coverage:
+      kind: automated
+      tests:
+        - packages/db/test/repository.integration.test.ts
+        - apps/server/test/operation-runner.integration.test.ts
+      evidence: Stored report snapshots and provider/model/prompt/Schema/question versions remain immutable across later changes.
+  - capability: assessment-report
+    scenario: Owner views report
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/api.integration.test.ts
+        - apps/web/test/report-page.test.tsx
+      evidence: Owner-scoped API access returns the validated immutable public report.
+  - capability: assessment-report
+    scenario: User requests unsupported report action
+    coverage:
+      kind: automated
+      tests:
+        - apps/server/test/app.test.ts
+        - apps/web/test/report-page.test.tsx
+      evidence: No regenerate, rescore, export, share, or continued-chat route/control is registered or rendered.

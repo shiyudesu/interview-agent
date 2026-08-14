@@ -107,4 +107,4 @@
 - [x] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
 - [x] 10.6 Run a production-container smoke test against clean PostgreSQL and Mailpit dependencies.
 - [x] 10.7 Update README setup commands and add repository development instructions only after all verified scripts and workflows exist.
-- [ ] 10.8 Verify every OpenSpec scenario has automated coverage or a documented manual acceptance step and validate the change in strict mode.
+- [x] 10.8 Verify every OpenSpec scenario has automated coverage or a documented manual acceptance step and validate the change in strict mode.

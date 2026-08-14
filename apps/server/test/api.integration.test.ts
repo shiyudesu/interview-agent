@@ -235,6 +235,13 @@ describe.sequential("real API integration", () => {
     });
     expect(firstOtp.code).toMatch(/^\d{6}$/u);
 
+    const invalidOtp = await postAuthentication(application, "/api/auth/sign-in/email-otp", {
+      email,
+      otp: firstOtp.code === "000000" ? "111111" : "000000",
+      name,
+    });
+    expect(invalidOtp.status).toBe(400);
+
     const accountBeforeSignIn = await testDatabase.pool.query<{
       user_count: string;
       session_count: string;

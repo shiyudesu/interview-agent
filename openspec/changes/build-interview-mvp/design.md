@@ -614,6 +614,14 @@ prevents a reproducible live calibration result, and the limits of Faux, single-
 language checks, and prompt-injection coverage. No live-model quality claim is made until that
 manual gate can run and its versioned results are reviewed.
 
+`openspec/changes/build-interview-mvp/scenario-coverage.yaml` maps every Scenario heading in all four
+capability specs to automated test files or an executable manual acceptance procedure. The
+`pnpm scenario-coverage:validate` gate parses the specs directly and rejects missing, duplicate, or
+extra entries, invalid coverage kinds, empty evidence, escaping/non-test paths, missing files, and
+underspecified manual steps. The current matrix contains 91 exact Scenarios: 89 automated and two
+manual GitHub OAuth flows that require external credentials. CI executes this validator and strict
+OpenSpec validation remains the final artifact check.
+
 Faux Provider tests additionally prove invalid or failed interviewer output emits no pre-validation
 deltas, rephrase fallback uses reviewed text, transient retries exhaust deterministically, evidence
 is required and question-scoped, unknown/skipped feedback cannot cite answer evidence, adapter input

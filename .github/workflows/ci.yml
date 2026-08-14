@@ -50,6 +50,9 @@ jobs:
       - name: Validate model evaluation fixtures
         run: pnpm model-quality:validate
 
+      - name: Validate OpenSpec scenario coverage
+        run: pnpm scenario-coverage:validate
+
       - name: Check formatting
         run: pnpm format:check
 
