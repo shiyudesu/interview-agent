@@ -1,4 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -11,10 +12,16 @@ const execFileAsync = promisify(execFile);
 export const test = base.extend({
   browser: [
     async ({ playwright }, use) => {
-      if (process.env["CI"]) {
-        const executablePath = process.env["PLAYWRIGHT_CHROME_PATH"]?.trim();
+      const configuredChromePath = process.env["PLAYWRIGHT_CHROME_PATH"]?.trim();
+      const windowsChromePath =
+        !process.env["CI"] &&
+        (configuredChromePath?.startsWith("/mnt/") === true ||
+          (configuredChromePath === undefined && existsSync(WINDOWS_CHROME_PATH)))
+          ? (configuredChromePath ?? WINDOWS_CHROME_PATH)
+          : null;
+      if (windowsChromePath === null) {
         const browser = await playwright.chromium.launch(
-          executablePath ? { executablePath } : { channel: "chrome" },
+          configuredChromePath ? { executablePath: configuredChromePath } : { channel: "chrome" },
         );
         try {
           await use(browser);
@@ -29,7 +36,7 @@ export const test = base.extend({
       const userDataDirectory = await mkdtemp(
         join(windowsTempDirectory, "interview-agent-playwright-"),
       );
-      const chromeProcess = startWindowsChrome(port, userDataDirectory);
+      const chromeProcess = startWindowsChrome(windowsChromePath, port, userDataDirectory);
       try {
         await waitForChrome(port, chromeProcess);
         const browser = await playwright.chromium.connectOverCDP(`http://127.0.0.1:${port}`);
@@ -50,9 +57,13 @@ export const test = base.extend({
 
 export { expect };
 
-function startWindowsChrome(port: number, userDataDirectory: string): ChildProcess {
+function startWindowsChrome(
+  executablePath: string,
+  port: number,
+  userDataDirectory: string,
+): ChildProcess {
   const chrome = spawn(
-    process.env["PLAYWRIGHT_CHROME_PATH"]?.trim() || WINDOWS_CHROME_PATH,
+    executablePath,
     [
       "--headless=new",
       `--remote-debugging-port=${port}`,
