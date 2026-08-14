@@ -95,7 +95,7 @@ export function createServer(options: FastifyServerOptions = {}) {
 
 function registerRequestLogContext(app: FastifyInstance): void {
   const failedRequests = new WeakSet<FastifyRequest>();
-  app.addHook("onRequest", async (request) => {
+  app.addHook("onRequest", (request, _reply, done) => {
     const traceId = parseTraceId(request.headers["traceparent"]);
     const correlation = routeCorrelation(request);
     request.log = request.log.child({
@@ -111,8 +111,9 @@ function registerRequestLogContext(app: FastifyInstance): void {
       },
       "Request started",
     );
+    done();
   });
-  app.addHook("onResponse", async (request, reply) => {
+  app.addHook("onResponse", (request, reply, done) => {
     const failed = failedRequests.has(request);
     request.log[failed ? "error" : "info"](
       {
@@ -123,9 +124,11 @@ function registerRequestLogContext(app: FastifyInstance): void {
       },
       failed ? "Request failed" : "Request completed",
     );
+    done();
   });
-  app.addHook("onError", async (request) => {
+  app.addHook("onError", (request, _reply, _error, done) => {
     failedRequests.add(request);
+    done();
   });
 }
 
