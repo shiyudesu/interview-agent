@@ -35,13 +35,13 @@ export function AccountSettingsPage() {
     mutationFn: () => deleteAccount(),
     onSuccess() {
       broadcastAccountDeletion();
+      navigate("/", { replace: true, flushSync: true });
       queryClient.clear();
-      navigate("/", { replace: true });
     },
     onError(error) {
       if (error instanceof ApiClientError && error.status === 401) {
+        navigate("/sign-in", { replace: true, flushSync: true });
         queryClient.clear();
-        navigate("/sign-in", { replace: true });
       }
     },
   });
