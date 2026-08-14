@@ -282,6 +282,13 @@ Every persisted interview message receives a positive per-interview sequence ass
 
 The same migration locks interview and Operation rows while hydrating legacy pending Operation IDs. It requires exactly one processing Operation matching owner, interview, command type, accepted timestamp, expected version, and question position, and aborts before enabling the pending-state constraint when the match is missing or ambiguous.
 
+Production logging uses Pino with server-generated UUID request IDs and allowlisted request lifecycle
+events. A valid W3C `traceparent` contributes only its trace ID; route parameters add interview and
+Operation IDs, while command results log Operation type and terminal/processing status. Fastify's
+raw automatic request/error logging is disabled. Request serializers remove query strings, error
+serializers discard messages and stacks, and redaction covers credentials, cookies, OTPs, API keys,
+tokens, answer fields, text/content fields, and request/response bodies.
+
 ### 7. Maintain and import the question bank as reviewed YAML
 
 The repository stores one or more YAML files per Go backend knowledge domain. A TypeBox schema validates:

@@ -399,6 +399,16 @@ async function executeCommand(
     const accepted = "operation" in result ? result : { operation: result, work: null };
     const { operation } = accepted;
     const response = mapOperationToStatusResponse(operation);
+    request.log.info(
+      {
+        event: "interview_command_result",
+        interviewId,
+        operationId: operation.id,
+        operationType: operation.type,
+        operationStatus: operation.status,
+      },
+      "Interview command result",
+    );
     if (response.status === "pending" || response.status === "processing") {
       const sent = reply.code(202).send(response);
       if (accepted.work !== null) {
@@ -476,7 +486,7 @@ async function sendCommandError(
   ) {
     return reply.code(409).send(commandRejected());
   }
-  request.log.error({ event: "interview_command_failed" }, "Interview command failed");
+  request.log.error({ event: "interview_command_failed", interviewId }, "Interview command failed");
   return reply.code(500).send(internalError());
 }
 
