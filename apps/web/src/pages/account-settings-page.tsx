@@ -5,6 +5,7 @@ import { Button } from "../components/button.js";
 import { ErrorState, LoadingState } from "../components/page-state.js";
 import { ACCOUNT_QUERY_KEY, useCurrentAccount } from "../features/account/account-query.js";
 import { authClient } from "../features/auth/auth-api.js";
+import { ACCOUNT_OWNED_QUERY_KEY } from "../features/interview/interview-query.js";
 import { ApiClientError } from "../lib/api-client.js";
 
 export function AccountSettingsPage() {
@@ -23,6 +24,7 @@ export function AccountSettingsPage() {
   const signOut = useMutation({
     mutationFn: () => authClient.signOut(),
     async onSuccess() {
+      queryClient.removeQueries({ queryKey: ACCOUNT_OWNED_QUERY_KEY });
       queryClient.removeQueries({ queryKey: ACCOUNT_QUERY_KEY });
       navigate("/sign-in", { replace: true });
     },

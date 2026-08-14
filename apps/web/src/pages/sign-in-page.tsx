@@ -6,6 +6,7 @@ import { Button } from "../components/button.js";
 import { FormField } from "../components/form-field.js";
 import { ACCOUNT_QUERY_KEY, useCurrentAccount } from "../features/account/account-query.js";
 import { authClient } from "../features/auth/auth-api.js";
+import { ACCOUNT_OWNED_QUERY_KEY } from "../features/interview/interview-query.js";
 
 export function SignInPage() {
   const account = useCurrentAccount();
@@ -27,6 +28,7 @@ export function SignInPage() {
         ...(name.trim().length === 0 ? {} : { name: name.trim() }),
       }),
     async onSuccess() {
+      queryClient.removeQueries({ queryKey: ACCOUNT_OWNED_QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY });
       navigate("/app", { replace: true });
     },

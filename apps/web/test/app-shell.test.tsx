@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../src/app/app-providers.js";
 import { AppShell } from "../src/components/app-shell.js";
 import { HomePage } from "../src/pages/home-page.js";
-import { WorkspacePage } from "../src/pages/workspace-page.js";
+import { InterviewCreationPage } from "../src/pages/interview-creation-page.js";
 
 afterEach(() => {
   cleanup();
@@ -19,18 +19,29 @@ describe("application shell", () => {
   it("renders the primary navigation and routes without a document reload", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            id: "account-shell",
-            email: "candidate@example.test",
-            displayName: "候选人",
-            linkedIdentities: [],
-            sessions: [],
-            createdAt: "2026-08-13T00:00:00.000Z",
-          }),
-          { headers: { "content-type": "application/json" } },
-        ),
+      vi.fn<typeof fetch>().mockImplementation(async (input) =>
+        String(input) === "/api/v1/account"
+          ? new Response(
+              JSON.stringify({
+                id: "account-shell",
+                email: "candidate@example.test",
+                displayName: "候选人",
+                linkedIdentities: [],
+                sessions: [],
+                createdAt: "2026-08-13T00:00:00.000Z",
+              }),
+              { headers: { "content-type": "application/json" } },
+            )
+          : new Response(
+              JSON.stringify({
+                error: {
+                  code: "not_found",
+                  message: "Interview not found",
+                  resource: "interview",
+                },
+              }),
+              { status: 404, headers: { "content-type": "application/json" } },
+            ),
       ),
     );
     const user = userEvent.setup();
@@ -41,7 +52,7 @@ describe("application shell", () => {
           element: <AppShell />,
           children: [
             { index: true, element: <HomePage /> },
-            { path: "app", element: <WorkspacePage /> },
+            { path: "app", element: <InterviewCreationPage /> },
           ],
         },
       ],
@@ -57,6 +68,8 @@ describe("application shell", () => {
     expect(screen.getByText("变成下一次进步的证据。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "进入面试空间" }));
-    expect(await screen.findByRole("heading", { name: "候选人，欢迎回来" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "创建 Go 后端模拟面试" }),
+    ).toBeInTheDocument();
   });
 });

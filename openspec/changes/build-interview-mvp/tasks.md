@@ -90,7 +90,7 @@
 
 - [x] 9.1 Create the React/Vite application shell with React Router, TanStack Query, Tailwind CSS, Radix primitives, shared API client, and accessible loading/error patterns.
 - [x] 9.2 Implement GitHub and email OTP authentication screens, unlinked-account guidance, explicit GitHub linking, and account settings.
-- [ ] 9.3 Implement interview creation with the fixed Go backend direction, 5/10/15 question selection, and active-interview resume-or-abandon conflict flow.
+- [x] 9.3 Implement interview creation with the fixed Go backend direction, 5/10/15 question selection, and active-interview resume-or-abandon conflict flow.
 - [ ] 9.4 Implement the active interview screen with question progress, answer submission, clarification, unknown, skip, bounded follow-up display, supplements, explicit continue, and disabled invalid actions.
 - [ ] 9.5 Implement Operation SSE consumption, reconnect through canonical GET state, retryable failure UI, cross-device resume, and report-pending UI.
 - [ ] 9.6 Implement history list and transcript detail for completed, early-ended, and abandoned interviews.

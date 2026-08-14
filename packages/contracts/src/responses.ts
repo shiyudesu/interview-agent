@@ -562,3 +562,13 @@ export type OperationStatusResponseDto = Static<typeof OperationStatusResponseSc
 export function isAccountResponseDto(value: unknown): value is AccountResponseDto {
   return Check(AccountResponseSchema, value);
 }
+
+export function isCurrentInterviewResponseDto(
+  value: unknown,
+): value is CurrentInterviewResponseDto {
+  return Check(CurrentInterviewResponseSchema, value);
+}
+
+export function isOperationStatusResponseDto(value: unknown): value is OperationStatusResponseDto {
+  return Check(OperationStatusResponseSchema, value);
+}

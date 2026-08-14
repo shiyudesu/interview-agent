@@ -48,6 +48,14 @@ rewrite the proxied Origin/Host consistently. Production builds copy the Vite ou
 image; Fastify serves immutable assets and returns the uncached SPA entry only for non-API browser
 navigations.
 
+Interview creation in the Web application exposes only the fixed Go backend direction and the
+supported 5, 10, or 15 question counts. The account-scoped active-interview query runs only after the
+account projection resolves, treats only the owner-scoped interview 404 as absence, and is cleared
+across authentication changes. A canonical unfinished interview replaces the creation form with a
+resume action and shows abandonment only when the response explicitly permits it. Create and
+abandon commands retain one Idempotency Key across ambiguous retries and re-read canonical state
+after both success and failure, allowing recovery when durable acceptance outlives the HTTP response.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:
