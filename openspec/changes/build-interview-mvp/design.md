@@ -588,6 +588,16 @@ Test tasks are not cached because database-time and container lifecycle assertio
 every validation run. Packages with implemented suites fail when no tests are discovered; the empty
 web suite remains explicitly allowed only until its planned UI testing task is implemented.
 
+`pnpm smoke:production` creates a uniquely named Compose project with a fresh PostgreSQL volume and
+Mailpit instance, builds the production image, runs the image's compiled migration CLI, imports the
+90-question release bank, and starts the application with a static OpenAI catalog model plus a
+non-secret dummy key. It makes no model request. The smoke verifies the production SPA, CSP/HSTS and
+absence of permissive CORS, disabled Swagger routes, stable unauthenticated API errors, OTP delivery
+through Mailpit, production Better Auth cookies and account access, interview creation, and the
+canonical active interview projection. Ports are allocated dynamically; the application container,
+Compose volume/network, image tag, and temporary response files are removed on exit. Docker installs
+use the image's pinned Node runtime through pnpm `--no-runtime` and skip Playwright browser downloads.
+
 The versioned evaluation fixture suite pins the current prompt/Schema versions and covers correct,
 partial, wholly incorrect, explicit unknown, explicit skipped, irrelevant-after-clarification,
 ambiguous, and prompt-injection answers. Model-evaluated fixtures carry valid evidence and

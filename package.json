@@ -39,6 +39,7 @@
     "services:down": "docker compose down",
     "services:logs": "docker compose logs --follow",
     "services:up": "docker compose up --detach --wait",
+    "smoke:production": "bash scripts/smoke-production-container.sh",
     "start": "pnpm --filter @interview-agent/server start",
     "test": "pnpm test:root && turbo run test",
     "test:coverage": "turbo run build --filter=@interview-agent/db... && vitest run --config vitest.root.config.ts --coverage && turbo run test:coverage",

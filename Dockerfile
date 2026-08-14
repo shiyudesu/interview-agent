@@ -11,6 +11,8 @@ WORKDIR /app
 
 FROM base AS dependencies
 
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
@@ -22,6 +24,7 @@ RUN pnpm install \
     --filter=@interview-agent/server... \
     --filter=@interview-agent/web... \
     --frozen-lockfile \
+    --no-runtime \
     --fetch-retries=5 \
     --fetch-timeout=300000 \
     --network-concurrency=16
