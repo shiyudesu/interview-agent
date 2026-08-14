@@ -47,6 +47,9 @@ jobs:
       - name: Validate question bank
         run: pnpm question-bank:validate:release
 
+      - name: Validate model evaluation fixtures
+        run: pnpm model-quality:validate
+
       - name: Check formatting
         run: pnpm format:check
 

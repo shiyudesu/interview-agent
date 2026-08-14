@@ -104,7 +104,7 @@
 - [x] 10.2 Add OpenTelemetry instrumentation for HTTP, PostgreSQL, Operations, and model calls with optional OTLP export.
 - [x] 10.3 Add endpoint-specific rate limits, security headers, same-origin checks, payload size limits, and tests for unauthorized or cross-origin requests.
 - [x] 10.4 Add Playwright critical-path tests for authentication substitutes, normal completion, all-zero completion, early ending, resume, report retry, history, and deletion.
-- [ ] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
+- [x] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
 - [ ] 10.6 Run a production-container smoke test against clean PostgreSQL and Mailpit dependencies.
 - [ ] 10.7 Update README setup commands and add repository development instructions only after all verified scripts and workflows exist.
 - [ ] 10.8 Verify every OpenSpec scenario has automated coverage or a documented manual acceptance step and validate the change in strict mode.

@@ -596,6 +596,14 @@ mirrors production Rubric, missing-point, follow-up-kind, identifier, Simplified
 untrusted-framing rules, and request builders create fresh Date values to prevent cross-test
 mutation.
 
+The suite is also an explicit release command, `pnpm model-quality:validate`, and CI executes it
+before the general test step so a filtered package test cannot silently omit the model-quality
+baseline. `docs/model-quality.md` records the pinned suite and contract versions, the configured
+manual-acceptance target `opencode-go/deepseek-v4-flash`, the provider opt-in blocker that currently
+prevents a reproducible live calibration result, and the limits of Faux, single-question fixtures,
+language checks, and prompt-injection coverage. No live-model quality claim is made until that
+manual gate can run and its versioned results are reviewed.
+
 Faux Provider tests additionally prove invalid or failed interviewer output emits no pre-validation
 deltas, rephrase fallback uses reviewed text, transient retries exhaust deterministically, evidence
 is required and question-scoped, unknown/skipped feedback cannot cite answer evidence, adapter input

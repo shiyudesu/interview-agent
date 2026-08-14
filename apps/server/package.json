@@ -13,6 +13,7 @@
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:evaluation-fixtures": "vitest run test/evaluation-fixtures.test.ts",
     "typecheck": "tsc -b --pretty false",
     "typecheck:test": "tsc -p tsconfig.test.json --pretty false",
     "typecheck:toolchain": "tsc -p tsconfig.type-tests.json --pretty false"
