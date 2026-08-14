@@ -16,6 +16,7 @@ import {
   interviewDetailQueryKey,
   useInterviewDetail,
 } from "../features/interview/interview-query.js";
+import { useOperationStream } from "../features/interview/use-operation-stream.js";
 import { ApiClientError } from "../lib/api-client.js";
 
 interface ActionInput {
@@ -35,6 +36,12 @@ export function ActiveInterviewPage() {
   const [commandReconciled, setCommandReconciled] = useState(false);
   const canonicalPosition =
     interview.data?.status === "active" ? interview.data.progress.current : null;
+  const streamedOperationId = currentProcessingOperationId(interview.data);
+  const stream = useOperationStream({
+    ...(account.data === undefined ? {} : { accountId: account.data.id }),
+    ...(interviewId === undefined ? {} : { interviewId }),
+    ...(streamedOperationId === undefined ? {} : { operationId: streamedOperationId }),
+  });
   useEffect(() => {
     setAnswer("");
     setSupplement("");
@@ -150,6 +157,19 @@ export function ActiveInterviewPage() {
         <p className="mt-4 text-sm leading-7 text-ink-700">
           已完成的题目和评价不会重新执行。报告生成失败时，可以仅重试报告分析。
         </p>
+        {stream.reconnecting ? (
+          <p className="mt-4 text-sm font-semibold text-ink-700" role="status">
+            连接已中断，正在从权威状态恢复…
+          </p>
+        ) : null}
+        {"operation" in current && current.operation.status === "failed" ? (
+          <p
+            className="mt-4 rounded-2xl bg-brand-600/10 px-4 py-3 text-sm text-brand-700"
+            role="alert"
+          >
+            {current.operation.failure.message}
+          </p>
+        ) : null}
         <div className="mt-7 flex flex-wrap gap-3">
           {retryOperationId === undefined ? null : (
             <Button
@@ -256,6 +276,24 @@ export function ActiveInterviewPage() {
           {current.phase === "processing" || currentOperationBusy ? (
             <p aria-live="polite" className="text-sm font-semibold text-ink-700" role="status">
               正在分析本次操作，页面刷新不会中断处理。
+            </p>
+          ) : null}
+          {stream.reconnecting ? (
+            <p className="mt-3 text-sm font-semibold text-ink-700" role="status">
+              实时连接已中断，正在刷新权威状态并重连…
+            </p>
+          ) : null}
+          {stream.text === null ? null : (
+            <div aria-live="polite" className="mt-4 rounded-2xl bg-paper-100 p-4 text-sm leading-7">
+              {stream.text}
+            </div>
+          )}
+          {"operation" in current && current.operation.status === "failed" ? (
+            <p
+              className="mt-4 rounded-2xl bg-brand-600/10 px-4 py-3 text-sm text-brand-700"
+              role="alert"
+            >
+              {current.operation.failure.message}
             </p>
           ) : null}
 
@@ -450,6 +488,20 @@ function canRetryFailedOperation(current: InterviewDetailResponseDto): boolean {
     current.operation.status === "failed" &&
     current.availableActions.some((candidate: string) => candidate === "retry")
   );
+}
+
+function currentProcessingOperationId(
+  current: InterviewDetailResponseDto | undefined,
+): string | undefined {
+  if (
+    current === undefined ||
+    (current.status !== "active" && current.status !== "report_pending") ||
+    !("operation" in current) ||
+    (current.operation.status !== "pending" && current.operation.status !== "processing")
+  ) {
+    return undefined;
+  }
+  return current.operation.operationId;
 }
 
 function commandLogicalId(version: number, input: ActionInput): string {

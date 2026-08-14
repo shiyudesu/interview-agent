@@ -65,6 +65,14 @@ proves the old draft is stale. Pending Operations are shown as busy even when th
 phase remains `awaiting_response`. Retryable report-pending failures expose only report Operation
 retry and never rerun question evaluation.
 
+The Web Operation client consumes SSE through `fetch` so it can validate every event, send
+`Last-Event-ID`, inspect replay-unavailable status, and cancel invalid streams explicitly. It clears
+the reconnect indicator as soon as a valid stream opens, retries only network and server failures,
+stops on permanent 4xx responses, and refreshes the account projection on session expiry. Stream
+closure or 409 first performs a direct canonical detail read; the loop stops only when that read
+confirms the same Operation is no longer pending or processing. Thus page reloads and other devices
+can resume processing without treating presentation text as durable state.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:

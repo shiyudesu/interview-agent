@@ -146,6 +146,39 @@ describe("active interview screen", () => {
     expect(screen.getByRole("button", { name: "澄清题意" })).toBeDisabled();
   });
 
+  it("resumes a processing Operation stream and reloads canonical state on terminal events", async () => {
+    let detail = processingFixture();
+    const requestFetch = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/v1/account") {
+        return jsonResponse(accountFixture(), 200);
+      }
+      if (url === "/api/v1/interviews/interview-active" && init?.method === "GET") {
+        return jsonResponse(detail, 200);
+      }
+      if (url === "/api/v1/operations/operation-answer/events") {
+        detail = awaitingContinueFixture();
+        return new Response(
+          `id: 1\nevent: succeeded\ndata: ${JSON.stringify({
+            operationId: "operation-answer",
+            sequence: 1,
+            occurredAt: "2026-08-14T00:02:00.000Z",
+            type: "succeeded",
+          })}\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", requestFetch);
+    renderInterview();
+
+    expect(await screen.findByRole("textbox", { name: "补充回答" })).toBeInTheDocument();
+    expect(
+      requestFetch.mock.calls.some(([url]) => url === "/api/v1/operations/operation-answer/events"),
+    ).toBe(true);
+  });
+
   it("rotates a retry key when canonical state remains a retryable failed Operation", async () => {
     const user = userEvent.setup();
     const keys: string[] = [];
@@ -169,7 +202,7 @@ describe("active interview screen", () => {
     renderInterview();
 
     await user.click(await screen.findByRole("button", { name: "重试报告生成" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("connection closed");
+    expect(await screen.findByText("connection closed")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试报告生成" }));
 
     expect(keys).toHaveLength(2);

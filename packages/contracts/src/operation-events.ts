@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { Check } from "typebox/value";
 
 import { IsoTimestampSchema, OperationIdSchema } from "./common.js";
 import { OperationFailureDetailSchema } from "./errors.js";
@@ -64,3 +65,7 @@ export type OperationFailedEventDto = Static<typeof OperationFailedEventSchema>;
 export type OperationTerminalEventDto = Static<typeof OperationTerminalEventSchema>;
 export type OperationEventDto = Static<typeof OperationEventSchema>;
 export type OperationEventStreamHeadersDto = Static<typeof OperationEventStreamHeadersSchema>;
+
+export function isOperationEventDto(value: unknown): value is OperationEventDto {
+  return Check(OperationEventSchema, value);
+}

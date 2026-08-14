@@ -19,6 +19,10 @@
     "./responses": {
       "types": "./dist/responses.d.ts",
       "default": "./dist/responses.js"
+    },
+    "./operation-events": {
+      "types": "./dist/operation-events.d.ts",
+      "default": "./dist/operation-events.js"
     }
   },
   "scripts": {
