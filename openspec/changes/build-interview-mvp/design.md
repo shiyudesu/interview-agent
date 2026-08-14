@@ -80,6 +80,13 @@ Terminal interview routes render their canonical read-only transcript for comple
 and abandoned sessions. Local commands and terminal SSE reconciliation invalidate the dedicated
 history cache, while entering the page always refreshes its first page.
 
+Report routes load only the owner-scoped public report DTO and require both Schema and semantic
+contract validation before rendering. Complete reports show their deterministic overall score;
+incomplete reports explicitly omit it. Both render all six domain results, including unassessed
+markers, the four report summary groups, and ordered per-question feedback with reason-specific
+outcomes. The page exposes no regeneration, rescoring, export, sharing, or continued-chat controls
+and links only back to the immutable transcript and history.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:

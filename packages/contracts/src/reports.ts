@@ -571,11 +571,16 @@ export function validateReportResponse(value: unknown): readonly ReportValidatio
       message: error.message,
     }));
   }
+
   return [
     ...domainCoverageIssues(value),
     ...questionPositionIssues(value),
     ...totalDomainQuestionCountIssues(value),
   ];
+}
+
+export function isReportResponseDto(value: unknown): value is ReportResponseDto {
+  return validateReportResponse(value).length === 0;
 }
 
 export type QuestionOutcomeKindDto = Static<typeof QuestionOutcomeKindSchema>;

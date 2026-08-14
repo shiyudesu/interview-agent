@@ -47,6 +47,7 @@ describe("interview history", () => {
     expect(screen.getByText("提前结束")).toBeInTheDocument();
     expect(screen.getByText("已放弃")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "查看面试记录" })).toHaveLength(3);
+    expect(screen.getAllByRole("link", { name: "查看报告" })).toHaveLength(2);
     expect(screen.getByText("88")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "加载更多" }));

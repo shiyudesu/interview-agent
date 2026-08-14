@@ -1,3 +1,4 @@
+import { isReportResponseDto, type ReportResponseDto } from "@interview-agent/contracts/reports";
 import {
   type ActiveInterviewActionDto,
   type CurrentInterviewResponseDto,
@@ -65,6 +66,21 @@ export function getInterviewHistory(
     decode(value) {
       if (!isInterviewHistoryResponseDto(value)) {
         throw new TypeError("Invalid interview history response");
+      }
+      return value;
+    },
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+export function getInterviewReport(
+  interviewId: string,
+  signal?: AbortSignal,
+): Promise<ReportResponseDto> {
+  return apiClient.request(`/api/v1/interviews/${interviewId}/report`, {
+    decode(value) {
+      if (!isReportResponseDto(value)) {
+        throw new TypeError("Invalid interview report response");
       }
       return value;
     },

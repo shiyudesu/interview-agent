@@ -254,7 +254,10 @@ describe("active interview screen", () => {
     renderInterview();
 
     expect(await screen.findByText("已完成")).toBeInTheDocument();
-    expect(screen.getByText("完整报告已生成。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看完整报告" })).toHaveAttribute(
+      "href",
+      "/reports/interview-active",
+    );
     expect(screen.getByText("候选人的历史回答。")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });

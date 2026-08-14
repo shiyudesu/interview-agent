@@ -9,6 +9,7 @@ import { HistoryPage } from "../pages/history-page.js";
 import { HomePage } from "../pages/home-page.js";
 import { InterviewCreationPage } from "../pages/interview-creation-page.js";
 import { NotFoundPage } from "../pages/not-found-page.js";
+import { ReportPage } from "../pages/report-page.js";
 import { SignInPage } from "../pages/sign-in-page.js";
 
 export const appRouter = createBrowserRouter([
@@ -44,6 +45,10 @@ export const appRouter = createBrowserRouter([
       {
         path: "history",
         element: <HistoryPage />,
+      },
+      {
+        path: "reports/:interviewId",
+        element: <ReportPage />,
       },
       {
         path: "*",

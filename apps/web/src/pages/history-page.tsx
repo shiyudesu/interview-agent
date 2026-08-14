@@ -102,6 +102,11 @@ function HistoryCard({ item }: { readonly item: InterviewHistoryItemDto }) {
         <Link className="underline underline-offset-4" to={`/interviews/${item.id}`}>
           查看面试记录
         </Link>
+        {"reportId" in item ? (
+          <Link className="underline underline-offset-4" to={`/reports/${item.id}`}>
+            查看报告
+          </Link>
+        ) : null}
       </div>
     </article>
   );

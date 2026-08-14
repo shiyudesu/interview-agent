@@ -243,9 +243,12 @@ export function ActiveInterviewPage() {
             {formatInterviewDate(interview.endedAt)}。
           </p>
           {"reportId" in interview ? (
-            <p className="mt-4 text-sm font-semibold text-moss-500">
-              {interview.status === "completed" ? "完整报告已生成。" : "不完整报告已生成。"}
-            </p>
+            <Link
+              className="mt-4 inline-block text-sm font-semibold text-moss-500 underline underline-offset-4"
+              to={`/reports/${interview.id}`}
+            >
+              {interview.status === "completed" ? "查看完整报告" : "查看不完整报告"}
+            </Link>
           ) : (
             <p className="mt-4 text-sm text-ink-700">本场面试未生成报告。</p>
           )}

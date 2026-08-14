@@ -23,6 +23,10 @@
     "./operation-events": {
       "types": "./dist/operation-events.d.ts",
       "default": "./dist/operation-events.js"
+    },
+    "./reports": {
+      "types": "./dist/reports.d.ts",
+      "default": "./dist/reports.js"
     }
   },
   "scripts": {
