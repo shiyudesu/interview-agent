@@ -207,6 +207,15 @@ describe.sequential("real API integration", () => {
       }),
     });
 
+    const crossOrigin = await postAuthentication(
+      application,
+      "/api/auth/email-otp/send-verification-otp",
+      { email, type: "sign-in" },
+      "https://attacker.example.test",
+    );
+    expect(crossOrigin.status).toBe(403);
+    expect(emailSender.messages).toHaveLength(0);
+
     const requested = await postAuthentication(
       application,
       "/api/auth/email-otp/send-verification-otp",
@@ -1920,12 +1929,13 @@ async function postAuthentication(
   application: TestApplication,
   path: string,
   payload: object,
+  origin: string = TEST_AUTH_CONFIG.auth.baseUrl,
 ): Promise<Response> {
   return await fetch(`${application.address}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      origin: TEST_AUTH_CONFIG.auth.baseUrl,
+      origin,
     },
     body: JSON.stringify(payload),
   });

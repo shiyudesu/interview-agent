@@ -3,9 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createApiRouteErrorHandler,
+  crossOriginRequestError,
   internalError,
   mapApiValidationError,
   notFoundError,
+  payloadTooLargeError,
+  rateLimitError,
   unauthorizedError,
 } from "../src/api-route-errors.js";
 
@@ -38,6 +41,25 @@ describe("API route errors", () => {
       error: {
         code: "internal_error",
         message: "An unexpected error occurred.",
+      },
+    });
+    expect(crossOriginRequestError()).toEqual({
+      error: {
+        code: "cross_origin_request",
+        message: "Cross-origin requests are not allowed.",
+      },
+    });
+    expect(payloadTooLargeError()).toEqual({
+      error: {
+        code: "payload_too_large",
+        message: "The request body is too large.",
+      },
+    });
+    expect(rateLimitError(12)).toEqual({
+      error: {
+        code: "rate_limit_exceeded",
+        message: "Too many requests; retry later.",
+        retryAfterSeconds: 12,
       },
     });
   });
@@ -133,5 +155,22 @@ describe("API route errors", () => {
         message: "Deletion request failed",
       },
     });
+  });
+
+  it("maps oversized bodies to 413 without logging parser details", () => {
+    const logError = vi.fn();
+    const request = { log: { error: logError } } as unknown as FastifyRequest;
+    const harness = replyHarness();
+    const handler = createApiRouteErrorHandler({
+      logEvent: "route_failed",
+      logMessage: "Route failed",
+      mapContentTypeParserErrors: true,
+    });
+
+    handler({ code: "FST_ERR_CTP_BODY_TOO_LARGE" } as FastifyError, request, harness.reply);
+
+    expect(harness.code).toHaveBeenCalledWith(413);
+    expect(harness.send).toHaveBeenCalledWith(payloadTooLargeError());
+    expect(logError).not.toHaveBeenCalled();
   });
 });

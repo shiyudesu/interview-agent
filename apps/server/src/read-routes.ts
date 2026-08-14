@@ -27,6 +27,7 @@ import {
   type PaginationQueryDto,
   PaginationQuerySchema,
   type PublicOperationProjection,
+  RateLimitErrorResponseSchema,
   ReportNotFoundErrorResponseSchema,
   type ReportResponseDto,
   ReportResponseSchema,
@@ -52,6 +53,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createApiRouteErrorHandler, internalError, notFoundError } from "./api-route-errors.js";
 import { authenticatedRequestContext } from "./authenticated-request.js";
 import { retryAfterRepositoryInterviewExpiry } from "./repository-interview-expiry.js";
+import { API_RATE_LIMITS } from "./security.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const HISTORY_CURSOR_VERSION = 1;
@@ -517,6 +519,7 @@ function readRouteOptions(
   statusSchemas: Readonly<Record<number, object>> = {},
 ) {
   return {
+    config: { rateLimit: API_RATE_LIMITS.read },
     schema: {
       tags: [tag],
       summary,
@@ -524,6 +527,7 @@ function readRouteOptions(
         200: successSchema,
         ...statusSchemas,
         401: UnauthorizedErrorResponseSchema,
+        429: RateLimitErrorResponseSchema,
         500: InternalErrorResponseSchema,
       },
     },

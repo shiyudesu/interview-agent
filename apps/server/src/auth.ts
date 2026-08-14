@@ -6,6 +6,7 @@ import { type AccountId, parseAccountId } from "@interview-agent/domain";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { type EmailOTPOptions, emailOTP } from "better-auth/plugins";
 
+import { trustedApplicationOrigins } from "./application-origins.js";
 import type { ServerConfig } from "./config.js";
 import type { EmailSender } from "./email-sender.js";
 
@@ -79,11 +80,6 @@ export function createEmailOtpOptions(emailSender: EmailSender, secret: string):
 
 export function createAuthentication(input: CreateAuthenticationInput): Authentication {
   const github = input.config.auth.github;
-  const origin = new URL(input.config.auth.baseUrl).origin;
-  const developmentOrigins =
-    input.config.environment === "production"
-      ? []
-      : ["http://localhost:5173", "http://127.0.0.1:5173"];
 
   const auth = betterAuth({
     appName: "Interview Agent",
@@ -94,7 +90,7 @@ export function createAuthentication(input: CreateAuthenticationInput): Authenti
       schema: { user, session, account, verification },
       transaction: true,
     }),
-    trustedOrigins: [...new Set([origin, ...developmentOrigins])],
+    trustedOrigins: [...trustedApplicationOrigins(input.config)],
     socialProviders:
       github === undefined
         ? {}

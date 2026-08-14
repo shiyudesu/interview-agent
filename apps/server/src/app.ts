@@ -2,6 +2,7 @@ import {
   AccountDeletionNotFoundResponseSchema,
   type ConfirmDeletionRequestDto,
   ConfirmDeletionRequestSchema,
+  CrossOriginRequestErrorResponseSchema,
   DeletionAcceptedResponseSchema,
   DeletionServerFailureResponseSchema,
   DeletionUnauthorizedResponseSchema,
@@ -9,6 +10,8 @@ import {
   InterviewDeletionNotFoundResponseSchema,
   type InterviewDeletionParamsDto,
   InterviewDeletionParamsSchema,
+  PayloadTooLargeErrorResponseSchema,
+  RateLimitErrorResponseSchema,
 } from "@interview-agent/contracts";
 import { parseInterviewId } from "@interview-agent/domain";
 import { fromNodeHeaders } from "better-auth/node";
@@ -29,6 +32,7 @@ import {
   registerOperationEventRoutes,
 } from "./operation-events.js";
 import { type CanonicalReadRouteDependencies, registerCanonicalReadRoutes } from "./read-routes.js";
+import { API_BODY_LIMITS, API_RATE_LIMITS, registerSecurityControls } from "./security.js";
 
 export interface RegisterApplicationInput {
   readonly authentication: Authentication;
@@ -43,6 +47,7 @@ export async function registerApplication(
   app: FastifyInstance,
   input: RegisterApplicationInput,
 ): Promise<void> {
+  await registerSecurityControls(app, input.config);
   await registerOpenApiDocumentation(app, input.config.environment);
 
   app.addContentTypeParser(
@@ -68,7 +73,9 @@ export async function registerApplication(
   app.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
+    bodyLimit: API_BODY_LIMITS.authentication,
     schema: { hide: true },
+    errorHandler: authenticationRouteErrorHandler,
     async handler(request, reply) {
       try {
         const response = await input.authentication.handler(
@@ -109,6 +116,8 @@ export async function registerApplication(
   }>(
     "/api/v1/interviews/:interviewId",
     {
+      bodyLimit: API_BODY_LIMITS.deletion,
+      config: { rateLimit: API_RATE_LIMITS.deletion },
       schema: {
         tags: ["Interviews"],
         summary: "Delete an interview",
@@ -117,7 +126,10 @@ export async function registerApplication(
         response: {
           400: DeletionValidationErrorResponseSchema,
           401: DeletionUnauthorizedResponseSchema,
+          403: CrossOriginRequestErrorResponseSchema,
           404: InterviewDeletionNotFoundResponseSchema,
+          413: PayloadTooLargeErrorResponseSchema,
+          429: RateLimitErrorResponseSchema,
           202: DeletionAcceptedResponseSchema,
           500: DeletionServerFailureResponseSchema,
         },
@@ -152,6 +164,8 @@ export async function registerApplication(
   app.delete<{ Body: ConfirmDeletionRequestDto }>(
     "/api/v1/account",
     {
+      bodyLimit: API_BODY_LIMITS.deletion,
+      config: { rateLimit: API_RATE_LIMITS.deletion },
       schema: {
         tags: ["Account"],
         summary: "Delete the current account",
@@ -159,7 +173,10 @@ export async function registerApplication(
         response: {
           400: DeletionValidationErrorResponseSchema,
           401: DeletionUnauthorizedResponseSchema,
+          403: CrossOriginRequestErrorResponseSchema,
           404: AccountDeletionNotFoundResponseSchema,
+          413: PayloadTooLargeErrorResponseSchema,
+          429: RateLimitErrorResponseSchema,
           202: DeletionAcceptedResponseSchema,
           500: DeletionServerFailureResponseSchema,
         },
@@ -263,4 +280,10 @@ const deletionRouteErrorHandler = createApiRouteErrorHandler({
   logMessage: "Deletion route failed",
   mapContentTypeParserErrors: true,
   unexpectedError: deletionFailureResponse,
+});
+
+const authenticationRouteErrorHandler = createApiRouteErrorHandler({
+  logEvent: "authentication_route_failed",
+  logMessage: "Authentication route failed",
+  mapContentTypeParserErrors: true,
 });

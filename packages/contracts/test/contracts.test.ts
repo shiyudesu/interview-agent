@@ -484,6 +484,43 @@ describe("API command and error schemas", () => {
     ).toBe(false);
   });
 
+  it("validates stable security error envelopes", () => {
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        error: {
+          code: "cross_origin_request",
+          message: "Cross-origin requests are not allowed.",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        error: {
+          code: "payload_too_large",
+          message: "The request body is too large.",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        error: {
+          code: "rate_limit_exceeded",
+          message: "Too many requests; retry later.",
+          retryAfterSeconds: 1,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Check(ErrorEnvelopeSchema, {
+        error: {
+          code: "rate_limit_exceeded",
+          message: "Too many requests; retry later.",
+          retryAfterSeconds: 0,
+        },
+      }),
+    ).toBe(false);
+  });
+
   it.each([
     [SubmitAnswerRequestSchema, { text: "answer" }],
     [SubmitSupplementRequestSchema, { text: "supplement" }],

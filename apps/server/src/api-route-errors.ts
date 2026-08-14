@@ -3,11 +3,49 @@ import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 
 export type ApiErrorResource = "account" | "interview" | "operation" | "report";
 
+export class RateLimitExceededError extends Error {
+  readonly statusCode = 429;
+  readonly code = "RATE_LIMIT_EXCEEDED";
+
+  constructor(readonly retryAfterSeconds: number) {
+    super("Rate limit exceeded");
+    this.name = "RateLimitExceededError";
+  }
+}
+
 export function unauthorizedError(): ErrorEnvelopeDto {
   return {
     error: {
       code: "unauthorized",
       message: "Authentication is required",
+    },
+  };
+}
+
+export function crossOriginRequestError(): ErrorEnvelopeDto {
+  return {
+    error: {
+      code: "cross_origin_request",
+      message: "Cross-origin requests are not allowed.",
+    },
+  };
+}
+
+export function payloadTooLargeError(): ErrorEnvelopeDto {
+  return {
+    error: {
+      code: "payload_too_large",
+      message: "The request body is too large.",
+    },
+  };
+}
+
+export function rateLimitError(retryAfterSeconds: number): ErrorEnvelopeDto {
+  return {
+    error: {
+      code: "rate_limit_exceeded",
+      message: "Too many requests; retry later.",
+      retryAfterSeconds,
     },
   };
 }
@@ -79,6 +117,12 @@ export interface ApiRouteErrorHandlerOptions {
 
 export function createApiRouteErrorHandler(options: ApiRouteErrorHandlerOptions) {
   return (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+    if (error instanceof RateLimitExceededError) {
+      return reply.code(429).send(rateLimitError(error.retryAfterSeconds));
+    }
+    if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+      return reply.code(413).send(payloadTooLargeError());
+    }
     const validationError = mapApiValidationError(error, options.mapContentTypeParserErrors);
     if (validationError !== null) {
       return reply.code(400).send(validationError);

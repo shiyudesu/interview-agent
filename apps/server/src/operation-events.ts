@@ -11,6 +11,7 @@ import {
   OperationReadParamsSchema,
   type OperationTerminalEventDto,
   type OperationTextDeltaEventDto,
+  RateLimitErrorResponseSchema,
   UnauthorizedErrorResponseSchema,
   ValidationErrorResponseSchema,
 } from "@interview-agent/contracts";
@@ -31,6 +32,7 @@ import {
 } from "./api-route-errors.js";
 import { authenticatedRequestContext } from "./authenticated-request.js";
 import { retryAfterRepositoryInterviewExpiry } from "./repository-interview-expiry.js";
+import { API_RATE_LIMITS } from "./security.js";
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 const DEFAULT_STATUS_POLL_INTERVAL_MS = 1_000;
@@ -640,6 +642,7 @@ export async function registerOperationEventRoutes(
   }>(
     "/api/v1/operations/:operationId/events",
     {
+      config: { rateLimit: API_RATE_LIMITS.stream },
       sse: { kind: "only" },
       schema: {
         tags: ["Operations"],
@@ -651,6 +654,7 @@ export async function registerOperationEventRoutes(
           401: UnauthorizedErrorResponseSchema,
           404: OperationNotFoundErrorResponseSchema,
           409: OperationEventReplayUnavailableErrorResponseSchema,
+          429: RateLimitErrorResponseSchema,
           500: InternalErrorResponseSchema,
         },
       },

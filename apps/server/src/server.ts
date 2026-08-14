@@ -8,6 +8,7 @@ import Fastify, {
   type FastifyServerOptions,
   LogController,
 } from "fastify";
+import { MAX_REQUEST_BODY_BYTES } from "./security.js";
 
 const TRACEPARENT_PATTERN = /^([\da-f]{2})-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/u;
 
@@ -81,6 +82,7 @@ export function createLoggerOptions(level: string) {
 
 export function createServer(options: FastifyServerOptions = {}) {
   const app = Fastify({
+    bodyLimit: MAX_REQUEST_BODY_BYTES,
     genReqId: () => randomUUID(),
     logController: new LogController({
       disableRequestLogging: true,

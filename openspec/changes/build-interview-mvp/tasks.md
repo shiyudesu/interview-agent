@@ -102,7 +102,7 @@
 
 - [x] 10.1 Add Pino structured logging with request, interview, Operation, and trace correlation plus redaction of credentials, OTPs, tokens, and complete answers.
 - [x] 10.2 Add OpenTelemetry instrumentation for HTTP, PostgreSQL, Operations, and model calls with optional OTLP export.
-- [ ] 10.3 Add endpoint-specific rate limits, security headers, same-origin checks, payload size limits, and tests for unauthorized or cross-origin requests.
+- [x] 10.3 Add endpoint-specific rate limits, security headers, same-origin checks, payload size limits, and tests for unauthorized or cross-origin requests.
 - [ ] 10.4 Add Playwright critical-path tests for authentication substitutes, normal completion, all-zero completion, early ending, resume, report retry, history, and deletion.
 - [ ] 10.5 Keep the full evaluation fixture suite as a release gate and document known model-quality limitations plus the configured development model used for manual acceptance.
 - [ ] 10.6 Run a production-container smoke test against clean PostgreSQL and Mailpit dependencies.

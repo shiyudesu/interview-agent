@@ -10,6 +10,7 @@ import {
   ContinueInterviewRequestSchema,
   type CreateInterviewRequestDto,
   CreateInterviewRequestSchema,
+  CrossOriginRequestErrorResponseSchema,
   type EndInterviewEarlyRequestDto,
   EndInterviewEarlyRequestSchema,
   type ErrorEnvelopeDto,
@@ -24,7 +25,9 @@ import {
   mapOperationToStatusResponse,
   NotFoundErrorResponseSchema,
   OperationFailureErrorResponseSchema,
+  PayloadTooLargeErrorResponseSchema,
   parseMappedDto,
+  RateLimitErrorResponseSchema,
   type RequestClarificationRequestDto,
   RequestClarificationRequestSchema,
   type RetryOperationRequestDto,
@@ -75,6 +78,7 @@ import {
   type RetryInterviewOperationInput,
   type TextInterviewOperationInput,
 } from "./operation-runner.js";
+import { API_BODY_LIMITS, API_RATE_LIMITS } from "./security.js";
 
 interface InterviewCommandHandlers {
   createInterview(input: CreateInterviewOperationInput): Promise<CommandAcceptance>;
@@ -138,8 +142,11 @@ const commandResponses = {
   202: AcceptedOperationStatusResponseSchema,
   400: ValidationErrorResponseSchema,
   401: UnauthorizedErrorResponseSchema,
+  403: CrossOriginRequestErrorResponseSchema,
   404: NotFoundErrorResponseSchema,
   409: CommandConflictErrorResponseSchema,
+  413: PayloadTooLargeErrorResponseSchema,
+  429: RateLimitErrorResponseSchema,
   500: InternalErrorResponseSchema,
   503: OperationFailureErrorResponseSchema,
 } as const;
@@ -160,6 +167,8 @@ export async function registerInterviewCommandRoutes(
   }>(
     "/api/v1/interviews",
     {
+      bodyLimit: API_BODY_LIMITS.controlCommand,
+      config: { rateLimit: API_RATE_LIMITS.command },
       schema: {
         tags: ["Interviews"],
         summary: "Create an interview",
@@ -190,7 +199,7 @@ export async function registerInterviewCommandRoutes(
     Body: SubmitAnswerRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/answers",
-    commandRouteOptions(SubmitAnswerRequestSchema, "Submit an answer"),
+    commandRouteOptions(SubmitAnswerRequestSchema, "Submit an answer", API_BODY_LIMITS.textCommand),
     async (request, reply) =>
       executeTextCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.submitAnswer(input),
@@ -203,7 +212,11 @@ export async function registerInterviewCommandRoutes(
     Body: SubmitSupplementRequestDto;
   }>(
     "/api/v1/interviews/:interviewId/supplements",
-    commandRouteOptions(SubmitSupplementRequestSchema, "Supplement the current answer"),
+    commandRouteOptions(
+      SubmitSupplementRequestSchema,
+      "Supplement the current answer",
+      API_BODY_LIMITS.textCommand,
+    ),
     async (request, reply) =>
       executeTextCommand(request, reply, dependencies, (input) =>
         dependencies.handlers.submitSupplement(input),
@@ -312,8 +325,14 @@ export async function registerInterviewCommandRoutes(
   );
 }
 
-function commandRouteOptions(body: object, summary: string) {
+function commandRouteOptions(
+  body: object,
+  summary: string,
+  bodyLimit = API_BODY_LIMITS.controlCommand,
+) {
   return {
+    bodyLimit,
+    config: { rateLimit: API_RATE_LIMITS.command },
     schema: {
       tags: ["Interviews"],
       summary,

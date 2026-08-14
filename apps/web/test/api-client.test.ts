@@ -75,6 +75,36 @@ describe("API client", () => {
     });
   });
 
+  it("recognizes stable security errors", async () => {
+    const client = createApiClient({
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: "rate_limit_exceeded",
+              message: "Too many requests; retry later.",
+              retryAfterSeconds: 30,
+            },
+          },
+          { status: 429 },
+        ),
+      ),
+    });
+
+    await expect(
+      client.request("/api/v1/interviews", {
+        decode: () => null,
+      }),
+    ).rejects.toMatchObject({
+      name: "ApiClientError",
+      status: 429,
+      apiError: {
+        code: "rate_limit_exceeded",
+        retryAfterSeconds: 30,
+      },
+    });
+  });
+
   it("rejects successful responses that do not match the caller decoder", async () => {
     const client = createApiClient({
       fetch: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ unexpected: true })),

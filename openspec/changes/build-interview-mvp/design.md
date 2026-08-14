@@ -471,6 +471,22 @@ serve production traffic.
 
 Production uses same-origin secure cookies, Origin/CSRF validation, security headers, and endpoint-specific rate limits. The application does not expose permissive CORS. OpenAPI and Swagger UI are enabled only for local and test environments.
 
+Fastify applies Helmet globally, including a production Content Security Policy and one-year HSTS;
+local and test environments keep CSP disabled so the generated Swagger UI remains usable. Unsafe
+`/api/v1` methods reject an untrusted `Origin` or cross-site Fetch Metadata value before session
+loading, while requests without browser origin metadata remain available to same-host operational
+clients. Better Auth retains its independent CSRF and trusted-origin enforcement for `/api/auth/*`.
+The socket-derived Fastify IP keys in-memory, per-endpoint one-minute limits: 120 reads, 30 commands,
+20 SSE connections, and 5 deletion requests. Exceeded limits return a Schema-valid `429` envelope
+and `Retry-After`; store errors fail closed.
+
+The server-wide body ceiling is 96 KiB. Authentication routes allow 16 KiB, control commands 4 KiB,
+answer and supplement commands 96 KiB so the existing 20,000-character contract remains valid for
+four-byte Unicode, and deletion confirmations 1 KiB. Oversized payloads return a stable `413`
+envelope before parsing; cross-origin mutations return a stable `403` envelope. These errors are
+part of the shared contracts and remain distinguishable from validation, authentication, and
+internal failures.
+
 Fastify mounts Better Auth under `/api/auth/*`, preserves JSON and URL-encoded request bodies, and
 forwards every response and session-refresh `Set-Cookie` header. Protected `/api/v1` routes receive
 a normalized account/session context from PostgreSQL-backed Better Auth sessions. The bridge

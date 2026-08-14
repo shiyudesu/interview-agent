@@ -49,6 +49,31 @@ export const UnauthorizedApiErrorSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const CrossOriginRequestApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("cross_origin_request"),
+    message: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PayloadTooLargeApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("payload_too_large"),
+    message: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const RateLimitApiErrorSchema = Type.Object(
+  {
+    code: Type.Literal("rate_limit_exceeded"),
+    message: Type.String({ minLength: 1 }),
+    retryAfterSeconds: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 function notFoundApiErrorSchema(resource: "account" | "interview" | "operation" | "report") {
   return Type.Object(
     {
@@ -148,6 +173,13 @@ function errorResponseSchema(error: TSchema) {
 
 export const ValidationErrorResponseSchema = errorResponseSchema(ValidationApiErrorSchema);
 export const UnauthorizedErrorResponseSchema = errorResponseSchema(UnauthorizedApiErrorSchema);
+export const CrossOriginRequestErrorResponseSchema = errorResponseSchema(
+  CrossOriginRequestApiErrorSchema,
+);
+export const PayloadTooLargeErrorResponseSchema = errorResponseSchema(
+  PayloadTooLargeApiErrorSchema,
+);
+export const RateLimitErrorResponseSchema = errorResponseSchema(RateLimitApiErrorSchema);
 export const AccountNotFoundErrorResponseSchema = errorResponseSchema(
   AccountNotFoundApiErrorSchema,
 );
@@ -180,6 +212,9 @@ export const InternalErrorResponseSchema = errorResponseSchema(InternalApiErrorS
 export const ApiErrorSchema = Type.Union([
   ValidationApiErrorSchema,
   UnauthorizedApiErrorSchema,
+  CrossOriginRequestApiErrorSchema,
+  PayloadTooLargeApiErrorSchema,
+  RateLimitApiErrorSchema,
   NotFoundApiErrorSchema,
   VersionConflictApiErrorSchema,
   CommandRejectedApiErrorSchema,
@@ -198,6 +233,9 @@ export const ErrorEnvelopeSchema = Type.Object(
 export type ValidationIssueDto = Static<typeof ValidationIssueSchema>;
 export type ValidationApiErrorDto = Static<typeof ValidationApiErrorSchema>;
 export type UnauthorizedApiErrorDto = Static<typeof UnauthorizedApiErrorSchema>;
+export type CrossOriginRequestApiErrorDto = Static<typeof CrossOriginRequestApiErrorSchema>;
+export type PayloadTooLargeApiErrorDto = Static<typeof PayloadTooLargeApiErrorSchema>;
+export type RateLimitApiErrorDto = Static<typeof RateLimitApiErrorSchema>;
 export type AccountNotFoundApiErrorDto = Static<typeof AccountNotFoundApiErrorSchema>;
 export type InterviewNotFoundApiErrorDto = Static<typeof InterviewNotFoundApiErrorSchema>;
 export type OperationNotFoundApiErrorDto = Static<typeof OperationNotFoundApiErrorSchema>;
@@ -219,6 +257,11 @@ export type ApiErrorDto = Static<typeof ApiErrorSchema>;
 export type ErrorEnvelopeDto = Static<typeof ErrorEnvelopeSchema>;
 export type ValidationErrorResponseDto = Static<typeof ValidationErrorResponseSchema>;
 export type UnauthorizedErrorResponseDto = Static<typeof UnauthorizedErrorResponseSchema>;
+export type CrossOriginRequestErrorResponseDto = Static<
+  typeof CrossOriginRequestErrorResponseSchema
+>;
+export type PayloadTooLargeErrorResponseDto = Static<typeof PayloadTooLargeErrorResponseSchema>;
+export type RateLimitErrorResponseDto = Static<typeof RateLimitErrorResponseSchema>;
 export type AccountNotFoundErrorResponseDto = Static<typeof AccountNotFoundErrorResponseSchema>;
 export type InterviewNotFoundErrorResponseDto = Static<typeof InterviewNotFoundErrorResponseSchema>;
 export type OperationNotFoundErrorResponseDto = Static<typeof OperationNotFoundErrorResponseSchema>;

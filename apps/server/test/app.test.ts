@@ -11,6 +11,7 @@ import {
   type OperationEventRouteDependencies,
 } from "../src/operation-events.js";
 import type { CanonicalReadRouteDependencies } from "../src/read-routes.js";
+import { API_BODY_LIMITS, API_RATE_LIMITS } from "../src/security.js";
 import { createServer } from "../src/server.js";
 
 const apps: ReturnType<typeof createServer>[] = [];
@@ -155,7 +156,19 @@ describe("registerApplication", () => {
         ),
       ).toBe(true);
       expect(Object.keys(createInterview.responses)).toEqual(
-        expect.arrayContaining(["200", "202", "400", "401", "404", "409", "500", "503"]),
+        expect.arrayContaining([
+          "200",
+          "202",
+          "400",
+          "401",
+          "403",
+          "404",
+          "409",
+          "413",
+          "429",
+          "500",
+          "503",
+        ]),
       );
       expect(
         createInterview.responses["202"].content["application/json"].schema.anyOf,
@@ -168,9 +181,12 @@ describe("registerApplication", () => {
       expect(JSON.stringify(createInterview.responses["400"])).toContain('"validation_error"');
       expect(JSON.stringify(createInterview.responses["400"])).not.toContain('"internal_error"');
       expect(JSON.stringify(createInterview.responses["401"])).toContain('"unauthorized"');
+      expect(JSON.stringify(createInterview.responses["403"])).toContain('"cross_origin_request"');
       expect(JSON.stringify(createInterview.responses["404"])).toContain('"not_found"');
       expect(JSON.stringify(createInterview.responses["409"])).toContain('"version_conflict"');
       expect(JSON.stringify(createInterview.responses["409"])).toContain('"command_rejected"');
+      expect(JSON.stringify(createInterview.responses["413"])).toContain('"payload_too_large"');
+      expect(JSON.stringify(createInterview.responses["429"])).toContain('"rate_limit_exceeded"');
       expect(JSON.stringify(createInterview.responses["500"])).toContain('"internal_error"');
       expect(JSON.stringify(createInterview.responses["503"])).toContain('"operation_failure"');
 
@@ -194,15 +210,17 @@ describe("registerApplication", () => {
         "200",
         "401",
         "404",
+        "429",
         "500",
       ]);
       expect(Object.keys(document.paths["/api/v1/interviews/active"].get.responses)).toEqual([
         "200",
         "401",
         "404",
+        "429",
         "500",
       ]);
-      expect(Object.keys(history.responses)).toEqual(["200", "400", "401", "500"]);
+      expect(Object.keys(history.responses)).toEqual(["200", "400", "401", "429", "500"]);
       expect(
         JSON.stringify(document.paths["/api/v1/operations/{operationId}"].get.responses["404"]),
       ).toContain('"operation"');
@@ -268,7 +286,19 @@ describe("registerApplication", () => {
       ];
       for (const operation of commandOperations) {
         expect(Object.keys(operation.responses)).toEqual(
-          expect.arrayContaining(["200", "202", "400", "401", "404", "409", "500", "503"]),
+          expect.arrayContaining([
+            "200",
+            "202",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "413",
+            "429",
+            "500",
+            "503",
+          ]),
         );
       }
 
@@ -278,12 +308,12 @@ describe("registerApplication", () => {
       ];
       for (const operation of deletionOperations) {
         expect(Object.keys(operation.responses)).toEqual(
-          expect.arrayContaining(["202", "400", "401", "404", "500"]),
+          expect.arrayContaining(["202", "400", "401", "403", "404", "413", "429", "500"]),
         );
       }
 
       expect(Object.keys(events.responses)).toEqual(
-        expect.arrayContaining(["200", "204", "400", "401", "404", "409", "500"]),
+        expect.arrayContaining(["200", "204", "400", "401", "404", "409", "429", "500"]),
       );
     },
   );
@@ -313,6 +343,74 @@ describe("registerApplication", () => {
     expect(instance.hasDecorator("swagger")).toBe(false);
     expect(instance.hasDecorator("swaggerCSP")).toBe(false);
     expect(instance.printPlugins()).not.toContain("@fastify/swagger");
+  });
+
+  it("wires endpoint-specific limits and rejects cross-origin API mutations", async () => {
+    const routes: {
+      readonly method: string | readonly string[];
+      readonly url: string;
+      readonly bodyLimit?: number;
+      readonly config?: { readonly rateLimit?: unknown };
+    }[] = [];
+    const getSession = vi.fn(async () => ({ context: null, headers: new Headers() }));
+    const instance = app();
+    instance.addHook("onRoute", (route) => {
+      routes.push(route);
+    });
+    await registerApplication(instance, {
+      authentication: authentication({ getSession }),
+      config,
+      deletion: deletion(),
+      interviewCommands: interviewCommands(),
+      canonicalReads: canonicalReads(),
+      operationEvents: operationEvents(),
+    });
+
+    const route = (method: string, url: string) => {
+      const found = routes.find(
+        (candidate) =>
+          candidate.url === url &&
+          (Array.isArray(candidate.method)
+            ? candidate.method.includes(method)
+            : candidate.method === method),
+      );
+      if (found === undefined) {
+        throw new Error(`Route ${method} ${url} was not registered`);
+      }
+      return found;
+    };
+
+    expect(route("POST", "/api/auth/*").bodyLimit).toBe(API_BODY_LIMITS.authentication);
+    expect(route("POST", "/api/v1/interviews").bodyLimit).toBe(API_BODY_LIMITS.controlCommand);
+    expect(route("POST", "/api/v1/interviews/:interviewId/answers").bodyLimit).toBe(
+      API_BODY_LIMITS.textCommand,
+    );
+    expect(route("DELETE", "/api/v1/account").bodyLimit).toBe(API_BODY_LIMITS.deletion);
+    expect(route("GET", "/api/v1/account").config?.rateLimit).toEqual(API_RATE_LIMITS.read);
+    expect(route("POST", "/api/v1/interviews").config?.rateLimit).toEqual(API_RATE_LIMITS.command);
+    expect(route("GET", "/api/v1/operations/:operationId/events").config?.rateLimit).toEqual(
+      API_RATE_LIMITS.stream,
+    );
+    expect(route("DELETE", "/api/v1/account").config?.rateLimit).toEqual(API_RATE_LIMITS.deletion);
+
+    const response = await instance.inject({
+      method: "POST",
+      url: "/api/v1/interviews",
+      headers: {
+        origin: "https://attacker.example.test",
+        "idempotency-key": "cross-origin-command",
+      },
+      payload: {
+        questionCount: 5,
+        expectedVersion: 0,
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      error: { code: "cross_origin_request" },
+    });
+    expect(getSession).not.toHaveBeenCalled();
   });
 
   it("mounts Better Auth and preserves request, response, and Set-Cookie headers", async () => {
