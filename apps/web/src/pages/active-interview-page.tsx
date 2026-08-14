@@ -13,6 +13,7 @@ import { useCurrentAccount } from "../features/account/account-query.js";
 import { getInterviewDetail, runInterviewAction } from "../features/interview/interview-api.js";
 import {
   activeInterviewQueryKey,
+  historyQueryKey,
   interviewDetailQueryKey,
   useInterviewDetail,
 } from "../features/interview/interview-query.js";
@@ -116,10 +117,15 @@ export function ActiveInterviewPage() {
       return;
     }
     const detailQueryKey = interviewDetailQueryKey(account.data.id, interviewId);
-    await queryClient.invalidateQueries({
-      queryKey: activeInterviewQueryKey(account.data.id),
-    });
-    await queryClient.invalidateQueries({ queryKey: detailQueryKey });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: activeInterviewQueryKey(account.data.id),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: historyQueryKey(account.data.id),
+      }),
+      queryClient.invalidateQueries({ queryKey: detailQueryKey }),
+    ]);
     return queryClient.fetchQuery({
       queryKey: detailQueryKey,
       queryFn: ({ signal }) => getInterviewDetail(interviewId, signal),
@@ -196,6 +202,13 @@ export function ActiveInterviewPage() {
       </section>
     );
   }
+  if (
+    current.status === "completed" ||
+    current.status === "early_ended" ||
+    current.status === "abandoned"
+  ) {
+    return <TerminalInterviewDetail interview={current} />;
+  }
   if (current.status !== "active") {
     return (
       <section className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white/75 p-8 shadow-sm">
@@ -207,6 +220,41 @@ export function ActiveInterviewPage() {
           <Link to="/app">返回面试空间</Link>
         </Button>
       </section>
+    );
+  }
+
+  function TerminalInterviewDetail({
+    interview,
+  }: {
+    readonly interview: Extract<
+      InterviewDetailResponseDto,
+      { readonly status: "completed" | "early_ended" | "abandoned" }
+    >;
+  }) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <header className="rounded-[2rem] border border-black/10 bg-white/75 p-7 shadow-sm sm:p-10">
+          <p className="text-xs font-black tracking-[0.18em] text-brand-700">
+            {terminalStatusLabel(interview.status)}
+          </p>
+          <h2 className="mt-4 text-3xl font-black">Go 后端 · {interview.questionCount} 题</h2>
+          <p className="mt-3 text-sm leading-7 text-ink-700">
+            开始于 {formatInterviewDate(interview.startedAt)}，结束于{" "}
+            {formatInterviewDate(interview.endedAt)}。
+          </p>
+          {"reportId" in interview ? (
+            <p className="mt-4 text-sm font-semibold text-moss-500">
+              {interview.status === "completed" ? "完整报告已生成。" : "不完整报告已生成。"}
+            </p>
+          ) : (
+            <p className="mt-4 text-sm text-ink-700">本场面试未生成报告。</p>
+          )}
+        </header>
+        <Transcript messages={interview.messages} />
+        <Button asChild className="mt-7" tone="secondary">
+          <Link to="/history">返回面试历史</Link>
+        </Button>
+      </div>
     );
   }
 
@@ -545,4 +593,22 @@ function messageLabel(kind: InterviewMessageDto["kind"]): string {
       return "衔接";
   }
   throw new Error("Unknown interview message kind");
+}
+
+function terminalStatusLabel(status: "completed" | "early_ended" | "abandoned"): string {
+  switch (status) {
+    case "completed":
+      return "已完成";
+    case "early_ended":
+      return "提前结束";
+    case "abandoned":
+      return "已放弃";
+  }
+}
+
+function formatInterviewDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

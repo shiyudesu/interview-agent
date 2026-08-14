@@ -2,8 +2,10 @@ import {
   type ActiveInterviewActionDto,
   type CurrentInterviewResponseDto,
   type InterviewDetailResponseDto,
+  type InterviewHistoryResponseDto,
   isCurrentInterviewResponseDto,
   isInterviewDetailResponseDto,
+  isInterviewHistoryResponseDto,
   isOperationStatusResponseDto,
   type OperationStatusResponseDto,
 } from "@interview-agent/contracts/responses";
@@ -44,6 +46,25 @@ export function getInterviewDetail(
     decode(value) {
       if (!isInterviewDetailResponseDto(value)) {
         throw new TypeError("Invalid interview detail response");
+      }
+      return value;
+    },
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+export function getInterviewHistory(
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<InterviewHistoryResponseDto> {
+  const query = new URLSearchParams({ limit: "20" });
+  if (cursor !== null) {
+    query.set("cursor", cursor);
+  }
+  return apiClient.request(`/api/v1/interviews?${query.toString()}`, {
+    decode(value) {
+      if (!isInterviewHistoryResponseDto(value)) {
+        throw new TypeError("Invalid interview history response");
       }
       return value;
     },

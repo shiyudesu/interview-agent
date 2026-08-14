@@ -28,6 +28,10 @@ export function interviewDetailQueryKey(accountId: string, interviewId: string) 
   return [...ACCOUNT_OWNED_QUERY_KEY, accountId, "interview", interviewId] as const;
 }
 
+export function historyQueryKey(accountId: string) {
+  return [...ACCOUNT_OWNED_QUERY_KEY, accountId, "history"] as const;
+}
+
 export function useInterviewDetail(
   accountId: string | undefined,
   interviewId: string | undefined,

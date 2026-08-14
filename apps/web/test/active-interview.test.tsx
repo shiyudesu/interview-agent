@@ -239,6 +239,25 @@ describe("active interview screen", () => {
     expect(screen.getByRole("textbox", { name: "你的回答" })).toHaveValue("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("renders completed transcript detail as immutable history", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockImplementation(async (input) =>
+          String(input) === "/api/v1/account"
+            ? jsonResponse(accountFixture(), 200)
+            : jsonResponse(completedInterviewFixture(), 200),
+        ),
+    );
+    renderInterview();
+
+    expect(await screen.findByText("已完成")).toBeInTheDocument();
+    expect(screen.getByText("完整报告已生成。")).toBeInTheDocument();
+    expect(screen.getByText("候选人的历史回答。")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
 });
 
 function renderInterview() {
@@ -458,6 +477,22 @@ function reportPendingProcessingFixture() {
       status: "processing",
     },
     availableActions: [],
+  };
+}
+
+function completedInterviewFixture() {
+  return {
+    id: "interview-active",
+    status: "completed",
+    version: 14,
+    questionCount: 5,
+    reportId: "report-complete",
+    startedAt: "2026-08-14T00:00:00.000Z",
+    endedAt: "2026-08-14T01:00:00.000Z",
+    messages: [
+      message("message-history-question", "interviewer", "main_question", "历史问题。"),
+      message("message-history-answer", "user", "answer", "候选人的历史回答。"),
+    ],
   };
 }
 

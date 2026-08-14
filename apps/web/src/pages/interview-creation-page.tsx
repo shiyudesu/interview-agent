@@ -13,6 +13,7 @@ import {
 } from "../features/interview/interview-api.js";
 import {
   activeInterviewQueryKey,
+  historyQueryKey,
   useActiveInterview,
 } from "../features/interview/interview-query.js";
 import { ApiClientError } from "../lib/api-client.js";
@@ -201,7 +202,10 @@ export function InterviewCreationPage() {
 
 async function refreshActiveInterview(queryClient: QueryClient, accountId: string) {
   const queryKey = activeInterviewQueryKey(accountId);
-  await queryClient.invalidateQueries({ queryKey });
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey }),
+    queryClient.invalidateQueries({ queryKey: historyQueryKey(accountId) }),
+  ]);
   return queryClient.fetchQuery({
     queryKey,
     queryFn: ({ signal }) => getActiveInterview(signal),

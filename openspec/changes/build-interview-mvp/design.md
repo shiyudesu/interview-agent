@@ -73,6 +73,13 @@ closure or 409 first performs a direct canonical detail read; the loop stops onl
 confirms the same Operation is no longer pending or processing. Thus page reloads and other devices
 can resume processing without treating presentation text as durable state.
 
+History uses the server's opaque keyset cursor through an account-scoped infinite query. Pages are
+appended without interpreting or rewriting the cursor, load-more never races a background refresh,
+and every page entry preserves the server's reverse chronological order and state-specific fields.
+Terminal interview routes render their canonical read-only transcript for completed, early-ended,
+and abandoned sessions. Local commands and terminal SSE reconciliation invalidate the dedicated
+history cache, while entering the page always refreshes its first page.
+
 ### 2. Model the interview as a persisted aggregate
 
 An interview has a top-level status:

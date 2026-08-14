@@ -5,6 +5,7 @@ import { NavLink, Outlet } from "react-router-dom";
 const navigation = [
   { to: "/", label: "首页", end: true },
   { to: "/app", label: "面试空间", end: false },
+  { to: "/history", label: "历史", end: false },
   { to: "/settings", label: "账户", end: false },
 ] as const;
 

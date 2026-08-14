@@ -3,7 +3,11 @@ import { useEffect, useState } from "react";
 
 import { ACCOUNT_QUERY_KEY } from "../account/account-query.js";
 import { getInterviewDetail } from "./interview-api.js";
-import { activeInterviewQueryKey, interviewDetailQueryKey } from "./interview-query.js";
+import {
+  activeInterviewQueryKey,
+  historyQueryKey,
+  interviewDetailQueryKey,
+} from "./interview-query.js";
 import {
   consumeOperationEvents,
   OperationReplayUnavailableError,
@@ -55,10 +59,18 @@ export function useOperationStream(input: UseOperationStreamInput): OperationStr
           queryKey: activeInterviewQueryKey(accountId),
         }),
       ]);
-      return queryClient.fetchQuery({
+      const canonical = await queryClient.fetchQuery({
         queryKey: detailQueryKey,
         queryFn: ({ signal }) => getInterviewDetail(interviewId, signal),
       });
+      if (
+        canonical.status === "completed" ||
+        canonical.status === "early_ended" ||
+        canonical.status === "abandoned"
+      ) {
+        await queryClient.invalidateQueries({ queryKey: historyQueryKey(accountId) });
+      }
+      return canonical;
     }
 
     async function run(): Promise<void> {
